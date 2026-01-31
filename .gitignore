@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+
+# Build
+dist/
+
+# Turbo
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Debug
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+
+# Vercel
+.vercel
+
+# High-resolution assets (too large for git)
+hqImages/

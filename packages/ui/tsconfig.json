@@ -1,0 +1,10 @@
+{
+  "extends": "@blessluxe/config/tsconfig/react-library",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

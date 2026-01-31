@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLESSLUXE | Luxury Women's Fashion</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Montserrat:wght@300;400;500;600;700&family=Pinyon+Script&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ═══════════════════════════════════════════════════════════
+           CSS VARIABLES & RESET
+           ═══════════════════════════════════════════════════════════ */
+        :root {
+            --gold-primary: #C9A84C;
+            --gold-dark: #B8860B;
+            --gold-light: #D4AF37;
+            --cream: #FDF8F3;
+            --cream-dark: #F5EDE3;
+            --white: #FFFFFF;
+            --black: #1A1A1A;
+            --black-light: #333333;
+            --blush: #F5E6E0;
+            --shadow: rgba(201, 168, 76, 0.15);
+            --shadow-dark: rgba(0, 0, 0, 0.1);
+            
+            --font-display: 'Cormorant Garamond', serif;
+            --font-body: 'Montserrat', sans-serif;
+            --font-script: 'Pinyon Script', cursive;
+            
+            --transition-fast: 0.2s ease;
+            --transition-medium: 0.4s ease;
+            --transition-slow: 0.6s ease;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: var(--font-body);
+            background: var(--cream);
+            color: var(--black);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           LOADING SCREEN
+           ═══════════════════════════════════════════════════════════ */
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+        
+        .loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        
+        .loader-logo {
+            width: 120px;
+            height: auto;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .loader-text {
+            margin-top: 30px;
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            color: var(--gold-primary);
+            letter-spacing: 3px;
+        }
+        
+        .loader-text span {
+            display: inline-block;
+            animation: loadingDots 1.4s infinite;
+        }
+        
+        .loader-text span:nth-child(2) { animation-delay: 0.2s; }
+        .loader-text span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        
+        @keyframes loadingDots {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           ANNOUNCEMENT BAR
+           ═══════════════════════════════════════════════════════════ */
+        .announcement-bar {
+            background: linear-gradient(90deg, var(--gold-dark), var(--gold-primary), var(--gold-dark));
+            color: var(--white);
+            padding: 10px 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .announcement-track {
+            display: flex;
+            animation: marquee 30s linear infinite;
+            white-space: nowrap;
+        }
+        
+        .announcement-item {
+            display: flex;
+            align-items: center;
+            padding: 0 50px;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .announcement-item::after {
+            content: '✦';
+            margin-left: 50px;
+            opacity: 0.7;
+        }
+        
+        @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           HEADER & NAVIGATION
+           ═══════════════════════════════════════════════════════════ */
+        .header {
+            position: sticky;
+            top: 0;
+            background: var(--cream);
+            z-index: 1000;
+            transition: all var(--transition-medium);
+            border-bottom: 1px solid rgba(201, 168, 76, 0.2);
+        }
+        
+        .header.scrolled {
+            background: rgba(253, 248, 243, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 30px var(--shadow);
+        }
+        
+        .header-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 5%;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .logo {
+            height: 60px;
+            transition: transform var(--transition-fast);
+        }
+        
+        .header.scrolled .logo {
+            height: 50px;
+        }
+        
+        .nav-main {
+            display: flex;
+            gap: 40px;
+        }
+        
+        .nav-link {
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--black);
+            text-decoration: none;
+            position: relative;
+            padding: 10px 0;
+            transition: color var(--transition-fast);
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--gold-primary);
+            transition: width var(--transition-medium);
+        }
+        
+        .nav-link:hover {
+            color: var(--gold-primary);
+        }
+        
+        .nav-link:hover::after {
+            width: 100%;
+        }
+        
+        .nav-link.sale {
+            color: #C41E3A;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+        
+        .header-action {
+            position: relative;
+            cursor: pointer;
+            transition: transform var(--transition-fast);
+        }
+        
+        .header-action:hover {
+            transform: scale(1.1);
+        }
+        
+        .header-action svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--black);
+            fill: none;
+            stroke-width: 1.5;
+        }
+        
+        .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--gold-primary);
+            color: var(--white);
+            font-size: 0.7rem;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            animation: popIn 0.3s ease;
+        }
+        
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           HERO SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .hero {
+            position: relative;
+            height: 85vh;
+            min-height: 600px;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--cream) 0%, var(--blush) 50%, var(--cream-dark) 100%);
+        }
+        
+        .hero-slides {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .hero-slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .hero-slide.active {
+            opacity: 1;
+        }
+        
+        .hero-content {
+            text-align: center;
+            z-index: 2;
+            padding: 0 20px;
+            max-width: 800px;
+        }
+        
+        .hero-badge {
+            display: inline-block;
+            background: var(--gold-primary);
+            color: var(--white);
+            padding: 8px 25px;
+            font-size: 0.75rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 0.8s ease 0.3s forwards;
+        }
+        
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 8vw, 5.5rem);
+            font-weight: 300;
+            color: var(--black);
+            line-height: 1.1;
+            margin-bottom: 20px;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeUp 0.8s ease 0.5s forwards;
+        }
+        
+        .hero-title .script {
+            font-family: var(--font-script);
+            color: var(--gold-primary);
+            font-size: 1.3em;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.1rem;
+            color: var(--black-light);
+            letter-spacing: 2px;
+            margin-bottom: 40px;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeUp 0.8s ease 0.7s forwards;
+        }
+        
+        .hero-cta {
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeUp 0.8s ease 0.9s forwards;
+        }
+        
+        @keyframes fadeUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 18px 50px;
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition-medium);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary {
+            background: var(--gold-primary);
+            color: var(--white);
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            background: var(--gold-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px var(--shadow);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: var(--black);
+            border: 2px solid var(--gold-primary);
+        }
+        
+        .btn-outline:hover {
+            background: var(--gold-primary);
+            color: var(--white);
+        }
+        
+        /* Hero Navigation */
+        .hero-nav {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        
+        .hero-dot {
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--gold-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            position: relative;
+        }
+        
+        .hero-dot.active {
+            background: var(--gold-primary);
+        }
+        
+        .hero-dot.active::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border: 1px solid var(--gold-primary);
+            border-radius: 50%;
+            animation: ping 1.5s ease infinite;
+        }
+        
+        @keyframes ping {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        
+        /* Scroll Indicator */
+        .scroll-indicator {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            opacity: 0.7;
+            animation: bounce 2s ease infinite;
+        }
+        
+        .scroll-indicator span {
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .scroll-indicator svg {
+            width: 20px;
+            height: 20px;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(10px); }
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           COLLECTION SWITCHER
+           ═══════════════════════════════════════════════════════════ */
+        .collection-switcher {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            padding: 60px 20px;
+            background: var(--white);
+        }
+        
+        .collection-tab {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--black-light);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 15px 0;
+            position: relative;
+            transition: color var(--transition-fast);
+        }
+        
+        .collection-tab::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--gold-primary);
+            transform: scaleX(0);
+            transition: transform var(--transition-medium);
+        }
+        
+        .collection-tab.active {
+            color: var(--gold-primary);
+        }
+        
+        .collection-tab.active::after {
+            transform: scaleX(1);
+        }
+        
+        .collection-tab:hover {
+            color: var(--gold-primary);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           CATEGORIES SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .categories {
+            padding: 80px 5%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .section-subtitle {
+            font-family: var(--font-script);
+            font-size: 1.8rem;
+            color: var(--gold-primary);
+            margin-bottom: 10px;
+        }
+        
+        .section-title {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            font-weight: 400;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+        }
+        
+        .section-line {
+            width: 80px;
+            height: 2px;
+            background: var(--gold-primary);
+            margin: 20px auto 0;
+        }
+        
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 30px;
+        }
+        
+        .category-card {
+            text-align: center;
+            cursor: pointer;
+            transition: transform var(--transition-medium);
+        }
+        
+        .category-card:hover {
+            transform: translateY(-10px);
+        }
+        
+        .category-image {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--blush), var(--cream-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            border: 3px solid transparent;
+            transition: all var(--transition-medium);
+        }
+        
+        .category-card:hover .category-image {
+            border-color: var(--gold-primary);
+            box-shadow: 0 15px 40px var(--shadow);
+        }
+        
+        .category-icon {
+            font-size: 2.5rem;
+        }
+        
+        .category-name {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--black);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           PRODUCTS SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .products-section {
+            padding: 80px 5%;
+            background: var(--white);
+        }
+        
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .product-card {
+            position: relative;
+            background: var(--cream);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all var(--transition-medium);
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        
+        .product-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .product-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 50px var(--shadow-dark);
+        }
+        
+        .product-image {
+            position: relative;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--cream-dark), var(--blush));
+        }
+        
+        .product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform var(--transition-slow);
+        }
+        
+        .product-card:hover .product-image img {
+            transform: scale(1.08);
+        }
+        
+        .product-badge {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            padding: 6px 15px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border-radius: 3px;
+        }
+        
+        .product-badge.new {
+            background: var(--gold-primary);
+            color: var(--white);
+        }
+        
+        .product-badge.sale {
+            background: #C41E3A;
+            color: var(--white);
+        }
+        
+        .product-actions {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            opacity: 0;
+            display: flex;
+            gap: 10px;
+            transition: all var(--transition-medium);
+        }
+        
+        .product-card:hover .product-actions {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        
+        .product-action-btn {
+            width: 45px;
+            height: 45px;
+            background: var(--white);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+            box-shadow: 0 5px 15px var(--shadow-dark);
+        }
+        
+        .product-action-btn:hover {
+            background: var(--gold-primary);
+            transform: scale(1.1);
+        }
+        
+        .product-action-btn:hover svg {
+            stroke: var(--white);
+        }
+        
+        .product-action-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--black);
+            fill: none;
+            stroke-width: 1.5;
+        }
+        
+        .product-wishlist {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 40px;
+            height: 40px;
+            background: var(--white);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all var(--transition-fast);
+        }
+        
+        .product-card:hover .product-wishlist {
+            opacity: 1;
+        }
+        
+        .product-wishlist:hover {
+            background: var(--gold-primary);
+        }
+        
+        .product-wishlist:hover svg {
+            stroke: var(--white);
+            fill: var(--white);
+        }
+        
+        .product-wishlist svg {
+            width: 18px;
+            height: 18px;
+            stroke: var(--black);
+            fill: none;
+            stroke-width: 1.5;
+            transition: all var(--transition-fast);
+        }
+        
+        .product-info {
+            padding: 20px;
+        }
+        
+        .product-name {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--black);
+        }
+        
+        .product-price {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .price-current {
+            font-weight: 600;
+            color: var(--black);
+        }
+        
+        .price-original {
+            font-size: 0.9rem;
+            color: #999;
+            text-decoration: line-through;
+        }
+        
+        .product-colors {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .color-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid var(--white);
+            box-shadow: 0 0 0 1px #ddd;
+            cursor: pointer;
+            transition: transform var(--transition-fast);
+        }
+        
+        .color-dot:hover {
+            transform: scale(1.2);
+        }
+        
+        .view-all-btn {
+            display: block;
+            width: fit-content;
+            margin: 60px auto 0;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           OCCASION SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .occasion-section {
+            padding: 80px 5%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .occasion-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+        
+        .occasion-card {
+            position: relative;
+            height: 450px;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        
+        .occasion-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, transparent 40%, rgba(26, 26, 26, 0.8) 100%);
+            z-index: 1;
+            transition: background var(--transition-medium);
+        }
+        
+        .occasion-card:hover::before {
+            background: linear-gradient(180deg, transparent 20%, rgba(26, 26, 26, 0.9) 100%);
+        }
+        
+        .occasion-bg {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--blush), var(--cream-dark));
+            transition: transform var(--transition-slow);
+        }
+        
+        .occasion-card:hover .occasion-bg {
+            transform: scale(1.1);
+        }
+        
+        .occasion-content {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            right: 30px;
+            z-index: 2;
+        }
+        
+        .occasion-title {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            color: var(--white);
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+        
+        .occasion-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--gold-primary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: gap var(--transition-fast);
+        }
+        
+        .occasion-link:hover {
+            gap: 15px;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           STATS SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .stats-section {
+            background: var(--black);
+            padding: 60px 5%;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            color: var(--gold-primary);
+            margin-bottom: 10px;
+        }
+        
+        .stat-label {
+            color: var(--white);
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           TRUST SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .trust-section {
+            padding: 80px 5%;
+            background: var(--cream);
+        }
+        
+        .trust-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .trust-item {
+            text-align: center;
+            padding: 30px;
+            transition: transform var(--transition-medium);
+        }
+        
+        .trust-item:hover {
+            transform: translateY(-5px);
+        }
+        
+        .trust-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        .trust-item:nth-child(2) .trust-icon { animation-delay: 0.5s; }
+        .trust-item:nth-child(3) .trust-icon { animation-delay: 1s; }
+        .trust-item:nth-child(4) .trust-icon { animation-delay: 1.5s; }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .trust-icon svg {
+            width: 50px;
+            height: 50px;
+            stroke: var(--gold-primary);
+            fill: none;
+            stroke-width: 1.5;
+        }
+        
+        .trust-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        
+        .trust-text {
+            font-size: 0.9rem;
+            color: var(--black-light);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           NEWSLETTER SECTION
+           ═══════════════════════════════════════════════════════════ */
+        .newsletter {
+            padding: 100px 5%;
+            background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-dark) 100%);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .newsletter::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5L35 25L55 30L35 35L30 55L25 35L5 30L25 25L30 5Z' fill='%23ffffff' fill-opacity='0.05'/%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+        
+        .newsletter-icon {
+            width: 80px;
+            margin: 0 auto 30px;
+        }
+        
+        .newsletter-title {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 4vw, 3rem);
+            color: var(--white);
+            margin-bottom: 15px;
+            position: relative;
+        }
+        
+        .newsletter-subtitle {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 40px;
+            position: relative;
+        }
+        
+        .newsletter-form {
+            display: flex;
+            gap: 15px;
+            max-width: 500px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .newsletter-input {
+            flex: 1;
+            padding: 18px 25px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--white);
+            font-family: var(--font-body);
+            font-size: 1rem;
+            border-radius: 50px;
+            outline: none;
+            transition: all var(--transition-fast);
+        }
+        
+        .newsletter-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .newsletter-input:focus {
+            border-color: var(--white);
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .newsletter-btn {
+            padding: 18px 35px;
+            background: var(--white);
+            color: var(--gold-primary);
+            border: none;
+            border-radius: 50px;
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+        
+        .newsletter-btn:hover {
+            background: var(--black);
+            color: var(--white);
+            transform: scale(1.05);
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           FOOTER
+           ═══════════════════════════════════════════════════════════ */
+        .footer {
+            background: var(--black);
+            color: var(--white);
+            padding: 80px 5% 40px;
+        }
+        
+        .footer-main {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 60px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .footer-brand img {
+            height: 50px;
+            margin-bottom: 25px;
+            filter: brightness(0) invert(1);
+        }
+        
+        .footer-brand p {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.8;
+            margin-bottom: 25px;
+        }
+        
+        .footer-social {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .footer-social a {
+            width: 45px;
+            height: 45px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+        }
+        
+        .footer-social a:hover {
+            background: var(--gold-primary);
+            border-color: var(--gold-primary);
+            transform: translateY(-3px);
+        }
+        
+        .footer-social svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--white);
+        }
+        
+        .footer-column h4 {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 25px;
+            color: var(--gold-primary);
+        }
+        
+        .footer-column ul {
+            list-style: none;
+        }
+        
+        .footer-column li {
+            margin-bottom: 12px;
+        }
+        
+        .footer-column a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color var(--transition-fast);
+        }
+        
+        .footer-column a:hover {
+            color: var(--gold-primary);
+        }
+        
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 60px;
+            padding-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .footer-copyright {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .footer-payments {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .footer-payments img {
+            height: 30px;
+            opacity: 0.7;
+            transition: opacity var(--transition-fast);
+        }
+        
+        .footer-payments img:hover {
+            opacity: 1;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           BACK TO TOP BUTTON
+           ═══════════════════════════════════════════════════════════ */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: var(--gold-primary);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--transition-medium);
+            z-index: 100;
+            box-shadow: 0 5px 20px var(--shadow);
+        }
+        
+        .back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .back-to-top:hover {
+            background: var(--gold-dark);
+            transform: translateY(-5px);
+        }
+        
+        .back-to-top svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--white);
+            fill: none;
+            stroke-width: 2;
+        }
+        
+        /* ═══════════════════════════════════════════════════════════
+           RESPONSIVE STYLES
+           ═══════════════════════════════════════════════════════════ */
+        @media (max-width: 1200px) {
+            .products-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 992px) {
+            .nav-main {
+                display: none;
+            }
+            
+            .categories-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            
+            .products-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .occasion-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid,
+            .trust-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .footer-main {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero {
+                height: 70vh;
+            }
+            
+            .hero-title {
+                font-size: 2.5rem;
+            }
+            
+            .collection-switcher {
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+            
+            .collection-tab {
+                font-size: 0.9rem;
+            }
+            
+            .categories-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .newsletter-form {
+                flex-direction: column;
+            }
+            
+            .footer-main {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            
+            .footer-social {
+                justify-content: center;
+            }
+            
+            .footer-bottom {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .products-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid,
+            .trust-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loader" id="loader">
+        <img src="icon.png" alt="BLESSLUXE" class="loader-logo">
+        <p class="loader-text">Curating Your Luxe Experience<span>.</span><span>.</span><span>.</span></p>
+    </div>
+
+    <!-- Announcement Bar -->
+    <div class="announcement-bar">
+        <div class="announcement-track">
+            <div class="announcement-item">Free Shipping on Orders Over $100</div>
+            <div class="announcement-item">New Arrivals Every Week</div>
+            <div class="announcement-item">Easy 30-Day Returns</div>
+            <div class="announcement-item">Exclusive Member Rewards</div>
+            <div class="announcement-item">Free Shipping on Orders Over $100</div>
+            <div class="announcement-item">New Arrivals Every Week</div>
+            <div class="announcement-item">Easy 30-Day Returns</div>
+            <div class="announcement-item">Exclusive Member Rewards</div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <div class="header-main">
+            <img src="logo.png" alt="BLESSLUXE" class="logo">
+            
+            <nav class="nav-main">
+                <a href="#" class="nav-link">New In</a>
+                <a href="#" class="nav-link">Dresses</a>
+                <a href="#" class="nav-link">Tops</a>
+                <a href="#" class="nav-link">Bottoms</a>
+                <a href="#" class="nav-link">Sets</a>
+                <a href="#" class="nav-link">Accessories</a>
+                <a href="#" class="nav-link sale">Sale</a>
+            </nav>
+            
+            <div class="header-actions">
+                <div class="header-action">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <div class="header-action">
+                    <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div class="header-action">
+                    <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                </div>
+                <div class="header-action">
+                    <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span class="cart-count">3</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-slides">
+            <div class="hero-slide active">
+                <div class="hero-content">
+                    <span class="hero-badge">Spring Collection 2026</span>
+                    <h1 class="hero-title">Embrace Your <span class="script">Luxe</span></h1>
+                    <p class="hero-subtitle">Discover the art of effortless elegance</p>
+                    <div class="hero-cta">
+                        <a href="#" class="btn btn-primary">Shop Collection</a>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-slide">
+                <div class="hero-content">
+                    <span class="hero-badge">Limited Time</span>
+                    <h1 class="hero-title">Up to 50% <span class="script">Off</span></h1>
+                    <p class="hero-subtitle">Exclusive sale on selected styles</p>
+                    <div class="hero-cta">
+                        <a href="#" class="btn btn-primary">Shop Sale</a>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-slide">
+                <div class="hero-content">
+                    <span class="hero-badge">Join the Royalty</span>
+                    <h1 class="hero-title">BLESSLUXE <span class="script">Rewards</span></h1>
+                    <p class="hero-subtitle">Earn points with every purchase</p>
+                    <div class="hero-cta">
+                        <a href="#" class="btn btn-primary">Join Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="hero-nav">
+            <div class="hero-dot active" data-slide="0"></div>
+            <div class="hero-dot" data-slide="1"></div>
+            <div class="hero-dot" data-slide="2"></div>
+        </div>
+        
+        <div class="scroll-indicator">
+            <span>Scroll</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+    </section>
+
+    <!-- Collection Switcher -->
+    <div class="collection-switcher">
+        <button class="collection-tab active">Spring Luxe</button>
+        <button class="collection-tab">Evening Glam</button>
+        <button class="collection-tab">Everyday Royalty</button>
+        <button class="collection-tab">Weekend Vibes</button>
+    </div>
+
+    <!-- Categories Section -->
+    <section class="categories">
+        <div class="section-header">
+            <p class="section-subtitle">Explore</p>
+            <h2 class="section-title">Shop by Category</h2>
+            <div class="section-line"></div>
+        </div>
+        
+        <div class="categories-grid">
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">👗</span>
+                </div>
+                <p class="category-name">Dresses</p>
+            </div>
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">👚</span>
+                </div>
+                <p class="category-name">Tops</p>
+            </div>
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">👖</span>
+                </div>
+                <p class="category-name">Bottoms</p>
+            </div>
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">🎀</span>
+                </div>
+                <p class="category-name">Sets</p>
+            </div>
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">👜</span>
+                </div>
+                <p class="category-name">Accessories</p>
+            </div>
+            <div class="category-card">
+                <div class="category-image">
+                    <span class="category-icon">🏷️</span>
+                </div>
+                <p class="category-name">Sale</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Products Section -->
+    <section class="products-section">
+        <div class="section-header">
+            <p class="section-subtitle">Curated for You</p>
+            <h2 class="section-title">New Arrivals</h2>
+            <div class="section-line"></div>
+        </div>
+        
+        <div class="products-grid">
+            <!-- Product 1 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge new">New</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Silk Wrap Dress</h3>
+                    <div class="product-price">
+                        <span class="price-current">$189.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #2C3E50;"></span>
+                        <span class="color-dot" style="background: #8E6B4D;"></span>
+                        <span class="color-dot" style="background: #C41E3A;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 2 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge sale">-30%</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Satin Blouse</h3>
+                    <div class="product-price">
+                        <span class="price-current">$89.00</span>
+                        <span class="price-original">$129.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #F5F5DC;"></span>
+                        <span class="color-dot" style="background: #FFC0CB;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 3 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge new">New</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Tailored Trousers</h3>
+                    <div class="product-price">
+                        <span class="price-current">$145.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #1A1A1A;"></span>
+                        <span class="color-dot" style="background: #8B4513;"></span>
+                        <span class="color-dot" style="background: #2F4F4F;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 4 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Linen Co-Ord Set</h3>
+                    <div class="product-price">
+                        <span class="price-current">$225.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #FAF0E6;"></span>
+                        <span class="color-dot" style="background: #D2B48C;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 5 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge new">New</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Pleated Midi Skirt</h3>
+                    <div class="product-price">
+                        <span class="price-current">$119.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #B8860B;"></span>
+                        <span class="color-dot" style="background: #556B2F;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 6 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge sale">-40%</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Cashmere Cardigan</h3>
+                    <div class="product-price">
+                        <span class="price-current">$179.00</span>
+                        <span class="price-original">$299.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #FFF8DC;"></span>
+                        <span class="color-dot" style="background: #D3D3D3;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 7 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Evening Gown</h3>
+                    <div class="product-price">
+                        <span class="price-current">$395.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #1A1A1A;"></span>
+                        <span class="color-dot" style="background: #722F37;"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Product 8 -->
+            <div class="product-card">
+                <div class="product-image">
+                    <span class="product-badge new">New</span>
+                    <button class="product-wishlist">
+                        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                    </button>
+                    <div class="product-actions">
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="product-action-btn">
+                            <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-name">Pearl Clutch Bag</h3>
+                    <div class="product-price">
+                        <span class="price-current">$85.00</span>
+                    </div>
+                    <div class="product-colors">
+                        <span class="color-dot" style="background: #FFFFF0;"></span>
+                        <span class="color-dot" style="background: #B8860B;"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <a href="#" class="btn btn-outline view-all-btn">View All Products</a>
+    </section>
+
+    <!-- Shop by Occasion -->
+    <section class="occasion-section">
+        <div class="section-header">
+            <p class="section-subtitle">Style Guide</p>
+            <h2 class="section-title">Shop by Occasion</h2>
+            <div class="section-line"></div>
+        </div>
+        
+        <div class="occasion-grid">
+            <div class="occasion-card">
+                <div class="occasion-bg"></div>
+                <div class="occasion-content">
+                    <h3 class="occasion-title">Date Night</h3>
+                    <a href="#" class="occasion-link">
+                        Shop Now
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="occasion-card">
+                <div class="occasion-bg"></div>
+                <div class="occasion-content">
+                    <h3 class="occasion-title">Work Luxe</h3>
+                    <a href="#" class="occasion-link">
+                        Shop Now
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+            <div class="occasion-card">
+                <div class="occasion-bg"></div>
+                <div class="occasion-content">
+                    <h3 class="occasion-title">Weekend Vibes</h3>
+                    <a href="#" class="occasion-link">
+                        Shop Now
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-number" data-target="10000">0+</div>
+                <p class="stat-label">Happy Customers</p>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" data-target="50">0+</div>
+                <p class="stat-label">Countries Shipped</p>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">4.9</div>
+                <p class="stat-label">Star Rating</p>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">24/7</div>
+                <p class="stat-label">Customer Support</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust Section -->
+    <section class="trust-section">
+        <div class="trust-grid">
+            <div class="trust-item">
+                <div class="trust-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                </div>
+                <h3 class="trust-title">Premium Quality</h3>
+                <p class="trust-text">Handpicked fabrics & exceptional craftsmanship</p>
+            </div>
+            <div class="trust-item">
+                <div class="trust-icon">
+                    <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                </div>
+                <h3 class="trust-title">Free Shipping</h3>
+                <p class="trust-text">Complimentary shipping on orders over $100</p>
+            </div>
+            <div class="trust-item">
+                <div class="trust-icon">
+                    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                </div>
+                <h3 class="trust-title">Easy Returns</h3>
+                <p class="trust-text">30-day hassle-free return policy</p>
+            </div>
+            <div class="trust-item">
+                <div class="trust-icon">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <h3 class="trust-title">Secure Checkout</h3>
+                <p class="trust-text">SSL encrypted payment processing</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter -->
+    <section class="newsletter">
+        <img src="icon.png" alt="" class="newsletter-icon">
+        <h2 class="newsletter-title">Join the BLESSLUXE Royalty</h2>
+        <p class="newsletter-subtitle">Get 15% off your first order + exclusive access to new arrivals</p>
+        <form class="newsletter-form">
+            <input type="email" placeholder="Enter your email" class="newsletter-input" required>
+            <button type="submit" class="newsletter-btn">Subscribe</button>
+        </form>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-main">
+            <div class="footer-brand">
+                <img src="logo.png" alt="BLESSLUXE">
+                <p>Embrace your inner royalty with BLESSLUXE. Premium women's fashion designed to make you feel confident, elegant, and effortlessly luxurious.</p>
+                <div class="footer-social">
+                    <a href="#">
+                        <svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    </a>
+                    <a href="#">
+                        <svg viewBox="0 0 24 24"><path d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+                    </a>
+                    <a href="#">
+                        <svg viewBox="0 0 24 24"><path d="M18.77 7.46H14.5v-1.9c0-.9.6-1.1 1-1.1h3V.5h-4.33C10.24.5 9.5 3.44 9.5 5.32v2.15h-3v4h3v12h5v-12h3.85l.42-4z"/></svg>
+                    </a>
+                    <a href="#">
+                        <svg viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.372 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12z"/></svg>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="footer-column">
+                <h4>Shop</h4>
+                <ul>
+                    <li><a href="#">New Arrivals</a></li>
+                    <li><a href="#">Dresses</a></li>
+                    <li><a href="#">Tops</a></li>
+                    <li><a href="#">Bottoms</a></li>
+                    <li><a href="#">Accessories</a></li>
+                    <li><a href="#">Sale</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-column">
+                <h4>Help</h4>
+                <ul>
+                    <li><a href="#">Contact Us</a></li>
+                    <li><a href="#">Shipping Info</a></li>
+                    <li><a href="#">Returns & Exchanges</a></li>
+                    <li><a href="#">Size Guide</a></li>
+                    <li><a href="#">FAQs</a></li>
+                    <li><a href="#">Track Order</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-column">
+                <h4>Company</h4>
+                <ul>
+                    <li><a href="#">About Us</a></li>
+                    <li><a href="#">Careers</a></li>
+                    <li><a href="#">Sustainability</a></li>
+                    <li><a href="#">Press</a></li>
+                    <li><a href="#">Affiliate Program</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p class="footer-copyright">© 2026 BLESSLUXE. All Rights Reserved.</p>
+            <div class="footer-payments">
+                <span style="color: rgba(255,255,255,0.5); font-size: 0.8rem;">Visa • Mastercard • Amex • PayPal • Apple Pay • Shop Pay</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Back to Top Button -->
+    <button class="back-to-top" id="backToTop">
+        <svg viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>
+    </button>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        // LOADING SCREEN
+        // ═══════════════════════════════════════════════════════════
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loader').classList.add('hidden');
+            }, 2000);
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // STICKY HEADER
+        // ═══════════════════════════════════════════════════════════
+        const header = document.getElementById('header');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 100) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // HERO SLIDER
+        // ═══════════════════════════════════════════════════════════
+        const slides = document.querySelectorAll('.hero-slide');
+        const dots = document.querySelectorAll('.hero-dot');
+        let currentSlide = 0;
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                dots[i].classList.remove('active');
+            });
+            slides[index].classList.add('active');
+            dots[index].classList.add('active');
+        }
+
+        dots.forEach((dot, index) => {
+            dot.addEventListener('click', () => {
+                currentSlide = index;
+                showSlide(currentSlide);
+            });
+        });
+
+        setInterval(() => {
+            currentSlide = (currentSlide + 1) % slides.length;
+            showSlide(currentSlide);
+        }, 5000);
+
+        // ═══════════════════════════════════════════════════════════
+        // COLLECTION TABS
+        // ═══════════════════════════════════════════════════════════
+        const collectionTabs = document.querySelectorAll('.collection-tab');
+        collectionTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                collectionTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // SCROLL REVEAL ANIMATIONS
+        // ═══════════════════════════════════════════════════════════
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    setTimeout(() => {
+                        entry.target.classList.add('visible');
+                    }, index * 100);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.product-card').forEach(card => {
+            observer.observe(card);
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // COUNTER ANIMATION
+        // ═══════════════════════════════════════════════════════════
+        const counters = document.querySelectorAll('.stat-number[data-target]');
+        const counterObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const target = parseInt(entry.target.dataset.target);
+                    let count = 0;
+                    const increment = target / 100;
+                    const updateCount = () => {
+                        if (count < target) {
+                            count += increment;
+                            entry.target.textContent = Math.ceil(count).toLocaleString() + '+';
+                            requestAnimationFrame(updateCount);
+                        } else {
+                            entry.target.textContent = target.toLocaleString() + '+';
+                        }
+                    };
+                    updateCount();
+                    counterObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.5 });
+
+        counters.forEach(counter => counterObserver.observe(counter));
+
+        // ═══════════════════════════════════════════════════════════
+        // BACK TO TOP BUTTON
+        // ═══════════════════════════════════════════════════════════
+        const backToTop = document.getElementById('backToTop');
+        
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 500) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        });
+
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // NEWSLETTER FORM
+        // ═══════════════════════════════════════════════════════════
+        const newsletterForm = document.querySelector('.newsletter-form');
+        newsletterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const btn = newsletterForm.querySelector('.newsletter-btn');
+            btn.textContent = '✓ Welcome, Queen!';
+            btn.style.background = '#2E7D32';
+            setTimeout(() => {
+                btn.textContent = 'Subscribe';
+                btn.style.background = '';
+                newsletterForm.reset();
+            }, 3000);
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // WISHLIST INTERACTION
+        // ═══════════════════════════════════════════════════════════
+        document.querySelectorAll('.product-wishlist').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const svg = this.querySelector('svg');
+                if (svg.style.fill === 'rgb(196, 30, 58)') {
+                    svg.style.fill = 'none';
+                    svg.style.stroke = 'var(--black)';
+                } else {
+                    svg.style.fill = '#C41E3A';
+                    svg.style.stroke = '#C41E3A';
+                    this.style.animation = 'pulse 0.3s ease';
+                    setTimeout(() => {
+                        this.style.animation = '';
+                    }, 300);
+                }
+            });
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // ADD TO CART ANIMATION
+        // ═══════════════════════════════════════════════════════════
+        document.querySelectorAll('.product-action-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const cartCount = document.querySelector('.cart-count');
+                let count = parseInt(cartCount.textContent);
+                cartCount.textContent = count + 1;
+                cartCount.style.animation = 'popIn 0.3s ease';
+                setTimeout(() => {
+                    cartCount.style.animation = '';
+                }, 300);
+            });
+        });
+    </script>
+</body>
+</html>
