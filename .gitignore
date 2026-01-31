@@ -34,5 +34,8 @@ coverage/
 # Vercel
 .vercel
 
+# Medusa
+.medusa/
+
 # High-resolution assets (too large for git)
 hqImages/

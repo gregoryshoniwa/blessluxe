@@ -4,42 +4,115 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BLESSLUXE is a luxury women's fashion e-commerce mockup/prototype. It is a **single-page static website** built with vanilla HTML5, CSS3, and JavaScript ES6 — no frameworks, no build system, no package manager.
+BLESSLUXE is a luxury women's fashion e-commerce project structured as a **Turborepo monorepo** using pnpm workspaces. It has Next.js frontend apps, a Medusa.js v2 backend, and shared packages.
 
-## How to Run
+## Commands
 
-Open `mock_website/blessluxe-website.html` directly in a web browser. There is no build step, no server required, and no dependencies to install. The only external resource is Google Fonts loaded via CDN.
+```bash
+pnpm install              # Install all dependencies
+pnpm dev                  # Run all apps in dev mode (storefront :3000, admin :3001, medusa :9000)
+pnpm build                # Build all packages and apps via Turbo
+pnpm lint                 # Lint all packages and apps
+pnpm format               # Format all files with Prettier
+pnpm format:check         # Check formatting without writing
+pnpm type-check           # TypeScript type checking across all packages
+pnpm clean                # Remove all build artifacts and node_modules
 
-## Project Structure
+# Run a single app
+pnpm --filter @blessluxe/storefront dev
+pnpm --filter @blessluxe/admin dev
+pnpm --filter @blessluxe/backend dev
 
-- `mock_website/blessluxe-website.html` — The entire application: markup, styles, and scripts are all in this single 2,125-line file.
-- `mock_website/logo.png`, `mock_website/icon.png` — Web-optimized brand assets used by the site.
-- `hqImages/` — High-resolution logo/icon variants (6–7MB each) for print or marketing use; not referenced by the website.
+# Run commands in a specific package
+pnpm --filter @blessluxe/ui type-check
+pnpm --filter @blessluxe/types lint
+
+# Backend (Medusa) commands — run from backend/medusa/
+pnpm --filter @blessluxe/backend db:migrate    # Run database migrations
+pnpm --filter @blessluxe/backend db:generate   # Generate migrations for custom modules
+pnpm --filter @blessluxe/backend seed          # Seed database
+
+# Infrastructure
+docker compose up -d          # Start PostgreSQL (5432) and Redis (6379)
+docker compose down           # Stop services
+```
+
+## Monorepo Structure
+
+```
+apps/
+  storefront/        Next.js 14 (App Router) — customer-facing store, port 3000
+  admin/             Next.js 14 (App Router) — admin dashboard, port 3001
+backend/
+  medusa/            Medusa.js v2 — e-commerce backend API, port 9000
+packages/
+  ui/                Shared React components (Button, Card) with Tailwind classes
+  config/            Shared tailwind.config.ts and tsconfig bases
+  types/             Shared TypeScript types (Product, User, Cart, Order)
+  eslint-config/     Shared ESLint config (base + Next.js variant)
+  prettier-config/   Shared Prettier config
+mock_website/        Original static HTML prototype (standalone, no build)
+docker-compose.yml   PostgreSQL 16 + Redis 7 for local development
+```
 
 ## Architecture
 
-### Single-File Structure
+### Package Dependencies
 
-All HTML, CSS (~1,400 lines), and JavaScript (~200 lines) live in one file. CSS is in a `<style>` block at the top; JS is in a `<script>` block at the bottom. There is no module system or code splitting.
+Apps (`storefront`, `admin`) depend on `@blessluxe/ui`, `@blessluxe/types`, and `@blessluxe/config`. The `ui` package exports React components that use Tailwind utility classes referencing the shared theme. Both apps use `transpilePackages: ["@blessluxe/ui"]` in their Next.js config.
 
-### CSS Design System
+### TypeScript Configuration
 
-Uses CSS custom properties for theming (defined on `:root`). Key variables: `--gold-primary` (#C9A84C), `--cream` (#FDF8F3), `--black` (#1A1A1A). Fonts: Cormorant Garamond (display), Montserrat (body), Pinyon Script (decorative).
+Three tsconfig presets in `packages/config`: `tsconfig.base.json` (shared compiler options), `tsconfig.nextjs.json` (extends base, adds Next.js plugin and JSX preserve), `tsconfig.react-library.json` (extends base, react-jsx transform). Apps and packages extend these via `@blessluxe/config/tsconfig/*`. The backend has its own tsconfig with `@modules/*` and `@providers/*` path aliases.
 
-Responsive breakpoints: 1200px, 992px, 768px, 480px.
+### Path Aliases
 
-### JavaScript Patterns
+All Next.js apps use `@/*` mapped to `./src/*`. The Medusa backend uses `@modules/*` and `@providers/*` mapped into `./src/`.
 
-- Direct DOM manipulation with `querySelector`/`querySelectorAll`
-- `IntersectionObserver` for scroll-triggered reveal animations and counter animations
-- `requestAnimationFrame` for smooth number counting
-- State managed via CSS class toggling (`.active`, `.visible`, `.scrolled`)
-- No persistent state — cart counter, wishlist, and form data reset on page reload
+### Tailwind Theme
 
-### Page Sections (in order)
+Shared theme in `packages/config/tailwind.config.ts` defines brand colors (`gold`, `cream`, `blush`) and font families (`font-display`, `font-body`, `font-script`). Each app's `tailwind.config.ts` spreads the shared config and adds its own content globs.
 
-Loading screen → Announcement bar (marquee) → Sticky header with nav → Hero carousel (3 auto-rotating slides, 5s interval) → Collection switcher tabs → Category grid → Product cards grid → Occasion collections → Stats counters → Trust/testimonials → Newsletter signup → Footer
+### Shared Types
 
-### Current Limitations
+`@blessluxe/types` exports e-commerce domain types: `Product`, `ProductVariant`, `ProductImage`, `User`, `Address`, `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatus`. Import from `@blessluxe/types` in any app or package.
 
-This is a visual prototype. All navigation links point to `#`. The cart, wishlist, and account features are UI-only with no backend, persistence, or routing. Product data is hardcoded in the HTML.
+### ESLint
+
+Two configs exported from `@blessluxe/eslint-config`: the base (`index.js`) for libraries, and `next.js` for Next.js apps. Apps set `root: true` and extend `@blessluxe/eslint-config/next`.
+
+### Turbo Pipeline
+
+`build` depends on `^build` (builds packages before apps). `dev` and `clean` are not cached. `lint` and `type-check` depend on `^build`. Build outputs are `.next/**`, `dist/**`, and `.medusa/**`.
+
+## Backend (Medusa.js v2)
+
+### Configuration
+
+`backend/medusa/medusa-config.ts` is the entry point. All providers and custom modules are registered in the `modules` array. Environment variables are loaded from `.env` via `loadEnv()`. Copy `.env.template` to `.env` before running.
+
+### Custom Modules
+
+Three custom modules in `backend/medusa/src/modules/`, each following the Medusa v2 module pattern (models via `model.define()`, service extending `MedusaService()`, module definition via `Module()`):
+
+- **affiliate** — `Affiliate`, `AffiliateSale`, `AffiliatePayout` models. Tracks affiliate codes, commission rates, sales attribution, and payout processing. Service: `AffiliateModuleService`.
+- **customer-extended** — `CustomerExtended` model. Adds loyalty points/tiers, style preferences, size profile, referral codes, and marketing consent to core customers. Service: `CustomerExtendedModuleService`.
+- **product-review** — `ProductReview` model. Customer reviews with rating, verified purchase flag, moderation status, admin responses, and helpful counts. Service: `ProductReviewModuleService`.
+
+### Custom Providers
+
+- **file-cloudinary** (`src/providers/file-cloudinary/`) — Extends `AbstractFileProviderService`. Uploads to Cloudinary with auto resource type detection. Registered under `@medusajs/medusa/file` module.
+- **payment-paystack** (`src/providers/payment-paystack/`) — Extends `AbstractPaymentProvider`. Handles Paystack transaction initialization, verification, refunds, and webhooks. Registered alongside Stripe under `@medusajs/medusa/payment` module.
+
+### Integrated Providers
+
+- **Stripe** — `@medusajs/medusa/payment-stripe`, configured via `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET`.
+- **SendGrid** — `@medusajs/medusa/notification-sendgrid`, configured via `SENDGRID_API_KEY` and `SENDGRID_FROM`, on the `email` channel.
+
+### Medusa Convention Directories
+
+`src/api/` for custom API routes, `src/workflows/` for custom workflows, `src/subscribers/` for event subscribers, `src/links/` for module links. These are auto-discovered by Medusa.
+
+### Required Environment Variables
+
+See `backend/medusa/.env.template` for all variables. Key ones: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`, plus provider-specific keys for Stripe, Paystack, Cloudinary, and SendGrid.
