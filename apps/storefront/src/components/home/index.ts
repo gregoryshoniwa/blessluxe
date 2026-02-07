@@ -1,0 +1,10 @@
+export { HeroSlider } from "./HeroSlider";
+export { CollectionSwitcher } from "./CollectionSwitcher";
+export { CategoryGrid } from "./CategoryGrid";
+export { ProductCard } from "./ProductCard";
+export { FeaturedProducts } from "./FeaturedProducts";
+export { InstagramGrid } from "./InstagramGrid";
+export { HotPicks } from "./ShopByOccasion";
+export { StatsSection } from "./StatsSection";
+export { TrustBadges } from "./TrustBadges";
+export { Newsletter } from "./Newsletter";

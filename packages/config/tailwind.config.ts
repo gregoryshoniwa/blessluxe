@@ -18,7 +18,7 @@ const config: Omit<Config, "content"> = {
       fontFamily: {
         display: ["Cormorant Garamond", "serif"],
         body: ["Montserrat", "sans-serif"],
-        script: ["Pinyon Script", "cursive"],
+        script: ["Niconne", "Great Vibes", "Pinyon Script", "cursive"],
       },
     },
   },

@@ -36,7 +36,7 @@ module.exports = defineConfig({
       },
     },
 
-    // --- Payment: Stripe + Paystack ---
+    // --- Payment: Stripe + Paystack + Flutterwave ---
     {
       resolve: "@medusajs/medusa/payment",
       options: {
@@ -56,15 +56,29 @@ module.exports = defineConfig({
               secret_key: process.env.PAYSTACK_SECRET_KEY,
             },
           },
+          {
+            resolve: "./src/providers/payment-flutterwave",
+            id: "flutterwave",
+            options: {
+              secret_key: process.env.FLUTTERWAVE_SECRET_KEY,
+            },
+          },
+          // To add another gateway, append an entry here:
+          // {
+          //   resolve: "./src/providers/payment-<name>",
+          //   id: "<name>",
+          //   options: { secret_key: process.env.<NAME>_SECRET_KEY },
+          // },
         ],
       },
     },
 
-    // --- Notifications: SendGrid ---
+    // --- Notifications: SendGrid + SMTP ---
     {
       resolve: "@medusajs/medusa/notification",
       options: {
         providers: [
+          // SendGrid — managed email delivery
           {
             resolve: "@medusajs/medusa/notification-sendgrid",
             id: "sendgrid",
@@ -74,6 +88,22 @@ module.exports = defineConfig({
               from: process.env.SENDGRID_FROM,
             },
           },
+          // Generic SMTP — works with any SMTP server (Gmail, Mailgun,
+          // Amazon SES, Zoho, self-hosted, etc.)
+          {
+            resolve: "./src/providers/notification-smtp",
+            id: "smtp",
+            options: {
+              channels: ["email"],
+              host: process.env.SMTP_HOST,
+              port: Number(process.env.SMTP_PORT || 587),
+              secure: process.env.SMTP_SECURE === "true",
+              auth_user: process.env.SMTP_USER,
+              auth_pass: process.env.SMTP_PASS,
+              from: process.env.SMTP_FROM,
+            },
+          },
+          // To add another notification provider, append an entry here.
         ],
       },
     },

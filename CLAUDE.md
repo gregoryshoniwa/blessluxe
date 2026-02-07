@@ -99,15 +99,28 @@ Three custom modules in `backend/medusa/src/modules/`, each following the Medusa
 - **customer-extended** — `CustomerExtended` model. Adds loyalty points/tiers, style preferences, size profile, referral codes, and marketing consent to core customers. Service: `CustomerExtendedModuleService`.
 - **product-review** — `ProductReview` model. Customer reviews with rating, verified purchase flag, moderation status, admin responses, and helpful counts. Service: `ProductReviewModuleService`.
 
-### Custom Providers
+### Payment Providers
 
-- **file-cloudinary** (`src/providers/file-cloudinary/`) — Extends `AbstractFileProviderService`. Uploads to Cloudinary with auto resource type detection. Registered under `@medusajs/medusa/file` module.
-- **payment-paystack** (`src/providers/payment-paystack/`) — Extends `AbstractPaymentProvider`. Handles Paystack transaction initialization, verification, refunds, and webhooks. Registered alongside Stripe under `@medusajs/medusa/payment` module.
+Three payment gateways registered under `@medusajs/medusa/payment`, all in the `providers` array of the payment module config in `medusa-config.ts`:
 
-### Integrated Providers
+- **Stripe** — Built-in `@medusajs/medusa/payment-stripe`. Env: `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`.
+- **Paystack** (`src/providers/payment-paystack/`) — Custom `AbstractPaymentProvider`. Handles transaction init, verify, refund, and `charge.success` webhooks. Env: `PAYSTACK_SECRET_KEY`.
+- **Flutterwave** (`src/providers/payment-flutterwave/`) — Custom `AbstractPaymentProvider`. Handles payment links, `verify_by_reference`, refunds, and `charge.completed` webhooks. Env: `FLUTTERWAVE_SECRET_KEY`.
 
-- **Stripe** — `@medusajs/medusa/payment-stripe`, configured via `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET`.
-- **SendGrid** — `@medusajs/medusa/notification-sendgrid`, configured via `SENDGRID_API_KEY` and `SENDGRID_FROM`, on the `email` channel.
+To add a new payment gateway: create `src/providers/payment-<name>/` with `index.ts` (using `ModuleProvider(Modules.PAYMENT, ...)`) and `service.ts` (extending `AbstractPaymentProvider`), then append an entry to the payment module's `providers` array in `medusa-config.ts`.
+
+### Notification Providers
+
+Two notification providers registered under `@medusajs/medusa/notification`. Medusa allows one provider per channel — configure either SendGrid or SMTP for the `email` channel, not both simultaneously:
+
+- **SendGrid** — Built-in `@medusajs/medusa/notification-sendgrid`. Uses SendGrid templates. Env: `SENDGRID_API_KEY`, `SENDGRID_FROM`.
+- **SMTP** (`src/providers/notification-smtp/`) — Custom `AbstractNotificationProviderService` using nodemailer. Works with any SMTP server (Gmail, Mailgun, Amazon SES, Zoho, self-hosted). Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
+
+To add a new notification provider: create `src/providers/notification-<name>/` with `index.ts` (using `ModuleProvider(Modules.NOTIFICATION, ...)`) and `service.ts` (extending `AbstractNotificationProviderService` with a `send()` method), then append to the notification module's `providers` array.
+
+### File Provider
+
+- **Cloudinary** (`src/providers/file-cloudinary/`) — Custom `AbstractFileProviderService`. Uploads to Cloudinary with auto resource type detection. Registered under `@medusajs/medusa/file`.
 
 ### Medusa Convention Directories
 
@@ -115,4 +128,4 @@ Three custom modules in `backend/medusa/src/modules/`, each following the Medusa
 
 ### Required Environment Variables
 
-See `backend/medusa/.env.template` for all variables. Key ones: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`, plus provider-specific keys for Stripe, Paystack, Cloudinary, and SendGrid.
+See `backend/medusa/.env.template` for all variables. Key ones: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`, plus provider-specific keys for Stripe, Paystack, Flutterwave, Cloudinary, SendGrid, and SMTP.

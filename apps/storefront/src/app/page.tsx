@@ -1,22 +1,36 @@
-import { Button } from "@blessluxe/ui";
+import {
+  HeroSlider,
+  FeaturedProducts,
+  HotPicks,
+  InstagramGrid,
+  StatsSection,
+  TrustBadges,
+  Newsletter,
+} from "@/components/home";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
-      <h1 className="font-display text-6xl font-light text-gold-dark">
-        BLESSLUXE
-      </h1>
-      <p className="font-body text-lg text-black/70">
-        Luxury Women&apos;s Fashion — Coming Soon
-      </p>
-      <div className="flex gap-4">
-        <Button variant="primary" size="lg">
-          Shop Collection
-        </Button>
-        <Button variant="outline" size="lg">
-          Learn More
-        </Button>
-      </div>
-    </main>
+    <>
+      {/* 1. Hero Section - Full height slider with animations */}
+      <HeroSlider />
+
+      {/* 2. New Arrivals - Featured products */}
+      <FeaturedProducts />
+
+      {/* 3. Hot Picks / Trending - Product grid with badges */}
+      <HotPicks />
+
+      {/* 4. Stats Section - Animated counters */}
+      <StatsSection />
+
+      {/* 5. Instagram Grid - Masonry layout */}
+      <InstagramGrid />
+
+      {/* 6. Trust Badges - Floating icons */}
+      <TrustBadges />
+
+      {/* 7. Newsletter - Email signup with success state */}
+      <Newsletter />
+    </>
   );
 }
