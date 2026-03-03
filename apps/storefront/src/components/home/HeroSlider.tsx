@@ -12,7 +12,7 @@ const slides = [
     title: "Embrace Your",
     highlight: "Luxe",
     subtitle: "Discover the art of effortless elegance",
-    cta: { label: "Shop Collection", href: "/collections" },
+    cta: { label: "Shop Collection", href: "/shop" },
     bg: "from-cream via-blush to-cream-dark",
   },
   {
@@ -20,7 +20,7 @@ const slides = [
     title: "Up to 50%",
     highlight: "Off",
     subtitle: "Exclusive sale on selected styles",
-    cta: { label: "Shop Sale", href: "/collections/sale" },
+    cta: { label: "Shop Sale", href: "/shop" },
     bg: "from-blush via-cream to-cream-dark",
   },
   {
@@ -28,7 +28,7 @@ const slides = [
     title: "BLESSLUXE",
     highlight: "Rewards",
     subtitle: "Earn points with every purchase",
-    cta: { label: "Join Now", href: "/rewards" },
+    cta: { label: "Join Now", href: "/shop" },
     bg: "from-cream-dark via-cream to-blush",
   },
 ];

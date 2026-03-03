@@ -67,7 +67,7 @@ export function LoadingScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.5 }}
-            className="mt-6 font-script text-2xl md:text-3xl text-gold"
+            className="-mt-2 font-script text-2xl md:text-3xl text-gold"
           >
             Loading
             <motion.span

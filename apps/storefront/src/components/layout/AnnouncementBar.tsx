@@ -11,7 +11,12 @@ const announcements = [
 
 export function AnnouncementBar() {
   return (
-    <div className="bg-gradient-to-r from-gold-dark via-gold to-gold-dark py-2.5 overflow-hidden">
+    <div 
+      className="py-2.5 overflow-hidden theme-transition"
+      style={{
+        background: `linear-gradient(to right, var(--theme-primary-dark), var(--theme-primary), var(--theme-primary-dark))`
+      }}
+    >
       <div className="flex animate-marquee whitespace-nowrap">
         {/* Duplicate announcements for seamless loop */}
         {[...announcements, ...announcements].map((text, index) => (

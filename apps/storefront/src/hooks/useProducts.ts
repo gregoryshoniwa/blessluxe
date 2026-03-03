@@ -34,6 +34,24 @@ export interface Category {
 }
 
 /**
+ * Fetch regions to get default region_id for pricing
+ */
+export function useRegions() {
+  return useQuery({
+    queryKey: ["regions"],
+    queryFn: async () => {
+      try {
+        const response = await medusa.store.region.list();
+        return response.regions;
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+/**
  * Fetch all products with optional filters
  */
 export function useProducts(options?: {
@@ -42,8 +60,11 @@ export function useProducts(options?: {
   collection_id?: string[];
   category_id?: string[];
 }) {
+  const { data: regions } = useRegions();
+  const regionId = regions?.[0]?.id;
+
   return useQuery({
-    queryKey: ["products", options],
+    queryKey: ["products", options, regionId],
     queryFn: async () => {
       try {
         const response = await medusa.store.product.list({
@@ -51,13 +72,14 @@ export function useProducts(options?: {
           offset: options?.offset ?? 0,
           collection_id: options?.collection_id,
           category_id: options?.category_id,
-        });
+          region_id: regionId,
+        } as Record<string, unknown>);
         return response.products as Product[];
       } catch {
-        // Return mock data if backend unavailable
         return getMockProducts();
       }
     },
+    enabled: !!regionId,
   });
 }
 
@@ -65,20 +87,24 @@ export function useProducts(options?: {
  * Fetch a single product by handle
  */
 export function useProduct(handle: string) {
+  const { data: regions } = useRegions();
+  const regionId = regions?.[0]?.id;
+
   return useQuery({
-    queryKey: ["product", handle],
+    queryKey: ["product", handle, regionId],
     queryFn: async () => {
       try {
         const response = await medusa.store.product.list({
           handle,
           limit: 1,
-        });
+          region_id: regionId,
+        } as Record<string, unknown>);
         return response.products[0] as Product | undefined;
       } catch {
         return getMockProducts().find((p) => p.handle === handle);
       }
     },
-    enabled: !!handle,
+    enabled: !!handle && !!regionId,
   });
 }
 
@@ -86,19 +112,23 @@ export function useProduct(handle: string) {
  * Fetch featured products
  */
 export function useFeaturedProducts(limit: number = 8) {
+  const { data: regions } = useRegions();
+  const regionId = regions?.[0]?.id;
+
   return useQuery({
-    queryKey: ["featured-products", limit],
+    queryKey: ["featured-products", limit, regionId],
     queryFn: async () => {
       try {
         const response = await medusa.store.product.list({
           limit,
-          // Add tag filter for featured products if supported
-        });
+          region_id: regionId,
+        } as Record<string, unknown>);
         return response.products as Product[];
       } catch {
         return getMockProducts().slice(0, limit);
       }
     },
+    enabled: !!regionId,
   });
 }
 

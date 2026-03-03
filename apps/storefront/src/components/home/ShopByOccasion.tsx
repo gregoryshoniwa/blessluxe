@@ -132,7 +132,7 @@ export function HotPicks() {
             transition={{ delay: index * 0.05 }}
             className="group"
           >
-            <Link href={`/products/${product.id}`} className="block">
+            <Link href={`/shop/${product.id}`} className="block">
               {/* Image Container */}
               <div className="relative aspect-[3/4] mb-4 rounded-lg overflow-hidden bg-cream-dark">
                 {/* Placeholder gradient */}
@@ -228,7 +228,7 @@ export function HotPicks() {
         className="text-center mt-12"
       >
         <Link
-          href="/collections/trending"
+          href="/shop"
           className="inline-block bg-gold text-white px-10 py-4 text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
         >
           View All Trending

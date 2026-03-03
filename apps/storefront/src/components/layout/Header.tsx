@@ -29,11 +29,11 @@ const navLinks = [
       categories: {
         title: "Categories",
         items: [
-          { href: "/shop?category=dresses", label: "Dresses" },
-          { href: "/shop?category=tops", label: "Tops & Blouses" },
-          { href: "/shop?category=bottoms", label: "Pants & Skirts" },
+          { href: "/shop?category=dresses&parent=women", label: "Dresses" },
+          { href: "/shop?category=tops&parent=women", label: "Tops & Blouses" },
+          { href: "/shop?category=bottoms&parent=women", label: "Pants & Skirts" },
           { href: "/shop?category=women", label: "Matching Sets" },
-          { href: "/shop?category=outerwear", label: "Jackets & Coats" },
+          { href: "/shop?category=outerwear&parent=women", label: "Jackets & Coats" },
           { href: "/shop?category=women", label: "Knitwear" },
         ],
       },
@@ -50,10 +50,10 @@ const navLinks = [
       accessories: {
         title: "Accessories",
         items: [
-          { href: "/shop?category=accessories", label: "Bags" },
-          { href: "/shop?category=accessories", label: "Jewelry" },
-          { href: "/shop?category=accessories", label: "Shoes" },
-          { href: "/shop?category=accessories", label: "Scarves" },
+          { href: "/shop?category=accessories&parent=women", label: "Bags" },
+          { href: "/shop?category=accessories&parent=women", label: "Jewelry" },
+          { href: "/shop?category=accessories&parent=women", label: "Shoes" },
+          { href: "/shop?category=accessories&parent=women", label: "Scarves" },
         ],
       },
     },
@@ -72,11 +72,11 @@ const navLinks = [
       categories: {
         title: "Categories",
         items: [
-          { href: "/shop?category=men", label: "Suits & Blazers" },
-          { href: "/shop?category=men", label: "Shirts" },
-          { href: "/shop?category=men", label: "Trousers" },
-          { href: "/shop?category=men", label: "Knitwear" },
-          { href: "/shop?category=outerwear", label: "Jackets & Coats" },
+          { href: "/shop?category=suits&parent=men", label: "Suits & Blazers" },
+          { href: "/shop?category=shirts&parent=men", label: "Shirts" },
+          { href: "/shop?category=trousers&parent=men", label: "Trousers" },
+          { href: "/shop?category=knitwear&parent=men", label: "Knitwear" },
+          { href: "/shop?category=outerwear&parent=men", label: "Jackets & Coats" },
           { href: "/shop?category=men", label: "Casual Wear" },
         ],
       },
@@ -91,10 +91,10 @@ const navLinks = [
       accessories: {
         title: "Accessories",
         items: [
-          { href: "/shop?category=accessories", label: "Watches" },
-          { href: "/shop?category=accessories", label: "Belts" },
-          { href: "/shop?category=accessories", label: "Shoes" },
-          { href: "/shop?category=accessories", label: "Bags" },
+          { href: "/shop?category=accessories&parent=men", label: "Watches" },
+          { href: "/shop?category=accessories&parent=men", label: "Belts" },
+          { href: "/shop?category=accessories&parent=men", label: "Shoes" },
+          { href: "/shop?category=accessories&parent=men", label: "Bags" },
         ],
       },
     },
@@ -208,19 +208,22 @@ export function Header() {
       <AnnouncementBar />
       <header
         className={cn(
-          "sticky top-0 z-50 transition-all duration-300",
-          "border-b border-gold/20",
+          "sticky top-0 z-50 transition-all duration-500 theme-transition",
+          "border-b border-theme-primary/20",
           isHeaderScrolled
-            ? "bg-cream/95 backdrop-blur-md shadow-lg shadow-gold/10"
-            : "bg-cream"
+            ? "bg-theme-background/95 backdrop-blur-md shadow-lg"
+            : "bg-theme-background"
         )}
+        style={{
+          boxShadow: isHeaderScrolled ? `0 4px 20px color-mix(in srgb, var(--theme-primary) 15%, transparent)` : 'none'
+        }}
       >
         <div className="max-w-[1600px] mx-auto px-[5%]">
           <div className="flex items-center justify-between py-4">
             {/* Mobile Menu Button */}
             <button
               onClick={openMobileNav}
-              className="lg:hidden p-2 -ml-2 hover:text-gold transition-colors"
+              className="lg:hidden p-2 -ml-2 hover:text-theme-primary theme-transition"
               aria-label="Open menu"
             >
               <Menu className="w-6 h-6" />
@@ -255,15 +258,14 @@ export function Header() {
                     className={cn(
                       "relative flex items-center gap-1.5 font-body text-sm font-medium tracking-widest uppercase",
                       "py-3 transition-colors",
-                      link.isSale ? "text-red-600" : "text-black hover:text-gold",
+                      link.isSale ? "text-red-600" : "text-black hover:text-theme-primary",
                       // Active state when hovering mega menu
-                      activeMenu === link.label && "text-gold",
+                      activeMenu === link.label && "text-theme-primary",
                       // Active state when on corresponding page
-                      activeNavItem === link.label && "text-gold",
+                      activeNavItem === link.label && "text-theme-primary",
                       // Underline animation
                       "after:absolute after:bottom-0 after:left-0",
-                      "after:w-0 after:h-0.5 after:bg-gold",
-                      "after:transition-all after:duration-300",
+                      "after:w-0 after:h-0.5 after:transition-all after:duration-300",
                       "hover:after:w-full",
                       // Show underline when active (hover or current page)
                       (activeMenu === link.label || activeNavItem === link.label) && "after:w-full"
@@ -287,7 +289,7 @@ export function Header() {
             <div className="flex items-center gap-5">
               <button
                 onClick={openSearch}
-                className="p-2 hover:text-gold transition-colors hover:scale-110"
+                className="p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Search"
               >
                 <Search className="w-5 h-5" strokeWidth={1.5} />
@@ -295,7 +297,7 @@ export function Header() {
 
               <Link
                 href="/account"
-                className="hidden sm:block p-2 hover:text-gold transition-colors hover:scale-110"
+                className="hidden sm:block p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Account"
               >
                 <User className="w-5 h-5" strokeWidth={1.5} />
@@ -303,12 +305,12 @@ export function Header() {
 
               <Link
                 href="/wishlist"
-                className="relative p-2 hover:text-gold transition-colors hover:scale-110"
+                className="relative p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Wishlist"
               >
                 <Heart className="w-5 h-5" strokeWidth={1.5} />
                 {mounted && wishlistCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold text-white text-[10px] font-semibold rounded-full flex items-center justify-center animate-pop-in">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-theme-primary text-white text-[10px] font-semibold rounded-full flex items-center justify-center animate-pop-in theme-transition">
                     {wishlistCount}
                   </span>
                 )}
@@ -316,12 +318,12 @@ export function Header() {
 
               <button
                 onClick={toggleCart}
-                className="relative p-2 hover:text-gold transition-colors hover:scale-110"
+                className="relative p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Cart"
               >
                 <ShoppingBag className="w-5 h-5" strokeWidth={1.5} />
                 {mounted && cartItemCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-gold text-white text-[10px] font-semibold rounded-full flex items-center justify-center animate-pop-in">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-theme-primary text-white text-[10px] font-semibold rounded-full flex items-center justify-center animate-pop-in theme-transition">
                     {cartItemCount}
                   </span>
                 )}
@@ -334,13 +336,14 @@ export function Header() {
         <AnimatePresence>
           {activeMenu && navLinks.find(l => l.label === activeMenu)?.submenu && (
             <motion.div
+              key={activeMenu}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
               onMouseEnter={handleSubmenuEnter}
               onMouseLeave={handleMenuLeave}
-              className="absolute left-0 right-0 bg-white shadow-xl border-t border-gold/10 z-40"
+              className="absolute left-0 right-0 bg-white shadow-xl border-t border-theme-primary/20 z-40 theme-transition"
             >
               <div className="max-w-[1400px] mx-auto px-[5%] py-10">
                 <div className="grid grid-cols-4 gap-12">
@@ -349,15 +352,15 @@ export function Header() {
                     if (!submenu) return null;
                     return Object.entries(submenu).map(([key, section]) => (
                       <div key={key}>
-                        <h3 className="font-display text-sm tracking-widest uppercase text-gold mb-5 pb-2 border-b border-gold/20">
+                        <h3 className="font-display text-sm tracking-widest uppercase text-theme-primary mb-5 pb-2 border-b border-theme-primary/30 theme-transition">
                           {section.title}
                         </h3>
                         <ul className="space-y-3">
-                          {section.items.map((item) => (
-                            <li key={item.href}>
+                          {section.items.map((item, index) => (
+                            <li key={`${key}-${item.label}-${index}`}>
                               <Link
                                 href={item.href}
-                                className="flex items-center gap-2 text-sm text-black/70 hover:text-gold transition-colors group"
+                                className="flex items-center gap-2 text-sm text-black/70 hover:text-theme-primary transition-colors group"
                               >
                                 {"icon" in item && (
                                   <span>{item.icon}</span>
@@ -375,15 +378,15 @@ export function Header() {
                 </div>
 
                 {/* Featured promo in mega menu */}
-                <div className="mt-10 pt-8 border-t border-gold/10">
+                <div className="mt-10 pt-8 border-t border-theme-primary/20 theme-transition">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-script text-2xl text-gold">New Season</p>
+                      <p className="font-script text-2xl text-theme-primary theme-transition">New Season</p>
                       <p className="text-black/70 text-sm mt-1">Up to 40% off selected styles</p>
                     </div>
                     <Link
-                      href="/collections/sale"
-                      className="inline-block bg-gold text-white px-8 py-3 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+                      href="/shop"
+                      className="inline-block bg-theme-primary text-white px-8 py-3 text-xs font-semibold tracking-widest uppercase hover:bg-theme-primary-dark theme-transition"
                     >
                       Shop Now
                     </Link>

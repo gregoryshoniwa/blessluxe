@@ -17,5 +17,10 @@
     "turbo": "^2.1.3"
   },
   "packageManager": "pnpm@9.12.3",
-  "prettier": "@blessluxe/prettier-config"
+  "prettier": "@blessluxe/prettier-config",
+  "pnpm": {
+    "overrides": {
+      "zod": "3.25.76"
+    }
+  }
 }

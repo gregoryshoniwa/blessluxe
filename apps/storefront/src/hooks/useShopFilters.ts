@@ -47,7 +47,24 @@ export function useShopFilters() {
     (newFilters: Partial<ShopFilters>) => {
       const params = new URLSearchParams(searchParams.toString());
 
-      const merged = { ...filters, ...newFilters };
+      // Read fresh values from current URL params to avoid stale closure
+      const currentCategory = searchParams.get("category") || null;
+      const currentSizes = searchParams.get("size")?.split(",").filter(Boolean) ?? [];
+      const currentMinPrice = searchParams.get("minPrice") ? Number(searchParams.get("minPrice")) : null;
+      const currentMaxPrice = searchParams.get("maxPrice") ? Number(searchParams.get("maxPrice")) : null;
+      const currentColors = searchParams.get("color")?.split(",").filter(Boolean) ?? [];
+      const currentSort = searchParams.get("sort") ?? "newest";
+
+      const currentFilters = {
+        category: currentCategory,
+        sizes: currentSizes,
+        minPrice: currentMinPrice,
+        maxPrice: currentMaxPrice,
+        colors: currentColors,
+        sort: currentSort,
+      };
+
+      const merged = { ...currentFilters, ...newFilters };
 
       // Category
       if (merged.category) {
@@ -94,7 +111,7 @@ export function useShopFilters() {
         : pathname;
       router.push(newUrl, { scroll: false });
     },
-    [filters, pathname, router, searchParams]
+    [pathname, router, searchParams]
   );
 
   // Toggle helpers

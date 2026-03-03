@@ -2,6 +2,8 @@ import { loadEnv, defineConfig, Modules } from "@medusajs/framework/utils";
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
+const isSecureCookies = process.env.COOKIE_SECURE === "true";
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -13,100 +15,131 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
+    cookieOptions: {
+      secure: isSecureCookies,
+      sameSite: isSecureCookies ? "none" as const : "lax" as const,
+    },
   },
   admin: {
-    disable: false,
+    disable: process.env.DISABLE_ADMIN === "true",
   },
   modules: [
     // --- File storage: Cloudinary ---
-    {
-      resolve: "@medusajs/medusa/file",
-      options: {
-        providers: [
+    // Uncomment when you have Cloudinary credentials
+    ...(process.env.CLOUDINARY_CLOUD_NAME
+      ? [
           {
-            resolve: "./src/providers/file-cloudinary",
-            id: "cloudinary",
+            resolve: "@medusajs/medusa/file",
             options: {
-              cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-              api_key: process.env.CLOUDINARY_API_KEY,
-              api_secret: process.env.CLOUDINARY_API_SECRET,
+              providers: [
+                {
+                  resolve: "./src/providers/file-cloudinary",
+                  id: "cloudinary",
+                  options: {
+                    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+                    api_key: process.env.CLOUDINARY_API_KEY,
+                    api_secret: process.env.CLOUDINARY_API_SECRET,
+                  },
+                },
+              ],
             },
           },
-        ],
-      },
-    },
+        ]
+      : []),
 
     // --- Payment: Stripe + Paystack + Flutterwave ---
-    {
-      resolve: "@medusajs/medusa/payment",
-      options: {
-        providers: [
+    // Only load when at least one payment key is set
+    ...(process.env.STRIPE_API_KEY ||
+    process.env.PAYSTACK_SECRET_KEY ||
+    process.env.FLUTTERWAVE_SECRET_KEY
+      ? [
           {
-            resolve: "@medusajs/medusa/payment-stripe",
-            id: "stripe",
+            resolve: "@medusajs/medusa/payment",
             options: {
-              apiKey: process.env.STRIPE_API_KEY,
-              webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+              providers: [
+                ...(process.env.STRIPE_API_KEY
+                  ? [
+                      {
+                        resolve: "@medusajs/medusa/payment-stripe",
+                        id: "stripe",
+                        options: {
+                          apiKey: process.env.STRIPE_API_KEY,
+                          webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(process.env.PAYSTACK_SECRET_KEY
+                  ? [
+                      {
+                        resolve: "./src/providers/payment-paystack",
+                        id: "paystack",
+                        options: {
+                          secret_key: process.env.PAYSTACK_SECRET_KEY,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(process.env.FLUTTERWAVE_SECRET_KEY
+                  ? [
+                      {
+                        resolve: "./src/providers/payment-flutterwave",
+                        id: "flutterwave",
+                        options: {
+                          secret_key: process.env.FLUTTERWAVE_SECRET_KEY,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
             },
           },
-          {
-            resolve: "./src/providers/payment-paystack",
-            id: "paystack",
-            options: {
-              secret_key: process.env.PAYSTACK_SECRET_KEY,
-            },
-          },
-          {
-            resolve: "./src/providers/payment-flutterwave",
-            id: "flutterwave",
-            options: {
-              secret_key: process.env.FLUTTERWAVE_SECRET_KEY,
-            },
-          },
-          // To add another gateway, append an entry here:
-          // {
-          //   resolve: "./src/providers/payment-<name>",
-          //   id: "<name>",
-          //   options: { secret_key: process.env.<NAME>_SECRET_KEY },
-          // },
-        ],
-      },
-    },
+        ]
+      : []),
 
     // --- Notifications: SendGrid + SMTP ---
-    {
-      resolve: "@medusajs/medusa/notification",
-      options: {
-        providers: [
-          // SendGrid — managed email delivery
+    // Only load when at least one notification key is set
+    ...(process.env.SENDGRID_API_KEY || process.env.SMTP_HOST
+      ? [
           {
-            resolve: "@medusajs/medusa/notification-sendgrid",
-            id: "sendgrid",
+            resolve: "@medusajs/medusa/notification",
             options: {
-              channels: ["email"],
-              api_key: process.env.SENDGRID_API_KEY,
-              from: process.env.SENDGRID_FROM,
+              providers: [
+                ...(process.env.SENDGRID_API_KEY
+                  ? [
+                      {
+                        resolve: "@medusajs/medusa/notification-sendgrid",
+                        id: "sendgrid",
+                        options: {
+                          channels: ["email"],
+                          api_key: process.env.SENDGRID_API_KEY,
+                          from: process.env.SENDGRID_FROM,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(process.env.SMTP_HOST
+                  ? [
+                      {
+                        resolve: "./src/providers/notification-smtp",
+                        id: "smtp",
+                        options: {
+                          channels: ["email"],
+                          host: process.env.SMTP_HOST,
+                          port: Number(process.env.SMTP_PORT || 587),
+                          secure: process.env.SMTP_SECURE === "true",
+                          auth_user: process.env.SMTP_USER,
+                          auth_pass: process.env.SMTP_PASS,
+                          from: process.env.SMTP_FROM,
+                        },
+                      },
+                    ]
+                  : []),
+              ],
             },
           },
-          // Generic SMTP — works with any SMTP server (Gmail, Mailgun,
-          // Amazon SES, Zoho, self-hosted, etc.)
-          {
-            resolve: "./src/providers/notification-smtp",
-            id: "smtp",
-            options: {
-              channels: ["email"],
-              host: process.env.SMTP_HOST,
-              port: Number(process.env.SMTP_PORT || 587),
-              secure: process.env.SMTP_SECURE === "true",
-              auth_user: process.env.SMTP_USER,
-              auth_pass: process.env.SMTP_PASS,
-              from: process.env.SMTP_FROM,
-            },
-          },
-          // To add another notification provider, append an entry here.
-        ],
-      },
-    },
+        ]
+      : []),
 
     // --- Custom modules ---
     {

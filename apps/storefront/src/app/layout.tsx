@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
-import { QueryProvider, CartProvider, AuthProvider } from "@/providers";
+import { QueryProvider, CartProvider, AuthProvider, ThemeProvider } from "@/providers";
 import { Header, MobileNav, Footer, LoadingScreen } from "@/components/layout";
+import { CartSidebar } from "@/components/cart";
+import AgentWidget from "@/components/chat/AgentWidget";
 
 export const metadata: Metadata = {
   title: "BLESSLUXE | Luxury Fashion for Women, Men & Children",
@@ -44,17 +47,26 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-body bg-cream text-[#1A1A1A] antialiased">
+      <body 
+        className="font-body text-[#1A1A1A] antialiased theme-transition"
+        style={{ backgroundColor: 'var(--theme-background)' }}
+      >
         <QueryProvider>
           <AuthProvider>
             <CartProvider>
-              <LoadingScreen />
-              <div className="flex min-h-screen flex-col">
-                <Header />
-                <MobileNav />
-                <main className="flex-1">{children}</main>
-                <Footer />
-              </div>
+              <Suspense fallback={null}>
+                <ThemeProvider>
+                  <LoadingScreen />
+                  <CartSidebar />
+                  <div className="flex min-h-screen flex-col">
+                    <Header />
+                    <MobileNav />
+                    <main className="flex-1">{children}</main>
+                    <Footer />
+                  </div>
+                  <AgentWidget />
+                </ThemeProvider>
+              </Suspense>
             </CartProvider>
           </AuthProvider>
         </QueryProvider>

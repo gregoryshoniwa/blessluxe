@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/.next
+**/.medusa
+**/dist
+.git
+.env
+.env.*
+!.env.template
+!.env.docker
+mock_website
+.turbo
+*.md

@@ -9,6 +9,7 @@
    CSS VARIABLES
    ═══════════════════════════════════════════════════════════ */
 :root {
+  /* Default Theme (Gold/Luxury) */
   --gold-primary: #C9A84C;
   --gold-dark: #B8860B;
   --gold-light: #D4AF37;
@@ -18,9 +19,149 @@
   --black-light: #333333;
   --blush: #F5E6E0;
   
+  /* Dynamic Theme Variables */
+  --theme-primary: #C9A84C;
+  --theme-primary-dark: #B8860B;
+  --theme-primary-light: #D4AF37;
+  --theme-secondary: #1A1A1A;
+  --theme-background: #FDF8F3;
+  --theme-background-dark: #F5EDE3;
+  --theme-accent: #F5E6E0;
+  --theme-text: #1A1A1A;
+  --theme-text-light: #666666;
+  
   --transition-fast: 0.2s ease;
   --transition-medium: 0.4s ease;
   --transition-slow: 0.6s ease;
+}
+
+/* Women's Theme - Feminine Rose */
+[data-theme="women"] {
+  --theme-primary: #D4A5A5;
+  --theme-primary-dark: #B08B8B;
+  --theme-primary-light: #E8C4C4;
+  --theme-secondary: #8B6B6B;
+  --theme-background: #FFF5F5;
+  --theme-background-dark: #FFE8E8;
+  --theme-accent: #F5E6E0;
+  --theme-text: #5C4A4A;
+  --theme-text-light: #8B7676;
+}
+
+/* Men's Theme - Masculine Navy */
+[data-theme="men"] {
+  --theme-primary: #1E3A5F;
+  --theme-primary-dark: #152A45;
+  --theme-primary-light: #2A4F7A;
+  --theme-secondary: #4A5568;
+  --theme-background: #F5F7FA;
+  --theme-background-dark: #E8ECF1;
+  --theme-accent: #6B7B8C;
+  --theme-text: #1A202C;
+  --theme-text-light: #4A5568;
+}
+
+/* Children's Theme - Playful Coral */
+[data-theme="children"] {
+  --theme-primary: #FF6B6B;
+  --theme-primary-dark: #E85A5A;
+  --theme-primary-light: #FF8585;
+  --theme-secondary: #4ECDC4;
+  --theme-background: #FFF0EE;
+  --theme-background-dark: #FFE4E1;
+  --theme-accent: #A8E6CF;
+  --theme-text: #2D3748;
+  --theme-text-light: #5A6B7C;
+}
+
+/* Smooth theme transitions */
+body {
+  transition: background-color 0.5s ease, color 0.5s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   THEME UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════ */
+
+/* Background colors */
+.bg-theme-primary { background-color: var(--theme-primary); }
+.bg-theme-primary-dark { background-color: var(--theme-primary-dark); }
+.bg-theme-primary-light { background-color: var(--theme-primary-light); }
+.bg-theme-secondary { background-color: var(--theme-secondary); }
+.bg-theme-background { background-color: var(--theme-background); }
+.bg-theme-background-dark { background-color: var(--theme-background-dark); }
+.bg-theme-accent { background-color: var(--theme-accent); }
+
+/* Text colors */
+.text-theme-primary { color: var(--theme-primary); }
+.text-theme-primary-dark { color: var(--theme-primary-dark); }
+.text-theme-secondary { color: var(--theme-secondary); }
+.text-theme-text { color: var(--theme-text); }
+.text-theme-text-light { color: var(--theme-text-light); }
+
+/* Border colors */
+.border-theme-primary { border-color: var(--theme-primary); }
+.border-theme-primary\/20 { border-color: color-mix(in srgb, var(--theme-primary) 20%, transparent); }
+.border-theme-primary\/50 { border-color: color-mix(in srgb, var(--theme-primary) 50%, transparent); }
+
+/* Ring colors */
+.ring-theme-primary { --tw-ring-color: var(--theme-primary); }
+.ring-theme-primary\/50 { --tw-ring-color: color-mix(in srgb, var(--theme-primary) 50%, transparent); }
+
+/* Focus states */
+.focus\:ring-theme-primary:focus { --tw-ring-color: var(--theme-primary); }
+.focus\:border-theme-primary:focus { border-color: var(--theme-primary); }
+
+/* Hover states */
+.hover\:bg-theme-primary:hover { background-color: var(--theme-primary); }
+.hover\:bg-theme-primary-dark:hover { background-color: var(--theme-primary-dark); }
+.hover\:text-theme-primary:hover { color: var(--theme-primary); }
+
+/* Transitions for theme changes */
+.theme-transition {
+  transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+}
+
+/* Navigation underline uses theme color */
+nav a::after,
+.nav-link::after {
+  background-color: var(--theme-primary) !important;
+}
+
+/* Radio button styling with theme colors */
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--theme-primary);
+  border-radius: 50%;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+input[type="radio"]:checked {
+  border-color: var(--theme-primary);
+  background-color: var(--theme-primary);
+}
+
+input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background-color: white;
+  border-radius: 50%;
+}
+
+input[type="radio"]:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 30%, transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -32,6 +173,33 @@ html {
 
 body {
   overflow-x: hidden;
+}
+
+/* Themed scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--theme-background);
+  transition: background-color 0.5s ease;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-primary);
+  border-radius: 5px;
+  transition: background-color 0.5s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-primary-dark);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-primary) var(--theme-background);
 }
 
 /* ═══════════════════════════════════════════════════════════

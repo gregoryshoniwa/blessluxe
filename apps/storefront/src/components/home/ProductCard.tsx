@@ -75,11 +75,15 @@ export function ProductCard({
       transition={{ duration: 0.3 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="group bg-cream rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300"
+      className="group rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300 theme-transition"
+      style={{ backgroundColor: 'var(--theme-background)' }}
     >
-      <Link href={`/products/${handle}`}>
+      <Link href={`/shop/${handle}`}>
         {/* Image Container */}
-        <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-cream-dark to-blush">
+        <div 
+          className="relative aspect-[3/4] overflow-hidden theme-transition"
+          style={{ background: 'linear-gradient(to bottom right, var(--theme-background-dark), var(--theme-secondary))' }}
+        >
           {/* Placeholder or Image */}
           {thumbnail ? (
             <motion.img
@@ -93,7 +97,8 @@ export function ProductCard({
             <motion.div
               animate={{ scale: isHovered ? 1.08 : 1 }}
               transition={{ duration: 0.6 }}
-              className="w-full h-full bg-gradient-to-br from-cream-dark to-blush"
+              className="w-full h-full theme-transition"
+              style={{ background: 'linear-gradient(to bottom right, var(--theme-background-dark), var(--theme-secondary))' }}
             />
           )}
 

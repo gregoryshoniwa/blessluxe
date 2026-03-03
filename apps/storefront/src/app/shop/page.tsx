@@ -36,24 +36,32 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     : "Shop All Collections";
 
   return (
-    <main className="min-h-screen bg-cream">
+    <main 
+      className="min-h-screen theme-transition"
+      style={{ backgroundColor: 'var(--theme-background)' }}
+    >
       {/* Page Header */}
-      <div className="bg-gradient-to-b from-cream-dark to-cream">
+      <div 
+        className="theme-transition"
+        style={{ 
+          background: `linear-gradient(to bottom, var(--theme-background-dark), var(--theme-background))` 
+        }}
+      >
         <div className="max-w-[1400px] mx-auto px-[5%] py-8">
           {/* Breadcrumb */}
           <nav
             className="flex items-center gap-2 text-sm text-black/60 mb-4"
             aria-label="Breadcrumb"
           >
-            <Link href="/" className="hover:text-gold transition-colors">
+            <Link href="/" className="hover:text-theme-primary theme-transition">
               Home
             </Link>
             <ChevronRight className="w-4 h-4" />
-            <span className="text-gold font-medium">Shop</span>
+            <span className="text-theme-primary font-medium theme-transition">Shop</span>
             {category && (
               <>
                 <ChevronRight className="w-4 h-4" />
-                <span className="text-gold font-medium">
+                <span className="text-theme-primary font-medium theme-transition">
                   {categoryTitles[category] || category}
                 </span>
               </>
@@ -72,13 +80,25 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
         fallback={
           <div className="max-w-[1400px] mx-auto px-[5%] py-8">
             <div className="animate-pulse">
-              <div className="h-8 bg-cream-dark rounded w-48 mb-8" />
+              <div 
+                className="h-8 rounded w-48 mb-8 theme-transition" 
+                style={{ backgroundColor: 'var(--theme-background-dark)' }}
+              />
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="space-y-4">
-                    <div className="aspect-[3/4] bg-cream-dark rounded-lg" />
-                    <div className="h-4 bg-cream-dark rounded w-3/4" />
-                    <div className="h-4 bg-cream-dark rounded w-1/2" />
+                    <div 
+                      className="aspect-[3/4] rounded-lg theme-transition" 
+                      style={{ backgroundColor: 'var(--theme-background-dark)' }}
+                    />
+                    <div 
+                      className="h-4 rounded w-3/4 theme-transition" 
+                      style={{ backgroundColor: 'var(--theme-background-dark)' }}
+                    />
+                    <div 
+                      className="h-4 rounded w-1/2 theme-transition" 
+                      style={{ backgroundColor: 'var(--theme-background-dark)' }}
+                    />
                   </div>
                 ))}
               </div>

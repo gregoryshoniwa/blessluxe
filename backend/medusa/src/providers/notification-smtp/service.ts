@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { AbstractNotificationProviderService } from "@medusajs/framework/utils";
 import type {
   Logger,

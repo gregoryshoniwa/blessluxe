@@ -1,22 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShopFilters } from "@/hooks/useShopFilters";
 
-const categories = [
-  { id: "all", label: "All Products" },
-  { id: "women", label: "Women" },
-  { id: "men", label: "Men" },
-  { id: "children", label: "Children" },
-  { id: "dresses", label: "Dresses" },
-  { id: "tops", label: "Tops & Blouses" },
-  { id: "bottoms", label: "Pants & Skirts" },
-  { id: "outerwear", label: "Outerwear" },
-  { id: "accessories", label: "Accessories" },
-];
+// Category structure with parent relationships
+const categoryConfig = {
+  women: {
+    label: "Women's Collection",
+    subcategories: [
+      { id: "all-women", label: "All Women's", value: "women" },
+      { id: "dresses", label: "Dresses", value: "dresses" },
+      { id: "tops", label: "Tops & Blouses", value: "tops" },
+      { id: "bottoms", label: "Pants & Skirts", value: "bottoms" },
+      { id: "outerwear", label: "Outerwear", value: "outerwear" },
+      { id: "accessories", label: "Accessories", value: "accessories" },
+    ],
+  },
+  men: {
+    label: "Men's Collection",
+    subcategories: [
+      { id: "all-men", label: "All Men's", value: "men" },
+      { id: "suits", label: "Suits & Blazers", value: "suits" },
+      { id: "shirts", label: "Shirts", value: "shirts" },
+      { id: "trousers", label: "Trousers", value: "trousers" },
+      { id: "knitwear", label: "Knitwear", value: "knitwear" },
+      { id: "outerwear-men", label: "Jackets & Coats", value: "outerwear" },
+    ],
+  },
+  children: {
+    label: "Children's Collection",
+    subcategories: [
+      { id: "all-children", label: "All Children's", value: "children" },
+      { id: "boys", label: "Boys", value: "boys" },
+      { id: "girls", label: "Girls", value: "girls" },
+      { id: "baby", label: "Baby", value: "baby" },
+      { id: "accessories-kids", label: "Accessories", value: "accessories" },
+    ],
+  },
+  default: {
+    label: "All Products",
+    subcategories: [
+      { id: "all", label: "All Products", value: null },
+      { id: "women", label: "Women", value: "women" },
+      { id: "men", label: "Men", value: "men" },
+      { id: "children", label: "Children", value: "children" },
+      { id: "accessories", label: "Accessories", value: "accessories" },
+    ],
+  },
+};
 
 const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
 
@@ -45,6 +80,33 @@ interface FiltersPanelProps {
 }
 
 export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps) {
+  const searchParams = useSearchParams();
+  const currentUrlCategory = searchParams.get("category");
+  const parentParam = searchParams.get("parent");
+  
+  // Determine which category config to use based on URL
+  const categories = useMemo(() => {
+    let parent: keyof typeof categoryConfig = "default";
+    
+    // First, check if parent param is provided (for subcategories like outerwear, accessories)
+    if (parentParam) {
+      if (parentParam === "women") parent = "women";
+      else if (parentParam === "men") parent = "men";
+      else if (parentParam === "children") parent = "children";
+    }
+    // Otherwise, check if current URL category is a parent category or belongs to one
+    else if (currentUrlCategory === "women" || ["dresses", "tops", "bottoms", "outerwear", "accessories"].includes(currentUrlCategory || "")) {
+      parent = "women";
+    } else if (currentUrlCategory === "men" || ["suits", "shirts", "trousers", "knitwear", "outerwear", "accessories"].includes(currentUrlCategory || "")) {
+      // Note: outerwear/accessories without parent param defaults to first match (women), but with parent=men it will show men's
+      parent = "men";
+    } else if (currentUrlCategory === "children" || ["boys", "girls", "baby"].includes(currentUrlCategory || "")) {
+      parent = "children";
+    }
+    
+    return categoryConfig[parent].subcategories;
+  }, [currentUrlCategory, parentParam]);
+
   const {
     filters,
     toggleSize,
@@ -113,29 +175,30 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
               className="overflow-hidden"
             >
               <div className="pt-3 space-y-2">
-                {categories.map((cat) => (
-                  <label
-                    key={cat.id}
-                    className="flex items-center gap-3 cursor-pointer group"
-                  >
-                    <input
-                      type="radio"
-                      name="category"
-                      checked={
-                        cat.id === "all"
-                          ? filters.category === null
-                          : filters.category === cat.id
-                      }
-                      onChange={() =>
-                        setCategory(cat.id === "all" ? null : cat.id)
-                      }
-                      className="w-4 h-4 border-2 border-gold/40 text-gold focus:ring-gold"
-                    />
-                    <span className="text-sm group-hover:text-gold transition-colors">
-                      {cat.label}
-                    </span>
-                  </label>
-                ))}
+                {categories.map((cat) => {
+                  // All subcategories now have explicit value property
+                  const categoryValue = cat.value;
+                  const isSelected = categoryValue === null 
+                    ? filters.category === null 
+                    : filters.category === categoryValue;
+                  
+                  return (
+                    <label
+                      key={cat.id}
+                      className="flex items-center gap-3 cursor-pointer group"
+                    >
+                      <input
+                        type="radio"
+                        checked={isSelected}
+                        onChange={() => setCategory(categoryValue)}
+                        className="w-4 h-4 border-2 border-theme-primary/50 text-theme-primary focus:ring-theme-primary theme-transition"
+                      />
+                      <span className="text-sm hover:text-theme-primary theme-transition">
+                        {cat.label}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </motion.div>
           )}
@@ -143,7 +206,7 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
       </div>
 
       {/* Size Filter */}
-      <div className="border-b border-gold/10 pb-6">
+      <div className="border-b border-theme-primary/20 pb-6 theme-transition">
         <button
           onClick={() => toggleSection("size")}
           className="w-full flex items-center justify-between py-2 text-left"
@@ -170,10 +233,10 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
                     key={size}
                     onClick={() => toggleSize(size)}
                     className={cn(
-                      "w-10 h-10 rounded-md border-2 text-sm font-medium transition-all",
+                      "w-10 h-10 rounded-md border-2 text-sm font-medium transition-all theme-transition",
                       filters.sizes.includes(size)
-                        ? "bg-gold border-gold text-white"
-                        : "border-gold/20 hover:border-gold/50"
+                        ? "bg-theme-primary border-theme-primary text-white"
+                        : "border-theme-primary/20 hover:border-theme-primary/50"
                     )}
                   >
                     {size}
@@ -218,16 +281,16 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
                       name="price"
                       checked={selectedPriceRange?.id === range.id}
                       onChange={() => setPriceRange(range.min, range.max)}
-                      className="w-4 h-4 border-2 border-gold/40 text-gold focus:ring-gold"
+                      className="w-4 h-4 border-2 border-theme-primary/50 text-theme-primary focus:ring-theme-primary theme-transition"
                     />
-                    <span className="text-sm group-hover:text-gold transition-colors">
+                    <span className="text-sm hover:text-theme-primary theme-transition">
                       {range.label}
                     </span>
                   </label>
                 ))}
                 <button
                   onClick={() => setPriceRange(null, null)}
-                  className="text-xs text-black/50 hover:text-gold mt-2"
+                  className="text-xs text-black/50 hover:text-theme-primary mt-2 theme-transition"
                 >
                   Clear price filter
                 </button>
@@ -327,7 +390,7 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
             </h2>
             <button
               onClick={onCloseMobile}
-              className="p-2 hover:text-gold transition-colors"
+              className="p-2 hover:text-theme-primary theme-transition"
             >
               <X className="w-5 h-5" />
             </button>
