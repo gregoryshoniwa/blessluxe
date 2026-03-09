@@ -60,20 +60,61 @@ export default async function seed({ container }: ExecArgs) {
     ]);
   }
 
-  const existingCategories = await productService.listProductCategories();
-  let categories = existingCategories;
+  const requiredCategories = [
+    { name: "Women", handle: "women" },
+    { name: "Men", handle: "men" },
+    { name: "Children", handle: "children" },
+    { name: "Sale", handle: "sale" },
+    { name: "Dresses", handle: "dresses" },
+    { name: "Tops", handle: "tops" },
+    { name: "Bottoms", handle: "bottoms" },
+    { name: "Outerwear", handle: "outerwear" },
+    { name: "Accessories", handle: "accessories" },
+    { name: "Shoes", handle: "shoes" },
+    { name: "Bags", handle: "bags" },
+    { name: "Jewelry", handle: "jewelry" },
+    { name: "Women Accessories", handle: "women-accessories" },
+    { name: "Women Shoes", handle: "women-shoes" },
+    { name: "Women Bags", handle: "women-bags" },
+    { name: "Women Jewelry", handle: "women-jewelry" },
+    { name: "Suits & Blazers", handle: "suits" },
+    { name: "Shirts", handle: "shirts" },
+    { name: "Trousers", handle: "trousers" },
+    { name: "Knitwear", handle: "knitwear" },
+    { name: "Men Accessories", handle: "men-accessories" },
+    { name: "Men Shoes", handle: "men-shoes" },
+    { name: "Men Bags", handle: "men-bags" },
+    { name: "Girls", handle: "girls" },
+    { name: "Boys", handle: "boys" },
+    { name: "Baby", handle: "baby" },
+    { name: "Children Accessories", handle: "children-accessories" },
+    { name: "Children Shoes", handle: "children-shoes" },
+  ];
 
-  if (existingCategories.length === 0) {
-    categories = await productService.createProductCategories([
-      { name: "Dresses", handle: "dresses" },
-      { name: "Tops", handle: "tops" },
-      { name: "Bottoms", handle: "bottoms" },
-      { name: "Outerwear", handle: "outerwear" },
-      { name: "Accessories", handle: "accessories" },
-      { name: "Shoes", handle: "shoes" },
-      { name: "Bags", handle: "bags" },
-      { name: "Jewelry", handle: "jewelry" },
-    ]);
+  const listAllCategories = async () =>
+    await productService.listProductCategories(
+      {},
+      { take: 500 } as Record<string, unknown>
+    );
+
+  let categories = await listAllCategories();
+
+  const ensureCategory = async (name: string, handle: string) => {
+    if (categories.some((category: { handle: string }) => category.handle === handle)) {
+      return;
+    }
+
+    try {
+      await productService.createProductCategories([{ name, handle }]);
+    } catch {
+      // Ignore duplicate-handle races and continue.
+    }
+
+    categories = await listAllCategories();
+  };
+
+  for (const category of requiredCategories) {
+    await ensureCategory(category.name, category.handle);
   }
 
   const cat = (handle: string) => {
@@ -589,6 +630,121 @@ export default async function seed({ container }: ExecArgs) {
 
   } // end if (products don't exist yet)
 
+  const latestProducts = await productService.listProducts({}, { take: 250 });
+  const existingProductHandles = new Set(
+    latestProducts.map((product: { handle: string }) => product.handle)
+  );
+  const supplementalProducts = [
+    {
+      title: "Classic Tailored Wool Suit",
+      handle: "classic-tailored-wool-suit",
+      description:
+        "A sharp two-piece wool suit designed for modern formalwear with a structured fit and breathable lining.",
+      status: "published",
+      categories: cat("suits"),
+      options: [
+        { title: "Size", values: ["48", "50", "52", "54"] },
+        { title: "Color", values: ["Navy", "Charcoal"] },
+      ],
+      variants: [
+        { title: "Navy / 50", sku: "MEN-SUIT-NAVY-50", manage_inventory: false, options: { Size: "50", Color: "Navy" } },
+        { title: "Navy / 52", sku: "MEN-SUIT-NAVY-52", manage_inventory: false, options: { Size: "52", Color: "Navy" } },
+        { title: "Charcoal / 50", sku: "MEN-SUIT-CHAR-50", manage_inventory: false, options: { Size: "50", Color: "Charcoal" } },
+      ],
+    },
+    {
+      title: "Premium Oxford Shirt",
+      handle: "premium-oxford-shirt",
+      description:
+        "A refined oxford cotton shirt with a clean collar and tailored silhouette for office and smart-casual styling.",
+      status: "published",
+      categories: cat("shirts"),
+      options: [
+        { title: "Size", values: ["S", "M", "L", "XL"] },
+        { title: "Color", values: ["White", "Sky Blue"] },
+      ],
+      variants: [
+        { title: "White / M", sku: "MEN-SHIRT-WHT-M", manage_inventory: false, options: { Size: "M", Color: "White" } },
+        { title: "White / L", sku: "MEN-SHIRT-WHT-L", manage_inventory: false, options: { Size: "L", Color: "White" } },
+        { title: "Sky Blue / M", sku: "MEN-SHIRT-BLU-M", manage_inventory: false, options: { Size: "M", Color: "Sky Blue" } },
+      ],
+    },
+    {
+      title: "Men's Leather Loafers",
+      handle: "mens-leather-loafers",
+      description:
+        "Polished leather loafers with cushioned insoles and a timeless slip-on silhouette.",
+      status: "published",
+      categories: cat("men-shoes"),
+      options: [
+        { title: "Size", values: ["41", "42", "43", "44"] },
+        { title: "Color", values: ["Black", "Brown"] },
+      ],
+      variants: [
+        { title: "Black / 42", sku: "MEN-LOAFER-BLK-42", manage_inventory: false, options: { Size: "42", Color: "Black" } },
+        { title: "Black / 43", sku: "MEN-LOAFER-BLK-43", manage_inventory: false, options: { Size: "43", Color: "Black" } },
+        { title: "Brown / 42", sku: "MEN-LOAFER-BRN-42", manage_inventory: false, options: { Size: "42", Color: "Brown" } },
+      ],
+    },
+    {
+      title: "Boys Formal Blazer Set",
+      handle: "boys-formal-blazer-set",
+      description:
+        "Smart blazer and trouser set for special events with stretch comfort and easy movement.",
+      status: "published",
+      categories: cat("boys"),
+      options: [
+        { title: "Size", values: ["6Y", "8Y", "10Y", "12Y"] },
+        { title: "Color", values: ["Navy"] },
+      ],
+      variants: [
+        { title: "Navy / 8Y", sku: "KIDS-BOYS-BLAZER-8Y", manage_inventory: false, options: { Size: "8Y", Color: "Navy" } },
+        { title: "Navy / 10Y", sku: "KIDS-BOYS-BLAZER-10Y", manage_inventory: false, options: { Size: "10Y", Color: "Navy" } },
+      ],
+    },
+    {
+      title: "Girls Party Tulle Dress",
+      handle: "girls-party-tulle-dress",
+      description:
+        "A playful party dress with layered tulle and satin bow details for festive occasions.",
+      status: "published",
+      categories: cat("girls"),
+      options: [
+        { title: "Size", values: ["5Y", "7Y", "9Y", "11Y"] },
+        { title: "Color", values: ["Blush", "Ivory"] },
+      ],
+      variants: [
+        { title: "Blush / 7Y", sku: "KIDS-GIRL-DRESS-BLSH-7Y", manage_inventory: false, options: { Size: "7Y", Color: "Blush" } },
+        { title: "Blush / 9Y", sku: "KIDS-GIRL-DRESS-BLSH-9Y", manage_inventory: false, options: { Size: "9Y", Color: "Blush" } },
+        { title: "Ivory / 7Y", sku: "KIDS-GIRL-DRESS-IVRY-7Y", manage_inventory: false, options: { Size: "7Y", Color: "Ivory" } },
+      ],
+    },
+    {
+      title: "Children Classic Sneakers",
+      handle: "children-classic-sneakers",
+      description:
+        "Durable everyday sneakers for kids with lightweight soles and secure lace-up fit.",
+      status: "published",
+      categories: cat("children-shoes"),
+      options: [
+        { title: "Size", values: ["30", "32", "34", "36"] },
+        { title: "Color", values: ["White", "Black"] },
+      ],
+      variants: [
+        { title: "White / 32", sku: "KIDS-SNEAKER-WHT-32", manage_inventory: false, options: { Size: "32", Color: "White" } },
+        { title: "White / 34", sku: "KIDS-SNEAKER-WHT-34", manage_inventory: false, options: { Size: "34", Color: "White" } },
+        { title: "Black / 34", sku: "KIDS-SNEAKER-BLK-34", manage_inventory: false, options: { Size: "34", Color: "Black" } },
+      ],
+    },
+  ];
+  const missingSupplementalProducts = supplementalProducts.filter(
+    (product) => !existingProductHandles.has(product.handle)
+  );
+  if (missingSupplementalProducts.length > 0) {
+    await (productService as any).createProducts(missingSupplementalProducts);
+    console.log(`✨ Added ${missingSupplementalProducts.length} supplemental men/children products.`);
+  }
+
   // ═══════════════════ PRICING ═══════════════════
   // Map SKU prefixes to base prices (in cents)
   const priceMap: Record<string, number> = {
@@ -617,6 +773,12 @@ export default async function seed({ container }: ExecArgs) {
     "TENNIS-BRACE": 14900,
     "SILK-SCARF": 16900,
     "BELT": 9900,
+    "MEN-SUIT": 69900,
+    "MEN-SHIRT": 15900,
+    "MEN-LOAFER": 28900,
+    "KIDS-BOYS-BLAZER": 25900,
+    "KIDS-GIRL-DRESS": 22900,
+    "KIDS-SNEAKER": 13900,
   };
 
   const allProducts = await productService.listProducts(
@@ -673,6 +835,6 @@ export default async function seed({ container }: ExecArgs) {
   }
 
   console.log(
-    "🌱 Seed completed: store, regions, 8 categories, 24 products with prices created."
+    "🌱 Seed completed: store, regions, audience categories, and test products for women/men/children."
   );
 }

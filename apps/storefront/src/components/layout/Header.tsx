@@ -10,143 +10,17 @@ import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
 import { useCartStore } from "@/stores/cart";
 import { useWishlistStore } from "@/stores/wishlist";
+import { useNavigation } from "@/hooks/useNavigation";
 import { AnnouncementBar } from "./AnnouncementBar";
-
-// Main navigation with submenus
-const navLinks = [
-  {
-    label: "Women",
-    href: "/shop?category=women",
-    submenu: {
-      featured: {
-        title: "Featured",
-        items: [
-          { href: "/shop", label: "New Arrivals", icon: "✨" },
-          { href: "/shop?category=women", label: "Bestsellers", icon: "🏆" },
-          { href: "/shop?category=women", label: "Trending Now", icon: "🔥" },
-        ],
-      },
-      categories: {
-        title: "Categories",
-        items: [
-          { href: "/shop?category=dresses&parent=women", label: "Dresses" },
-          { href: "/shop?category=tops&parent=women", label: "Tops & Blouses" },
-          { href: "/shop?category=bottoms&parent=women", label: "Pants & Skirts" },
-          { href: "/shop?category=women", label: "Matching Sets" },
-          { href: "/shop?category=outerwear&parent=women", label: "Jackets & Coats" },
-          { href: "/shop?category=women", label: "Knitwear" },
-        ],
-      },
-      occasions: {
-        title: "Shop by Occasion",
-        items: [
-          { href: "/shop?category=women", label: "Date Night" },
-          { href: "/shop?category=women", label: "Work Luxe" },
-          { href: "/shop?category=women", label: "Casual Chic" },
-          { href: "/shop?category=women", label: "Evening & Formal" },
-          { href: "/shop?category=women", label: "Vacation Ready" },
-        ],
-      },
-      accessories: {
-        title: "Accessories",
-        items: [
-          { href: "/shop?category=accessories&parent=women", label: "Bags" },
-          { href: "/shop?category=accessories&parent=women", label: "Jewelry" },
-          { href: "/shop?category=accessories&parent=women", label: "Shoes" },
-          { href: "/shop?category=accessories&parent=women", label: "Scarves" },
-        ],
-      },
-    },
-  },
-  {
-    label: "Men",
-    href: "/shop?category=men",
-    submenu: {
-      featured: {
-        title: "Featured",
-        items: [
-          { href: "/shop?category=men", label: "New Arrivals", icon: "✨" },
-          { href: "/shop?category=men", label: "Bestsellers", icon: "🏆" },
-        ],
-      },
-      categories: {
-        title: "Categories",
-        items: [
-          { href: "/shop?category=suits&parent=men", label: "Suits & Blazers" },
-          { href: "/shop?category=shirts&parent=men", label: "Shirts" },
-          { href: "/shop?category=trousers&parent=men", label: "Trousers" },
-          { href: "/shop?category=knitwear&parent=men", label: "Knitwear" },
-          { href: "/shop?category=outerwear&parent=men", label: "Jackets & Coats" },
-          { href: "/shop?category=men", label: "Casual Wear" },
-        ],
-      },
-      occasions: {
-        title: "Shop by Occasion",
-        items: [
-          { href: "/shop?category=men", label: "Business" },
-          { href: "/shop?category=men", label: "Smart Casual" },
-          { href: "/shop?category=men", label: "Weekend" },
-        ],
-      },
-      accessories: {
-        title: "Accessories",
-        items: [
-          { href: "/shop?category=accessories&parent=men", label: "Watches" },
-          { href: "/shop?category=accessories&parent=men", label: "Belts" },
-          { href: "/shop?category=accessories&parent=men", label: "Shoes" },
-          { href: "/shop?category=accessories&parent=men", label: "Bags" },
-        ],
-      },
-    },
-  },
-  {
-    label: "Children",
-    href: "/shop?category=children",
-    submenu: {
-      featured: {
-        title: "Featured",
-        items: [
-          { href: "/shop?category=children", label: "New Arrivals", icon: "✨" },
-          { href: "/shop?category=children", label: "Bestsellers", icon: "🏆" },
-        ],
-      },
-      categories: {
-        title: "Girls",
-        items: [
-          { href: "/shop?category=children", label: "Dresses" },
-          { href: "/shop?category=children", label: "Tops" },
-          { href: "/shop?category=children", label: "Bottoms" },
-          { href: "/shop?category=children", label: "Sets" },
-        ],
-      },
-      occasions: {
-        title: "Boys",
-        items: [
-          { href: "/shop?category=children", label: "Shirts" },
-          { href: "/shop?category=children", label: "Trousers" },
-          { href: "/shop?category=children", label: "Casual" },
-          { href: "/shop?category=children", label: "Formal" },
-        ],
-      },
-      accessories: {
-        title: "Baby",
-        items: [
-          { href: "/shop?category=children", label: "Clothing" },
-          { href: "/shop?category=children", label: "Accessories" },
-          { href: "/shop?category=children", label: "Gift Sets" },
-        ],
-      },
-    },
-  },
-  { label: "Sale", href: "/shop", isSale: true },
-];
 
 export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const menuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { navLinks } = useNavigation();
   
   const { isHeaderScrolled, setHeaderScrolled, openMobileNav, openSearch } = useUIStore();
   const cartItemCount = useCartStore((state) => state.getItemCount());
@@ -158,20 +32,30 @@ export function Header() {
     if (pathname !== "/shop") return null;
     const category = searchParams.get("category");
     if (!category) return null;
-    
-    // Map category to nav labels
-    if (["women", "dresses", "tops", "bottoms", "outerwear"].includes(category)) {
-      return "Women";
-    }
-    if (category === "men") return "Men";
-    if (category === "children") return "Children";
-    if (category === "accessories") return "Women"; // accessories under women for now
-    return null;
-  }, [pathname, searchParams]);
+
+    const match = navLinks.find((link) => {
+      if (link.categoryHandle === category) return true;
+      if (!link.submenu) return false;
+      return Object.values(link.submenu).some((section) =>
+        section.items.some((item) => item.href.includes(`category=${category}`))
+      );
+    });
+    return match?.label ?? null;
+  }, [pathname, searchParams, navLinks]);
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
+    const loadSessionState = async () => {
+      try {
+        const res = await fetch("/api/account/me", { cache: "no-store" });
+        const data = (await res.json()) as { customer?: unknown };
+        setIsLoggedIn(Boolean(data.customer));
+      } catch {
+        setIsLoggedIn(false);
+      }
+    };
+    loadSessionState();
   }, []);
 
   // Handle scroll effect
@@ -297,10 +181,13 @@ export function Header() {
 
               <Link
                 href="/account"
-                className="hidden sm:block p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
+                className="hidden sm:flex items-center gap-2 p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Account"
               >
                 <User className="w-5 h-5" strokeWidth={1.5} />
+                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase">
+                  {isLoggedIn ? "Profile" : "Login"}
+                </span>
               </Link>
 
               <Link

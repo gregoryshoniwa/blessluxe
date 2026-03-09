@@ -5,8 +5,7 @@
 ##    cp .env.docker .env          # one-time setup
 ##    docker compose up --build    # build & start everything
 ##
-##  After first start:
-##    docker compose exec medusa npx medusa db:migrate
+##  Optional after first start:
 ##    docker compose exec medusa npx medusa user -e admin@blessluxe.com -p admin123
 ##    docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
 ## ─────────────────────────────────────────────────────────
@@ -83,12 +82,13 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    command: ["sh", "-c", "npx medusa db:migrate && pnpm start"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 90s
 
   # ─── Next.js Storefront (port 3000) ─────────────────────
   storefront:
@@ -109,9 +109,14 @@ services:
       NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
       NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-}
       NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       AI_DATABASE_URL: postgres://${POSTGRES_USER:-blessluxe}:${POSTGRES_PASSWORD:-blessluxe}@postgres:5432/${POSTGRES_DB:-blessluxe}?sslmode=disable
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-to-a-random-secret}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ADMIN_DASHBOARD_KEY: ${ADMIN_DASHBOARD_KEY:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
 
 volumes:
   postgres_data:

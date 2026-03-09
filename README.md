@@ -10,7 +10,8 @@ Built with **Next.js 14**, **Medusa.js v2**, and **Google Gemini** — structure
 
 - [Quick Start (Local Development)](#quick-start-local-development)
 - [Docker Deployment (Full Stack)](#docker-deployment-full-stack)
-- [Post-Setup: Migrations, Admin User & Seed Data](#post-setup-migrations-admin-user--seed-data)
+- [Rebuild Quick Reference](#rebuild-quick-reference)
+- [Post-Setup: Admin User & Seed Data](#post-setup-admin-user--seed-data)
 - [Environment Variables Reference](#environment-variables-reference)
 - [Project Structure](#project-structure)
 - [AI Shopping Assistant (LUXE)](#ai-shopping-assistant-luxe)
@@ -57,7 +58,18 @@ pnpm --filter @blessluxe/backend seed
 ### 4. Set up the storefront
 
 ```bash
-cp apps/storefront/.env.local.example apps/storefront/.env.local
+cat > apps/storefront/.env.local <<'EOF'
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000
+NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=
+NEXT_PUBLIC_GOOGLE_AI_API_KEY=
+NEXT_PUBLIC_AI_AGENT_PROVIDER=google
+NEXT_PUBLIC_AI_AGENT_MODEL=gemini-2.5-flash
+NEXT_PUBLIC_AI_MEMORY_ENABLED=true
+NEXT_PUBLIC_AI_VOICE_ENABLED=true
+NEXT_PUBLIC_VOICE_STT_PROVIDER=browser
+NEXT_PUBLIC_VOICE_TTS_PROVIDER=browser
+EOF
+
 # Add your NEXT_PUBLIC_GOOGLE_AI_API_KEY (get one at https://aistudio.google.com/apikey)
 # Add your NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY (create in Medusa Admin > Settings > API Key Management)
 ```
@@ -104,6 +116,8 @@ Edit `.env` and fill in the **required** values:
 docker compose up --build -d
 ```
 
+Medusa migrations now run automatically during container startup, so you don't need a separate first-run `db:migrate` command.
+
 This starts 4 services:
 
 | Service | Port | Description |
@@ -113,14 +127,11 @@ This starts 4 services:
 | `medusa` | 9000 | Medusa backend + admin dashboard |
 | `storefront` | 3000 | Next.js customer storefront |
 
-### 3. First-time setup (migrations, admin user, seed data)
+### 3. First-time setup (admin user, seed data)
 
 After the containers are running for the first time:
 
 ```bash
-# Run database migrations
-docker compose exec medusa npx medusa db:migrate
-
 # Create the admin user
 docker compose exec medusa npx medusa user -e admin@blessluxe.com -p admin123
 
@@ -159,19 +170,26 @@ docker compose up --build -d storefront # Rebuild only storefront
 
 ---
 
-## Post-Setup: Migrations, Admin User & Seed Data
+## Rebuild Quick Reference
 
-These steps apply to both local and Docker setups.
-
-### Database migrations
+Use these commands when you change code or environment values:
 
 ```bash
-# Local
-pnpm --filter @blessluxe/backend db:migrate
-
-# Docker
-docker compose exec medusa npx medusa db:migrate
+docker compose up --build -d            # Full stack rebuild
+docker compose up --build -d storefront # Frontend-only rebuild
+docker compose up --build -d medusa     # Backend-only rebuild
 ```
+
+Common cases:
+- Updated `apps/storefront/.env.local` or root `.env` AI/public vars -> rebuild `storefront`
+- Updated backend providers/modules/scripts -> rebuild `medusa`
+- Updated shared packages/config used by both -> rebuild full stack
+
+---
+
+## Post-Setup: Admin User & Seed Data
+
+For Docker, migrations run automatically when the `medusa` container starts.
 
 ### Create admin user
 
@@ -189,8 +207,8 @@ The seed script creates:
 
 - **Store**: BLESSLUXE with USD, GBP, EUR, ZAR currencies
 - **4 Regions**: United States, United Kingdom, Europe, South Africa
-- **8 Categories**: Dresses, Tops, Bottoms, Outerwear, Shoes, Bags, Jewelry, Accessories
-- **24 Products** with variants, sizes, colors, and multi-currency pricing
+- **Audience-based category structure**: Women, Men, Children (+ branch-specific accessories/shoes/bags)
+- **Core + supplemental test products** across women, men, and children with multi-currency pricing
 
 ```bash
 # Local
@@ -226,10 +244,67 @@ The seed script is idempotent — safe to run multiple times.
 
 | Variable | Default | Description |
 |---|---|---|
+| `GOOGLE_AI_API_KEY` | — | Gemini API key for server-side AI routes (Docker/runtime) |
 | `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | `http://localhost:9000` | Medusa API URL (browser-accessible) |
 | `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | — | Publishable API key from Medusa admin |
 | `NEXT_PUBLIC_GOOGLE_AI_API_KEY` | — | Gemini API key for AI chat |
 | `AI_DATABASE_URL` | (set by compose) | PostgreSQL for AI memory tables |
+| `GOOGLE_CLIENT_ID` | — | Google OAuth client id for account login |
+| `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret for account login |
+| `NEXTAUTH_SECRET` | `change-me...` | Session signing secret for NextAuth |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Public storefront URL for auth callbacks |
+| `ADMIN_DASHBOARD_KEY` | — | Shared key for protecting affiliate admin routes |
+| `ADMIN_EMAILS` | — | Comma-separated admin emails (alternative to key) |
+
+### Where to get Google and admin keys
+
+#### Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/).
+2. Create/select a project.
+3. Go to **APIs & Services > OAuth consent screen** and configure the app (External/Internal, app name, support email).
+4. Go to **APIs & Services > Credentials > Create Credentials > OAuth client ID**.
+5. Choose **Web application** and set:
+   - **Authorized JavaScript origins**:
+     - `http://localhost:3000` (local)
+     - your production storefront URL (when deployed)
+   - **Authorized redirect URIs**:
+     - `http://localhost:3000/api/auth/callback/google` (local)
+     - `https://your-domain.com/api/auth/callback/google` (production)
+6. Copy the generated Client ID and Client Secret into:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+
+#### NextAuth secret (`NEXTAUTH_SECRET`)
+
+Generate a strong random secret:
+
+```bash
+openssl rand -base64 32
+```
+
+Paste output into `NEXTAUTH_SECRET`.
+
+#### Admin dashboard key (`ADMIN_DASHBOARD_KEY`)
+
+Generate a strong admin key:
+
+```bash
+openssl rand -hex 32
+```
+
+Paste output into `ADMIN_DASHBOARD_KEY`.  
+Use this key on `/affiliate/admin/auth`.
+
+#### Admin email allowlist (`ADMIN_EMAILS`)
+
+Alternative to dashboard key: set trusted emails as comma-separated values, for example:
+
+```env
+ADMIN_EMAILS=owner@blessluxe.com,ops@blessluxe.com
+```
+
+If `ADMIN_EMAILS` is used, users must first login on `/account` with one of these emails before opening `/affiliate/admin`.
 
 ---
 
@@ -373,6 +448,46 @@ The Medusa Store API needs a `region_id` to calculate prices. The storefront hoo
 
 Create a publishable API key in the Medusa admin (Settings > API Key Management) and link it to your sales channels. Add it to `MEDUSA_PUBLISHABLE_KEY` in your `.env` file.
 
+### AI chat says it's not fully configured
+
+- Set `GOOGLE_AI_API_KEY` in root `.env` (Docker) or `NEXT_PUBLIC_GOOGLE_AI_API_KEY` in `apps/storefront/.env.local` (local dev).
+- If running with Docker, rebuild the storefront after changing env vars:
+
+```bash
+docker compose up --build -d storefront
+```
+
+### Google OAuth login button says not configured
+
+Set these vars in root `.env` (Docker) or `apps/storefront/.env.local` (local dev):
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL`
+
+Then rebuild storefront:
+
+```bash
+docker compose up --build -d storefront
+```
+
+### Affiliate admin endpoints return Unauthorized
+
+Admin APIs now require explicit auth:
+- Set `ADMIN_DASHBOARD_KEY` and provide it from the admin page key prompt, or
+- Set `ADMIN_EMAILS` (comma-separated) and login with one of those account emails.
+
+The admin page is now server-side protected and redirects unauthenticated users to:
+- `/affiliate/admin/auth`
+
+### Storefront startup env warnings
+
+The storefront container now runs a startup environment check and logs warnings when required keys are missing.
+
+- It validates `NEXT_PUBLIC_MEDUSA_BACKEND_URL` and `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY`.
+- It also checks that at least one AI key is set: `GOOGLE_AI_API_KEY` or `NEXT_PUBLIC_GOOGLE_AI_API_KEY`.
+- The container still starts even when values are missing, but related features (catalog pricing, AI chat/voice) may fail.
+
 ### Docker build fails with TypeScript errors
 
 The Medusa backend uses `strict: false` in `tsconfig.json` and the storefront uses `ignoreBuildErrors: true` in `next.config.js` to handle evolving type definitions. If you add new code with strict errors, either fix the types or use `// @ts-nocheck` pragmatically for providers.
@@ -381,7 +496,18 @@ The Medusa backend uses `strict: false` in `tsconfig.json` and the storefront us
 
 Ensure the `DATABASE_URL` includes `?sslmode=disable` — the PostgreSQL container doesn't enable SSL.
 
+### Medusa is "unhealthy" right after startup
+
+The `medusa` container now runs migrations before starting the API. On first boot (or after DB reset), it can take a little longer before the healthcheck turns green.
+
 ### Storefront can't reach Medusa API
 
 - In Docker: the storefront container uses `NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://localhost:9000` for browser-side requests (port-mapped to the host).
 - For server-side requests, ensure `STORE_CORS` includes both `http://localhost:3000` and `http://storefront:3000`.
+
+### Category filters show too many options
+
+The shop sidebar category filter is now scoped to the selected header branch:
+- Selecting `Women`, `Men`, or `Children` shows only that branch and its descendants
+- Selecting a subcategory keeps the same parent branch scope
+- With no selected category, the sidebar shows broader top-level category options

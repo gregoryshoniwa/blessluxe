@@ -1,57 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShopFilters } from "@/hooks/useShopFilters";
-
-// Category structure with parent relationships
-const categoryConfig = {
-  women: {
-    label: "Women's Collection",
-    subcategories: [
-      { id: "all-women", label: "All Women's", value: "women" },
-      { id: "dresses", label: "Dresses", value: "dresses" },
-      { id: "tops", label: "Tops & Blouses", value: "tops" },
-      { id: "bottoms", label: "Pants & Skirts", value: "bottoms" },
-      { id: "outerwear", label: "Outerwear", value: "outerwear" },
-      { id: "accessories", label: "Accessories", value: "accessories" },
-    ],
-  },
-  men: {
-    label: "Men's Collection",
-    subcategories: [
-      { id: "all-men", label: "All Men's", value: "men" },
-      { id: "suits", label: "Suits & Blazers", value: "suits" },
-      { id: "shirts", label: "Shirts", value: "shirts" },
-      { id: "trousers", label: "Trousers", value: "trousers" },
-      { id: "knitwear", label: "Knitwear", value: "knitwear" },
-      { id: "outerwear-men", label: "Jackets & Coats", value: "outerwear" },
-    ],
-  },
-  children: {
-    label: "Children's Collection",
-    subcategories: [
-      { id: "all-children", label: "All Children's", value: "children" },
-      { id: "boys", label: "Boys", value: "boys" },
-      { id: "girls", label: "Girls", value: "girls" },
-      { id: "baby", label: "Baby", value: "baby" },
-      { id: "accessories-kids", label: "Accessories", value: "accessories" },
-    ],
-  },
-  default: {
-    label: "All Products",
-    subcategories: [
-      { id: "all", label: "All Products", value: null },
-      { id: "women", label: "Women", value: "women" },
-      { id: "men", label: "Men", value: "men" },
-      { id: "children", label: "Children", value: "children" },
-      { id: "accessories", label: "Accessories", value: "accessories" },
-    ],
-  },
-};
+import { useCategories } from "@/hooks/useProducts";
+const AUDIENCE_PREFIX_PATTERN = /^(women|men|children)[-\s_]+/i;
 
 const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
 
@@ -80,33 +35,7 @@ interface FiltersPanelProps {
 }
 
 export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps) {
-  const searchParams = useSearchParams();
-  const currentUrlCategory = searchParams.get("category");
-  const parentParam = searchParams.get("parent");
-  
-  // Determine which category config to use based on URL
-  const categories = useMemo(() => {
-    let parent: keyof typeof categoryConfig = "default";
-    
-    // First, check if parent param is provided (for subcategories like outerwear, accessories)
-    if (parentParam) {
-      if (parentParam === "women") parent = "women";
-      else if (parentParam === "men") parent = "men";
-      else if (parentParam === "children") parent = "children";
-    }
-    // Otherwise, check if current URL category is a parent category or belongs to one
-    else if (currentUrlCategory === "women" || ["dresses", "tops", "bottoms", "outerwear", "accessories"].includes(currentUrlCategory || "")) {
-      parent = "women";
-    } else if (currentUrlCategory === "men" || ["suits", "shirts", "trousers", "knitwear", "outerwear", "accessories"].includes(currentUrlCategory || "")) {
-      // Note: outerwear/accessories without parent param defaults to first match (women), but with parent=men it will show men's
-      parent = "men";
-    } else if (currentUrlCategory === "children" || ["boys", "girls", "baby"].includes(currentUrlCategory || "")) {
-      parent = "children";
-    }
-    
-    return categoryConfig[parent].subcategories;
-  }, [currentUrlCategory, parentParam]);
-
+  const { data: backendCategories } = useCategories();
   const {
     filters,
     toggleSize,
@@ -116,6 +45,115 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
     clearFilters,
     hasActiveFilters,
   } = useShopFilters();
+  const categories = useMemo(() => {
+    if (!backendCategories || backendCategories.length === 0) {
+      return [{ id: "all", label: "All Products", value: null }];
+    }
+
+    const byId = new Map(backendCategories.map((category) => [category.id, category]));
+    const byHandle = new Map(backendCategories.map((category) => [category.handle, category]));
+    const childrenByParent = new Map<string, typeof backendCategories>();
+
+    for (const category of backendCategories) {
+      if (!category.parent_category_id) continue;
+      const siblings = childrenByParent.get(category.parent_category_id) ?? [];
+      siblings.push(category);
+      childrenByParent.set(category.parent_category_id, siblings);
+    }
+
+    const getRootCategory = (categoryId: string) => {
+      let current = byId.get(categoryId);
+      let safety = 0;
+
+      while (current?.parent_category_id && safety < 10) {
+        const parent = byId.get(current.parent_category_id);
+        if (!parent) break;
+        current = parent;
+        safety += 1;
+      }
+
+      return current;
+    };
+
+    const selectedCategory = filters.category ? byHandle.get(filters.category) : undefined;
+    const selectedRoot = selectedCategory ? getRootCategory(selectedCategory.id) : undefined;
+
+    const rootCategories = selectedRoot
+      ? [selectedRoot]
+      : backendCategories
+          .filter((category) => !category.parent_category_id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+    const collectDescendants = (rootId: string) => {
+      const queue = [...(childrenByParent.get(rootId) ?? [])];
+      const descendants: typeof backendCategories = [];
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (!current) continue;
+        descendants.push(current);
+        const children = childrenByParent.get(current.id);
+        if (children?.length) queue.push(...children);
+      }
+
+      return descendants.sort((a, b) => a.name.localeCompare(b.name));
+    };
+
+    const scopedEntries = rootCategories.flatMap((root) => {
+      const descendants = collectDescendants(root.id);
+      const preferredByCanonicalHandle = new Map<string, (typeof descendants)[number]>();
+      const audienceHandle = root.handle.toLowerCase();
+      const isAudienceRoot = ["women", "men", "children"].includes(audienceHandle);
+
+      for (const category of descendants) {
+        const canonicalHandle = category.handle.replace(AUDIENCE_PREFIX_PATTERN, "");
+        const existing = preferredByCanonicalHandle.get(canonicalHandle);
+        if (!existing) {
+          preferredByCanonicalHandle.set(canonicalHandle, category);
+          continue;
+        }
+
+        if (
+          isAudienceRoot &&
+          category.handle.toLowerCase().startsWith(`${audienceHandle}-`) &&
+          !existing.handle.toLowerCase().startsWith(`${audienceHandle}-`)
+        ) {
+          preferredByCanonicalHandle.set(canonicalHandle, category);
+        }
+      }
+      const dedupedDescendants = Array.from(preferredByCanonicalHandle.values()).sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+
+      const normalizeLabel = (input: string) =>
+        input
+          .replace(new RegExp(`^${audienceHandle}[-\\s_]+`, "i"), "")
+          .replace(AUDIENCE_PREFIX_PATTERN, "")
+          .replace(/[-_]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+
+      if (dedupedDescendants.length === 0) {
+        return [{ id: root.id, label: root.name, value: root.handle }];
+      }
+
+      return [
+        { id: `root-${root.id}`, label: `All ${root.name}`, value: root.handle },
+        ...dedupedDescendants.map((category) => ({
+          id: category.id,
+          label: normalizeLabel(category.name || category.handle),
+          value: category.handle,
+        })),
+      ];
+    });
+
+    if (selectedRoot) {
+      return scopedEntries;
+    }
+
+    return [{ id: "all", label: "All Products", value: null }, ...scopedEntries];
+  }, [backendCategories, filters.category]);
 
   const [expandedSections, setExpandedSections] = useState<string[]>([
     "category",

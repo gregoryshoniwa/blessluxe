@@ -67,19 +67,23 @@ export function useProducts(options?: {
     queryKey: ["products", options, regionId],
     queryFn: async () => {
       try {
-        const response = await medusa.store.product.list({
+        const params: Record<string, unknown> = {
           limit: options?.limit ?? 12,
           offset: options?.offset ?? 0,
           collection_id: options?.collection_id,
           category_id: options?.category_id,
-          region_id: regionId,
-        } as Record<string, unknown>);
-        return response.products as Product[];
+        };
+        if (regionId) {
+          params.region_id = regionId;
+        }
+        const response = await medusa.store.product.list({
+          ...params,
+        });
+        return response.products as unknown as Product[];
       } catch {
-        return getMockProducts();
+        return [];
       }
     },
-    enabled: !!regionId,
   });
 }
 
@@ -94,17 +98,22 @@ export function useProduct(handle: string) {
     queryKey: ["product", handle, regionId],
     queryFn: async () => {
       try {
-        const response = await medusa.store.product.list({
+        const params: Record<string, unknown> = {
           handle,
           limit: 1,
-          region_id: regionId,
-        } as Record<string, unknown>);
-        return response.products[0] as Product | undefined;
+        };
+        if (regionId) {
+          params.region_id = regionId;
+        }
+        const response = await medusa.store.product.list({
+          ...params,
+        });
+        return response.products[0] as unknown as Product | undefined;
       } catch {
-        return getMockProducts().find((p) => p.handle === handle);
+        return undefined;
       }
     },
-    enabled: !!handle && !!regionId,
+    enabled: !!handle,
   });
 }
 
@@ -119,16 +128,18 @@ export function useFeaturedProducts(limit: number = 8) {
     queryKey: ["featured-products", limit, regionId],
     queryFn: async () => {
       try {
+        const params: Record<string, unknown> = { limit };
+        if (regionId) {
+          params.region_id = regionId;
+        }
         const response = await medusa.store.product.list({
-          limit,
-          region_id: regionId,
-        } as Record<string, unknown>);
-        return response.products as Product[];
+          ...params,
+        });
+        return response.products as unknown as Product[];
       } catch {
-        return getMockProducts().slice(0, limit);
+        return [];
       }
     },
-    enabled: !!regionId,
   });
 }
 
@@ -140,94 +151,15 @@ export function useCategories() {
     queryKey: ["categories"],
     queryFn: async () => {
       try {
-        const response = await medusa.store.category.list({
-          include_descendants_tree: true,
+        const response = await fetch("/api/catalog/categories", {
+          cache: "no-store",
         });
-        return response.product_categories as Category[];
+        if (!response.ok) return [];
+        const payload = (await response.json()) as { categories?: Category[] };
+        return payload.categories ?? [];
       } catch {
-        return getMockCategories();
+        return [];
       }
     },
   });
-}
-
-// Mock data for development/fallback
-function getMockProducts(): Product[] {
-  return [
-    {
-      id: "prod_01",
-      title: "Silk Wrap Dress",
-      handle: "silk-wrap-dress",
-      description: "Elegant silk wrap dress perfect for any occasion",
-      thumbnail: null,
-      images: [],
-      variants: [
-        {
-          id: "variant_01",
-          title: "S / Navy",
-          sku: "SWD-S-NAV",
-          prices: [{ amount: 18900, currency_code: "USD" }],
-        },
-      ],
-    },
-    {
-      id: "prod_02",
-      title: "Satin Blouse",
-      handle: "satin-blouse",
-      description: "Luxurious satin blouse with a relaxed fit",
-      thumbnail: null,
-      images: [],
-      variants: [
-        {
-          id: "variant_02",
-          title: "M / Cream",
-          sku: "SB-M-CRM",
-          prices: [{ amount: 8900, currency_code: "USD" }],
-        },
-      ],
-    },
-    {
-      id: "prod_03",
-      title: "Cashmere Cardigan",
-      handle: "cashmere-cardigan",
-      description: "Soft cashmere cardigan for everyday luxury",
-      thumbnail: null,
-      images: [],
-      variants: [
-        {
-          id: "variant_03",
-          title: "M / Blush",
-          sku: "CC-M-BLU",
-          prices: [{ amount: 24900, currency_code: "USD" }],
-        },
-      ],
-    },
-    {
-      id: "prod_04",
-      title: "Pleated Midi Skirt",
-      handle: "pleated-midi-skirt",
-      description: "Flowing pleated midi skirt in rich gold",
-      thumbnail: null,
-      images: [],
-      variants: [
-        {
-          id: "variant_04",
-          title: "S / Gold",
-          sku: "PMS-S-GLD",
-          prices: [{ amount: 12900, currency_code: "USD" }],
-        },
-      ],
-    },
-  ];
-}
-
-function getMockCategories(): Category[] {
-  return [
-    { id: "cat_01", name: "Dresses", handle: "dresses", description: null, parent_category_id: null },
-    { id: "cat_02", name: "Tops", handle: "tops", description: null, parent_category_id: null },
-    { id: "cat_03", name: "Bottoms", handle: "bottoms", description: null, parent_category_id: null },
-    { id: "cat_04", name: "Sets", handle: "sets", description: null, parent_category_id: null },
-    { id: "cat_05", name: "Accessories", handle: "accessories", description: null, parent_category_id: null },
-    { id: "cat_06", name: "Sale", handle: "sale", description: null, parent_category_id: null },
-  ];
 }

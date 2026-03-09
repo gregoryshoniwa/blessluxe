@@ -9,7 +9,7 @@ const PUBLISHABLE_API_KEY =
 export const medusa = new Medusa({
   baseUrl: MEDUSA_BACKEND_URL,
   debug: process.env.NODE_ENV === "development",
-  publishableKey: PUBLISHABLE_API_KEY,
+  ...(PUBLISHABLE_API_KEY ? { publishableKey: PUBLISHABLE_API_KEY } : {}),
 });
 
 export { MEDUSA_BACKEND_URL };

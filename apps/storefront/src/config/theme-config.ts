@@ -96,17 +96,31 @@ export const categoryThemeMap: Record<string, ThemeType> = {
   dresses: 'women',
   tops: 'women',
   bottoms: 'women',
+  outerwear: 'women',
+  accessories: 'women',
+  shoes: 'women',
+  bags: 'women',
+  jewelry: 'women',
+  'women-accessories': 'women',
+  'women-shoes': 'women',
+  'women-bags': 'women',
+  'women-jewelry': 'women',
   // Men's categories
   men: 'men',
   suits: 'men',
   shirts: 'men',
   trousers: 'men',
   knitwear: 'men',
+  'men-accessories': 'men',
+  'men-shoes': 'men',
+  'men-bags': 'men',
   // Children's categories
   children: 'children',
   boys: 'children',
   girls: 'children',
   baby: 'children',
+  'children-accessories': 'children',
+  'children-shoes': 'children',
 };
 
 export const getThemeForCategory = (category: string | null): ThemeType => {

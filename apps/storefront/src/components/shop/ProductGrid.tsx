@@ -30,7 +30,13 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
   const categoryIds = useMemo(() => {
     if (!filters.category || !categories) return undefined;
     const match = categories.find((c) => c.handle === filters.category);
-    return match ? [match.id] : undefined;
+    if (!match) return undefined;
+
+    const childIds = categories
+      .filter((category) => category.parent_category_id === match.id)
+      .map((category) => category.id);
+
+    return [match.id, ...childIds];
   }, [filters.category, categories]);
 
   const { data: rawProducts, isLoading } = useProducts({

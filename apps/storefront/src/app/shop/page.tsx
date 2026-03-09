@@ -10,18 +10,12 @@ export const metadata: Metadata = {
     "Browse our curated collection of luxury fashion for women, men, and children.",
 };
 
-// Mock categories for breadcrumb titles
-const categoryTitles: Record<string, string> = {
-  women: "Women's Collection",
-  men: "Men's Collection",
-  children: "Children's Collection",
-  dresses: "Dresses",
-  tops: "Tops & Blouses",
-  bottoms: "Pants & Skirts",
-  outerwear: "Outerwear",
-  accessories: "Accessories",
-  sale: "Sale Items",
-};
+const formatCategoryTitle = (value: string) =>
+  value
+    .replace(/[-_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 interface ShopPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -32,7 +26,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
   const category =
     typeof params.category === "string" ? params.category : null;
   const title = category
-    ? categoryTitles[category] || "Shop"
+    ? formatCategoryTitle(category)
     : "Shop All Collections";
 
   return (
@@ -62,7 +56,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               <>
                 <ChevronRight className="w-4 h-4" />
                 <span className="text-theme-primary font-medium theme-transition">
-                  {categoryTitles[category] || category}
+                  {formatCategoryTitle(category)}
                 </span>
               </>
             )}

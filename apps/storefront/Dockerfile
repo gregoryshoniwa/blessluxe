@@ -61,7 +61,9 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=builder /app/apps/storefront/.next/standalone ./
 COPY --from=builder /app/apps/storefront/.next/static     ./apps/storefront/.next/static
 COPY --from=builder /app/apps/storefront/public            ./apps/storefront/public
+COPY apps/storefront/docker-entrypoint.sh                  ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 3000
 ENV PORT=3000
-CMD ["node", "apps/storefront/server.js"]
+CMD ["./docker-entrypoint.sh"]

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,6 +31,7 @@ export default function CheckoutInformationPage() {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<InformationFormData>({
     resolver: zodResolver(informationSchema),
@@ -62,8 +64,59 @@ export default function CheckoutInformationPage() {
       phone: data.phone,
     });
     setCurrentStep(2);
+
+    if (data.saveInfo) {
+      await fetch('/api/account/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          address: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone,
+            address1: data.address1,
+            address2: data.address2,
+            city: data.city,
+            province: data.province,
+            postalCode: data.postalCode,
+            country: data.country,
+          },
+        }),
+      }).catch(() => null);
+    }
+
     router.push('/checkout/shipping');
   };
+
+  useEffect(() => {
+    const hydrateFromAccount = async () => {
+      try {
+        const res = await fetch('/api/account/me', { cache: 'no-store' });
+        const data = await res.json();
+        const customer = data.customer;
+        if (!customer) return;
+        const address = customer.address || {};
+        reset({
+          email: String(customer.email || email || ''),
+          phone: String(address.phone || shippingAddress?.phone || ''),
+          firstName: String(address.firstName || shippingAddress?.firstName || ''),
+          lastName: String(address.lastName || shippingAddress?.lastName || ''),
+          address1: String(address.address1 || shippingAddress?.address1 || ''),
+          address2: String(address.address2 || shippingAddress?.address2 || ''),
+          city: String(address.city || shippingAddress?.city || ''),
+          province: String(address.province || shippingAddress?.province || ''),
+          postalCode: String(address.postalCode || shippingAddress?.postalCode || ''),
+          country: String(address.country || shippingAddress?.country || 'Zimbabwe'),
+          saveInfo: true,
+        });
+      } catch {
+        // Silent fail: checkout still works with manual entry.
+      }
+    };
+    hydrateFromAccount();
+  }, [email, reset, shippingAddress]);
 
   const inputClassName = (error?: boolean) =>
     cn(

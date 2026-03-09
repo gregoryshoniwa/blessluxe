@@ -89,6 +89,21 @@ export default function CheckoutPaymentPage() {
       
       const orderId = `ORD-${Date.now()}`;
       const orderNumber = `BL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      // Track affiliate commission (no-op when no ref cookie is present).
+      try {
+        await fetch("/api/affiliate/order-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId,
+            orderTotal: total,
+            currencyCode: "usd",
+          }),
+        });
+      } catch (trackingError) {
+        console.warn("Affiliate tracking failed:", trackingError);
+      }
       
       setPaymentMethod(selectedMethod);
       setOrderComplete(orderId, orderNumber);

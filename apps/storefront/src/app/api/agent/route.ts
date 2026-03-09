@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { AgentResponse } from '@/lib/ai/types';
 
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
 const MODEL = 'gemini-2.5-flash';
+const getGoogleApiKey = () =>
+  process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
 
 const SYSTEM_PROMPT = `You are LUXE, the personal AI shopping assistant for BLESSLUXE — a luxury women's fashion e-commerce store.
 
@@ -26,6 +27,7 @@ Rules:
 
 export async function POST(req: NextRequest) {
   try {
+    const googleApiKey = getGoogleApiKey();
     const body = await req.json();
     const { text, sessionId, messages: conversationHistory } = body;
 
@@ -33,9 +35,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
     }
 
-    if (!GOOGLE_API_KEY) {
+    if (!googleApiKey) {
       return NextResponse.json({
-        text: "I'm not fully configured yet. Please set the NEXT_PUBLIC_GOOGLE_AI_API_KEY in your .env.local file to enable AI chat.",
+        text: "I'm not fully configured yet. Please set GOOGLE_AI_API_KEY (or NEXT_PUBLIC_GOOGLE_AI_API_KEY for local dev) in your environment to enable AI chat.",
         suggestions: ['Show me new arrivals', 'Browse dresses'],
       });
     }
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     contents.push({ role: 'user', parts: [{ text: text || 'Hello' }] });
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${googleApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

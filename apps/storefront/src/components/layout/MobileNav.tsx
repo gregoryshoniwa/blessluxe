@@ -8,46 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
 import { useState } from "react";
-
-const navLinks = [
-  {
-    label: "Women",
-    href: "/shop?category=women",
-    subCategories: [
-      { label: "New Arrivals", href: "/shop", icon: "✨" },
-      { label: "Dresses", href: "/shop?category=dresses" },
-      { label: "Tops & Blouses", href: "/shop?category=tops" },
-      { label: "Pants & Skirts", href: "/shop?category=bottoms" },
-      { label: "Sets", href: "/shop?category=women" },
-      { label: "Outerwear", href: "/shop?category=outerwear" },
-      { label: "Accessories", href: "/shop?category=accessories" },
-    ],
-  },
-  {
-    label: "Men",
-    href: "/shop?category=men",
-    subCategories: [
-      { label: "New Arrivals", href: "/shop?category=men", icon: "✨" },
-      { label: "Suits & Blazers", href: "/shop?category=men" },
-      { label: "Shirts", href: "/shop?category=men" },
-      { label: "Trousers", href: "/shop?category=men" },
-      { label: "Knitwear", href: "/shop?category=men" },
-      { label: "Outerwear", href: "/shop?category=outerwear" },
-      { label: "Accessories", href: "/shop?category=accessories" },
-    ],
-  },
-  {
-    label: "Children",
-    href: "/shop?category=children",
-    subCategories: [
-      { label: "New Arrivals", href: "/shop?category=children", icon: "✨" },
-      { label: "Girls", href: "/shop?category=children" },
-      { label: "Boys", href: "/shop?category=children" },
-      { label: "Baby", href: "/shop?category=children" },
-    ],
-  },
-  { label: "Sale", href: "/shop", isSale: true },
-];
+import { useNavigation } from "@/hooks/useNavigation";
 
 const accountLinks = [
   { href: "/account", label: "My Account" },
@@ -66,6 +27,7 @@ const helpLinks = [
 export function MobileNav() {
   const { isMobileNavOpen, closeMobileNav } = useUIStore();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
+  const { navLinks } = useNavigation();
 
   // Handle body scroll lock
   useEffect(() => {
@@ -147,7 +109,7 @@ export function MobileNav() {
             <ul className="space-y-1">
               {navLinks.map((link) => (
                 <li key={link.label}>
-                  {link.subCategories ? (
+                  {link.submenu ? (
                     <>
                       <button
                         onClick={() => toggleExpand(link.label)}
@@ -174,14 +136,16 @@ export function MobileNav() {
                             transition={{ duration: 0.2 }}
                             className="overflow-hidden pl-4 border-l-2 border-gold/20 ml-2"
                           >
-                            {link.subCategories.map((sub) => (
-                              <li key={sub.href}>
+                            {Object.values(link.submenu)
+                              .flatMap((section) => section.items)
+                              .map((sub, index) => (
+                              <li key={`${sub.href}-${sub.label}-${index}`}>
                                 <Link
                                   href={sub.href}
                                   onClick={closeMobileNav}
                                   className="flex items-center gap-2 py-2 text-sm text-black/70 hover:text-gold transition-colors"
                                 >
-                                  {"icon" in sub && <span>{sub.icon}</span>}
+                                  {"icon" in sub && sub.icon && <span>{sub.icon}</span>}
                                   <span>{sub.label}</span>
                                 </Link>
                               </li>

@@ -9,18 +9,20 @@
  * ts_vector full-text search as a secondary ranking signal.
  */
 
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
 const EMBEDDING_MODEL = 'text-embedding-004';
 const DIMENSIONS = 768;
+const getGoogleApiKey = () =>
+  process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
 
 export type EmbeddingVector = number[];
 
 export async function embed(text: string): Promise<EmbeddingVector | null> {
-  if (!GOOGLE_API_KEY) return null;
+  const googleApiKey = getGoogleApiKey();
+  if (!googleApiKey) return null;
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${GOOGLE_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${googleApiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
