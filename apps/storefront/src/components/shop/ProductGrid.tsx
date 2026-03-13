@@ -44,6 +44,23 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
     category_id: categoryIds,
   });
 
+  const normalizeProductImageUrl = (value: string | null | undefined) => {
+    const input = String(value || "").trim();
+    if (!input) return null;
+
+    const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "").replace(/\/+$/, "");
+    if (input.startsWith("/")) {
+      return publicBase ? `${publicBase}${input}` : input;
+    }
+    if (publicBase && input.startsWith("http://medusa:9000")) {
+      return `${publicBase}${input.slice("http://medusa:9000".length)}`;
+    }
+    if (publicBase && input.startsWith("https://medusa:9000")) {
+      return `${publicBase}${input.slice("https://medusa:9000".length)}`;
+    }
+    return input;
+  };
+
   const mappedProducts = useMemo(() => {
     return (rawProducts || []).map((p) => {
       const firstVariant = p.variants?.[0] as Record<string, unknown> | undefined;
@@ -65,7 +82,7 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         title: p.title,
         handle: p.handle,
         price,
-        thumbnail: p.thumbnail,
+        thumbnail: normalizeProductImageUrl(p.thumbnail || p.images?.[0]?.url || null),
         badge,
         colors: [] as string[],
         sizes: [...new Set(sizes)],

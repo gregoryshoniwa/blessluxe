@@ -5,6 +5,7 @@ export interface CartItem {
   id: string;
   variantId: string;
   productId: string;
+  handle?: string;
   title: string;
   thumbnail: string | null;
   quantity: number;
@@ -102,6 +103,18 @@ export const useCartStore = create<CartState>()(
     {
       name: "blessluxe-cart",
       partialize: (state) => ({ items: state.items }),
+      version: 2,
+      migrate: (persistedState: unknown) => {
+        const state = persistedState as { items?: CartItem[] } | undefined;
+        if (!state?.items) return { items: [] };
+        return {
+          items: state.items.map((item) => ({
+            ...item,
+            // Migrate older cart entries that accidentally stored cents as dollars.
+            unitPrice: item.unitPrice > 2000 ? Number((item.unitPrice / 100).toFixed(2)) : item.unitPrice,
+          })),
+        };
+      },
     }
   )
 );

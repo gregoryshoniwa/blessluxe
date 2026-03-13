@@ -9,12 +9,14 @@ import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
 import { useState } from "react";
 import { useNavigation } from "@/hooks/useNavigation";
+import { usePathname } from "next/navigation";
 
 const accountLinks = [
-  { href: "/account", label: "My Account" },
-  { href: "/account/orders", label: "Order History" },
+  { href: "/account/login", label: "Login" },
+  { href: "/account/signup", label: "Create Account" },
+  { href: "/account", label: "My Dashboard" },
   { href: "/wishlist", label: "Wishlist" },
-  { href: "/account/rewards", label: "Rewards" },
+  { href: "/affiliate/dashboard", label: "Affiliate Dashboard" },
 ];
 
 const helpLinks = [
@@ -28,6 +30,17 @@ export function MobileNav() {
   const { isMobileNavOpen, closeMobileNav } = useUIStore();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const { navLinks } = useNavigation();
+  const pathname = usePathname();
+  const isAffiliateShopPage = /^\/affiliate\/shop\/[^/?#]+/i.test(pathname);
+  const affiliateCodeFromPage = (() => {
+    const match = pathname.match(/^\/affiliate\/shop\/([^/?#]+)/i);
+    return match?.[1] || "";
+  })();
+  const withAffiliateRef = (href: string) => {
+    if (!affiliateCodeFromPage || !href.startsWith("/shop")) return href;
+    const separator = href.includes("?") ? "&" : "?";
+    return `${href}${separator}ref=${encodeURIComponent(affiliateCodeFromPage)}`;
+  };
 
   // Handle body scroll lock
   useEffect(() => {
@@ -107,7 +120,7 @@ export function MobileNav() {
               Shop
             </p>
             <ul className="space-y-1">
-              {navLinks.map((link) => (
+              {!isAffiliateShopPage ? navLinks.map((link) => (
                 <li key={link.label}>
                   {link.submenu ? (
                     <>
@@ -141,7 +154,7 @@ export function MobileNav() {
                               .map((sub, index) => (
                               <li key={`${sub.href}-${sub.label}-${index}`}>
                                 <Link
-                                  href={sub.href}
+                                  href={withAffiliateRef(sub.href)}
                                   onClick={closeMobileNav}
                                   className="flex items-center gap-2 py-2 text-sm text-black/70 hover:text-gold transition-colors"
                                 >
@@ -156,7 +169,7 @@ export function MobileNav() {
                     </>
                   ) : (
                     <Link
-                      href={link.href}
+                      href={withAffiliateRef(link.href)}
                       onClick={closeMobileNav}
                       className={cn(
                         "flex items-center justify-between py-3 px-2 -mx-2",
@@ -170,7 +183,9 @@ export function MobileNav() {
                     </Link>
                   )}
                 </li>
-              ))}
+              )) : (
+                <li className="py-2 text-sm text-black/60">Affiliate shop menu is streamlined on this page.</li>
+              )}
             </ul>
           </nav>
 

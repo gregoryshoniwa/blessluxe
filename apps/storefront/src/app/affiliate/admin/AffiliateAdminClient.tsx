@@ -34,24 +34,36 @@ interface Payout {
   status: string;
 }
 
+interface SocialModerationPost {
+  id: string;
+  caption: string;
+  image_url: string;
+  code: string;
+  email: string;
+  created_at: string;
+}
+
 export default function AffiliateAdminClient() {
   const router = useRouter();
   const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [socialPosts, setSocialPosts] = useState<SocialModerationPost[]>([]);
   const [error, setError] = useState("");
 
   const load = async () => {
     setError("");
-    const [aRes, sRes, pRes] = await Promise.all([
+    const [aRes, sRes, pRes, socialRes] = await Promise.all([
       fetch("/api/admin/affiliate/affiliates", { cache: "no-store" }),
       fetch("/api/admin/affiliate/sales", { cache: "no-store" }),
       fetch("/api/admin/affiliate/payouts", { cache: "no-store" }),
+      fetch("/api/admin/affiliate/social/posts", { cache: "no-store" }),
     ]);
     if (aRes.ok) setAffiliates((await aRes.json()).affiliates || []);
     if (sRes.ok) setSales((await sRes.json()).sales || []);
     if (pRes.ok) setPayouts((await pRes.json()).payouts || []);
-    if (!aRes.ok || !sRes.ok || !pRes.ok) {
+    if (socialRes.ok) setSocialPosts((await socialRes.json()).posts || []);
+    if (!aRes.ok || !sRes.ok || !pRes.ok || !socialRes.ok) {
       setError("Session expired or access denied. Please authenticate again.");
     }
   };
@@ -81,6 +93,15 @@ export default function AffiliateAdminClient() {
   const logoutAdmin = async () => {
     await fetch("/api/admin/auth/session", { method: "DELETE" });
     router.push("/affiliate/admin/auth");
+  };
+
+  const moderatePost = async (id: string, status: "approved" | "rejected") => {
+    await fetch(`/api/admin/affiliate/social/posts/${id}/moderate`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await load();
   };
 
   return (
@@ -172,6 +193,42 @@ export default function AffiliateAdminClient() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-lg border border-theme-primary/20 p-5">
+          <h2 className="font-semibold mb-4">Social Commerce Moderation</h2>
+          <div className="space-y-4">
+            {socialPosts.length === 0 ? (
+              <p className="text-sm text-black/60">No pending social posts.</p>
+            ) : (
+              socialPosts.map((post) => (
+                <div key={post.id} className="border border-black/10 rounded p-4">
+                  <div className="flex justify-between gap-3 mb-2 text-sm">
+                    <p>
+                      <span className="font-medium">{post.code}</span> • {post.email}
+                    </p>
+                    <p className="text-black/50">{new Date(post.created_at).toLocaleString()}</p>
+                  </div>
+                  <img src={post.image_url} alt="Pending affiliate post" className="w-full max-h-64 object-cover rounded border border-black/10 mb-2" />
+                  <p className="text-sm mb-3">{post.caption}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => moderatePost(post.id, "approved")}
+                      className="px-3 py-1 text-xs bg-green-600 text-white rounded"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => moderatePost(post.id, "rejected")}
+                      className="px-3 py-1 text-xs bg-red-600 text-white rounded"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 

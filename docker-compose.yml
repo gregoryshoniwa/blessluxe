@@ -79,9 +79,6 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
     command: ["sh", "-c", "npx medusa db:migrate && pnpm start"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health || exit 1"]
@@ -117,6 +114,10 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       ADMIN_DASHBOARD_KEY: ${ADMIN_DASHBOARD_KEY:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-affiliate-media}
+      GOOGLE_NANO_BANANA_MODEL: ${GOOGLE_NANO_BANANA_MODEL:-gemini-3.1-flash-image-preview}
 
 volumes:
   postgres_data:

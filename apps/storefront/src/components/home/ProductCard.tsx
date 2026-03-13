@@ -50,10 +50,11 @@ export function ProductCard({
     addItem({
       variantId: `${id}-default`,
       productId: id,
+      handle,
       title,
       thumbnail: thumbnail ?? null,
       quantity: 1,
-      unitPrice: price,
+      unitPrice: price / 100,
       variant: { title: "Default", sku: null },
     });
     openCart();

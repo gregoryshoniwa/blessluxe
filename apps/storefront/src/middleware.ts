@@ -10,7 +10,6 @@ export function middleware(request: NextRequest) {
     response.cookies.set({
       name: AFFILIATE_COOKIE,
       value: ref,
-      maxAge: 60 * 60 * 24 * 30,
       path: "/",
       httpOnly: false,
       sameSite: "lax",

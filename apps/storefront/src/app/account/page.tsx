@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 type AccountPayload = {
   customer: {
@@ -45,6 +46,7 @@ const tabs = [
 ] as const;
 
 export default function AccountPage() {
+  const router = useRouter();
   const { data: oauthSession } = useSession();
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Profile");
   const [payload, setPayload] = useState<AccountPayload | null>(null);
@@ -52,16 +54,8 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
-  const [googleOauthReady, setGoogleOauthReady] = useState(false);
   const oauthSyncInFlight = useRef(false);
 
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [signupFirstName, setSignupFirstName] = useState("");
-  const [signupLastName, setSignupLastName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [googleEmail, setGoogleEmail] = useState("");
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
 
   const customer = payload?.customer || null;
@@ -93,19 +87,6 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
-    const loadOauthStatus = async () => {
-      try {
-        const res = await fetch("/api/account/oauth-status", { cache: "no-store" });
-        const data = (await res.json()) as { google?: boolean };
-        setGoogleOauthReady(Boolean(data.google));
-      } catch {
-        setGoogleOauthReady(false);
-      }
-    };
-    loadOauthStatus();
-  }, []);
-
-  useEffect(() => {
     const syncOauthSession = async () => {
       if (!oauthSession?.user?.email || customer || oauthSyncInFlight.current) return;
       oauthSyncInFlight.current = true;
@@ -120,77 +101,6 @@ export default function AccountPage() {
     };
     syncOauthSession();
   }, [customer, oauthSession?.user?.email]);
-
-  const onLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setNote("");
-    setError("");
-    const res = await fetch("/api/account/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: loginEmail, password: loginPassword }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error || "Login failed.");
-      return;
-    }
-    setNote("Welcome back.");
-    await loadAccount();
-  };
-
-  const onSignup = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setNote("");
-    setError("");
-    const res = await fetch("/api/account/signup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        firstName: signupFirstName,
-        lastName: signupLastName,
-        email: signupEmail,
-        password: signupPassword,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error || "Signup failed.");
-      return;
-    }
-
-    if (json.verifyEmailToken) {
-      setNote("Account created. Click verify to confirm your email.");
-      await fetch("/api/account/verify-email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: json.verifyEmailToken }),
-      });
-    }
-    await loadAccount();
-  };
-
-  const onGoogleQuickLogin = async () => {
-    setNote("");
-    setError("");
-    const email = googleEmail.trim();
-    if (!email) {
-      setError("Enter your Google email to continue.");
-      return;
-    }
-    const res = await fetch("/api/account/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, mode: "google" }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json.error || "Google sign-in failed.");
-      return;
-    }
-    setNote("Signed in with Google.");
-    await loadAccount();
-  };
 
   const onLogout = async () => {
     await signOut({ redirect: false });
@@ -314,100 +224,25 @@ export default function AccountPage() {
       {note ? <p className="text-sm text-emerald-700">{note}</p> : null}
 
       {!customer ? (
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="border border-black/10 p-6 space-y-3">
-            <h2 className="font-display tracking-widest uppercase">Quick Google Sign-in</h2>
-            <p className="text-sm text-black/60">
-              If you are already logged into Chrome, use the Google sign-in button for one-click account access.
-            </p>
+        <div className="max-w-2xl border border-black/10 p-8 space-y-4 bg-white">
+          <h2 className="font-display text-2xl tracking-widest uppercase">Login Required</h2>
+          <p className="text-black/65 text-sm">
+            Your account dashboard is available after login. Use secure sign-in or create a new account.
+          </p>
+          <div className="flex gap-3 flex-wrap">
             <button
-              onClick={() => signIn("google", { callbackUrl: "/account" })}
-              disabled={!googleOauthReady}
-              className="w-full bg-black text-white py-3 text-xs tracking-[0.2em] uppercase hover:bg-black/85 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {googleOauthReady ? "Continue With Google OAuth" : "Google OAuth Not Configured"}
-            </button>
-            <input
-              type="email"
-              placeholder="your-google-email@gmail.com"
-              value={googleEmail}
-              onChange={(event) => setGoogleEmail(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <button
-              onClick={onGoogleQuickLogin}
-              className="w-full border border-black/20 py-3 text-xs tracking-[0.2em] uppercase hover:bg-black/5 transition-colors"
-            >
-              Quick Google Email Sign-in (Fallback)
-            </button>
-          </div>
-
-          <form onSubmit={onLogin} className="border border-black/10 p-6 space-y-3">
-            <h2 className="font-display tracking-widest uppercase">Login</h2>
-            <input
-              required
-              type="email"
-              placeholder="Email"
-              value={loginEmail}
-              onChange={(event) => setLoginEmail(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <input
-              required
-              type="password"
-              placeholder="Password"
-              value={loginPassword}
-              onChange={(event) => setLoginPassword(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <button
-              type="submit"
-              className="w-full bg-gold text-white py-3 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+              onClick={() => router.push("/account/login")}
+              className="bg-black text-white px-6 py-3 text-xs tracking-[0.2em] uppercase"
             >
               Login
             </button>
-          </form>
-
-          <form onSubmit={onSignup} className="border border-black/10 p-6 space-y-3">
-            <h2 className="font-display tracking-widest uppercase">Create Account</h2>
-            <input
-              type="text"
-              placeholder="First name"
-              value={signupFirstName}
-              onChange={(event) => setSignupFirstName(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Last name"
-              value={signupLastName}
-              onChange={(event) => setSignupLastName(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <input
-              required
-              type="email"
-              placeholder="Email"
-              value={signupEmail}
-              onChange={(event) => setSignupEmail(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
-            <input
-              required
-              type="password"
-              minLength={6}
-              placeholder="Password (min 6)"
-              value={signupPassword}
-              onChange={(event) => setSignupPassword(event.target.value)}
-              className="w-full border border-black/20 px-4 py-3 text-sm"
-            />
             <button
-              type="submit"
-              className="w-full bg-gold text-white py-3 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+              onClick={() => router.push("/account/signup")}
+              className="border border-black/20 px-6 py-3 text-xs tracking-[0.2em] uppercase"
             >
               Create Account
             </button>
-          </form>
+          </div>
         </div>
       ) : (
         <div className="space-y-6">

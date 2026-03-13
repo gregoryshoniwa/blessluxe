@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartStore, CartItem as CartItemType } from '@/stores/cart';
@@ -13,8 +12,20 @@ interface CartItemProps {
 
 export function CartItem({ item }: CartItemProps) {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
+  const productHref = item.handle ? `/shop/${item.handle}` : '/shop';
+  const normalizeThumbnailUrl = (value: string | null) => {
+    const input = String(value || '').trim();
+    if (!input) return null;
+    const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
+    if (input.startsWith('/')) return `${publicBase}${input}`;
+    if (input.startsWith('http://medusa:9000')) return `${publicBase}${input.slice('http://medusa:9000'.length)}`;
+    if (input.startsWith('https://medusa:9000')) return `${publicBase}${input.slice('https://medusa:9000'.length)}`;
+    return input;
+  };
+  const thumbnailUrl = normalizeThumbnailUrl(item.thumbnail);
 
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1) return;
@@ -33,14 +44,14 @@ export function CartItem({ item }: CartItemProps) {
       isUpdating && "opacity-50"
     )}>
       {/* Product Image */}
-      <Link href={`/shop/${item.productId}`} className="flex-shrink-0">
+      <Link href={productHref} className="flex-shrink-0">
         <div className="relative w-20 h-24 bg-cream-dark rounded overflow-hidden">
-          {item.thumbnail ? (
-            <Image
-              src={item.thumbnail}
+          {thumbnailUrl && !imageError ? (
+            <img
+              src={thumbnailUrl}
               alt={item.title}
-              fill
-              className="object-cover"
+              className="w-full h-full object-cover"
+              onError={() => setImageError(true)}
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-cream to-blush" />
@@ -51,7 +62,7 @@ export function CartItem({ item }: CartItemProps) {
       {/* Product Details */}
       <div className="flex-1 min-w-0">
         <Link 
-          href={`/shop/${item.productId}`}
+          href={productHref}
           className="font-display text-sm hover:text-gold transition-colors line-clamp-1"
         >
           {item.title}

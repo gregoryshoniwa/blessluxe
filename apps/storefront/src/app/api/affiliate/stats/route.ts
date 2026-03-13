@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       },
       chart,
       payoutHistory: payouts,
-      link: `${publicOrigin}/shop?ref=${affiliate.code}`,
+      link: `${publicOrigin}/affiliate/shop/${affiliate.code}?ref=${affiliate.code}`,
     });
   } catch (error) {
     console.error("[API /affiliate/stats] error:", error);

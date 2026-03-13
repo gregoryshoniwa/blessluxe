@@ -28,190 +28,170 @@ interface Product {
   };
 }
 
-// Mock data - replace with actual API calls
-const getProduct = async (handle: string): Promise<Product | null> => {
-  // TODO: Replace with actual API call to Medusa
-  // Example: const { product } = await medusa.store.product.retrieve(handle);
-  
-  const mockProducts: Record<string, Product> = {
-    'luxury-silk-dress': {
-      id: '1',
-      name: 'Luxury Silk Dress',
-      handle: 'luxury-silk-dress',
-      price: 299.99,
-      salePrice: 249.99,
-      rating: 4.5,
-      reviewCount: 128,
-      description:
-        'Experience elegance with our premium silk dress. Crafted from the finest materials, this dress combines comfort with sophistication for any special occasion.',
-      category: 'Dresses',
-      images: [
-        'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800',
-        'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800',
-        'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=800',
-        'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=800',
-      ],
-      colors: [
-        { name: 'Black', value: '#000000' },
-        { name: 'Navy', value: '#1e3a8a' },
-        { name: 'Burgundy', value: '#7f1d1d' },
-        { name: 'Emerald', value: '#065f46' },
-      ],
-      sizes: [
-        { name: 'XS', inStock: true },
-        { name: 'S', inStock: true },
-        { name: 'M', inStock: true },
-        { name: 'L', inStock: true },
-        { name: 'XL', inStock: false },
-      ],
-      details: {
-        description:
-          'This luxurious silk dress is designed to make you feel confident and beautiful. The premium fabric drapes elegantly, creating a flattering silhouette that works for both formal events and upscale casual occasions.',
-        sizeAndFit:
-          'Model is 5\'9" and wearing size S. Fits true to size. For a more relaxed fit, we recommend sizing up.',
-        shippingAndReturns:
-          'Free standard shipping on orders over $100. Express shipping available at checkout. We offer hassle-free returns within 30 days of purchase.',
-        careInstructions:
-          'Dry clean only. Do not bleach. Iron on low heat if needed. Store hanging to maintain shape.',
-      },
-    },
-    'silk-wrap-dress': {
-      id: 'prod_01',
-      name: 'Silk Wrap Dress',
-      handle: 'silk-wrap-dress',
-      price: 189.00,
-      rating: 4.7,
-      reviewCount: 95,
-      description: 'A timeless wrap dress crafted from pure silk. Perfect for any occasion from office to evening.',
-      category: 'Dresses',
-      images: [
-        'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=800',
-        'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800',
-      ],
-      colors: [
-        { name: 'Navy', value: '#2C3E50' },
-        { name: 'Camel', value: '#8E6B4D' },
-        { name: 'Ruby', value: '#C41E3A' },
-      ],
-      sizes: [
-        { name: 'XS', inStock: true },
-        { name: 'S', inStock: true },
-        { name: 'M', inStock: true },
-        { name: 'L', inStock: false },
-      ],
-      details: {
-        description: 'Elegant wrap silhouette in 100% mulberry silk. Features adjustable tie waist and flutter sleeves.',
-        sizeAndFit: 'Relaxed fit. Model wears size S.',
-        shippingAndReturns: 'Free shipping on orders over $100. 30-day returns.',
-        careInstructions: 'Dry clean recommended.',
-      },
-    },
-    'satin-blouse': {
-      id: 'prod_02',
-      name: 'Satin Blouse',
-      handle: 'satin-blouse',
-      price: 129.00,
-      salePrice: 89.00,
-      rating: 4.4,
-      reviewCount: 67,
-      description: 'Luxurious satin blouse with a relaxed fit. Perfect for layering or wearing alone.',
-      category: 'Tops',
-      images: [
-        'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=800',
-        'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=800',
-      ],
-      colors: [
-        { name: 'Ivory', value: '#F5F5DC' },
-        { name: 'Blush', value: '#FFC0CB' },
-      ],
-      sizes: [
-        { name: 'XS', inStock: true },
-        { name: 'S', inStock: true },
-        { name: 'M', inStock: true },
-        { name: 'L', inStock: true },
-      ],
-      details: {
-        description: 'Soft satin with a subtle sheen. Button-front closure with pearl buttons.',
-        sizeAndFit: 'Relaxed fit. Size up for oversized look.',
-        shippingAndReturns: 'Free shipping. Easy 30-day returns.',
-        careInstructions: 'Machine wash cold. Hang dry.',
-      },
-    },
-    'cashmere-cardigan': {
-      id: 'prod_03',
-      name: 'Cashmere Cardigan',
-      handle: 'cashmere-cardigan',
-      price: 249.00,
-      rating: 4.9,
-      reviewCount: 142,
-      description: 'Ultra-soft cashmere cardigan. A wardrobe essential for every season.',
-      category: 'Knitwear',
-      images: [
-        'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=800',
-        'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800',
-      ],
-      colors: [
-        { name: 'Cream', value: '#F5E6E0' },
-        { name: 'Gold', value: '#C9A84C' },
-      ],
-      sizes: [
-        { name: 'S', inStock: true },
-        { name: 'M', inStock: true },
-        { name: 'L', inStock: true },
-      ],
-      details: {
-        description: '100% Grade-A Mongolian cashmere. Ribbed hem and cuffs.',
-        sizeAndFit: 'True to size with a slightly relaxed fit.',
-        shippingAndReturns: 'Complimentary shipping. Full refund within 30 days.',
-        careInstructions: 'Hand wash cold. Lay flat to dry.',
-      },
+function getMedusaHeaders() {
+  const key =
+    process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY ||
+    process.env.MEDUSA_PUBLISHABLE_KEY ||
+    '';
+  return key ? { 'x-publishable-api-key': key, accept: 'application/json' } : { accept: 'application/json' };
+}
+
+function getMedusaCandidates() {
+  const configured = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
+  return Array.from(
+    new Set([configured, 'http://medusa:9000', 'http://host.docker.internal:9000', 'http://localhost:9000'])
+  );
+}
+
+async function getDefaultRegionId(base: string) {
+  try {
+    const url = new URL('/store/regions', base);
+    url.searchParams.set('limit', '1');
+    const response = await fetch(url.toString(), {
+      cache: 'no-store',
+      headers: getMedusaHeaders(),
+    });
+    if (!response.ok) return '';
+    const payload = (await response.json()) as { regions?: Array<Record<string, unknown>> };
+    return String(payload.regions?.[0]?.id || '');
+  } catch {
+    return '';
+  }
+}
+
+function toPublicImageUrl(value: string) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
+  if (input.startsWith('/')) return `${publicBase}${input}`;
+  if (input.startsWith('http://medusa:9000')) return `${publicBase}${input.slice('http://medusa:9000'.length)}`;
+  if (input.startsWith('https://medusa:9000')) return `${publicBase}${input.slice('https://medusa:9000'.length)}`;
+  return input;
+}
+
+function mapStoreProduct(raw: Record<string, unknown>): Product {
+  const variants = Array.isArray(raw.variants) ? (raw.variants as Array<Record<string, unknown>>) : [];
+  const firstVariant = variants[0] || {};
+  const calcPrice = firstVariant.calculated_price as Record<string, unknown> | undefined;
+  const prices = (firstVariant.prices as Array<Record<string, unknown>> | undefined) || [];
+  const firstPrice = prices[0] || {};
+  const directVariantAmount = Number(firstVariant.amount || 0);
+  const amountCents =
+    Number(calcPrice?.calculated_amount || 0) ||
+    Number(calcPrice?.original_amount || 0) ||
+    Number(firstPrice.amount || 0) ||
+    directVariantAmount;
+  const price = amountCents > 0 ? amountCents / 100 : 0;
+
+  const images = Array.isArray(raw.images) ? (raw.images as Array<Record<string, unknown>>) : [];
+  const imageUrls = images.map((img) => toPublicImageUrl(String(img.url || ''))).filter(Boolean);
+  const thumb = toPublicImageUrl(String(raw.thumbnail || ''));
+  const mergedImages = (thumb ? [thumb] : []).concat(imageUrls).slice(0, 8);
+
+  const options = Array.isArray(raw.options) ? (raw.options as Array<Record<string, unknown>>) : [];
+  const colorOption = options.find((o) => String(o.title || '').toLowerCase().includes('color'));
+  const colorValues = Array.isArray(colorOption?.values) ? (colorOption?.values as Array<Record<string, unknown>>) : [];
+  const colors =
+    colorValues.length > 0
+      ? colorValues.map((v, index) => ({
+          name: String(v.value || `Color ${index + 1}`),
+          value: ['#111827', '#1f2937', '#7f1d1d', '#6b7280', '#0f766e'][index % 5],
+        }))
+      : [{ name: 'Default', value: '#111827' }];
+
+  const sizeSet = new Set<string>();
+  for (const variant of variants) {
+    const title = String(variant.title || '');
+    const parts = title.split(' / ').map((p) => p.trim());
+    for (const part of parts) {
+      if (['XS', 'S', 'M', 'L', 'XL', 'XXL'].includes(part.toUpperCase())) sizeSet.add(part.toUpperCase());
+    }
+  }
+  const sizes = (sizeSet.size ? Array.from(sizeSet) : ['Default']).map((size) => ({ name: size, inStock: true }));
+
+  const categories = Array.isArray(raw.categories) ? (raw.categories as Array<Record<string, unknown>>) : [];
+  const firstCategory = categories[0];
+  const category = String(firstCategory?.handle || firstCategory?.name || 'all');
+
+  const description = String(raw.description || '').trim() || 'Premium fashion piece from our curated collection.';
+
+  return {
+    id: String(raw.id || ''),
+    name: String(raw.title || 'Product'),
+    handle: String(raw.handle || ''),
+    price,
+    rating: 4.6,
+    reviewCount: 0,
+    description,
+    category,
+    images: mergedImages.length
+      ? mergedImages
+      : ['https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=1200'],
+    colors,
+    sizes,
+    details: {
+      description,
+      sizeAndFit: 'Fits true to size. Please select your usual size.',
+      shippingAndReturns: 'Shipping and returns available at checkout based on your location.',
+      careInstructions: 'Follow care label instructions for best results.',
     },
   };
+}
 
-  return mockProducts[handle] || null;
+const getProduct = async (handle: string): Promise<Product | null> => {
+  for (const base of getMedusaCandidates()) {
+    try {
+      const regionId = await getDefaultRegionId(base);
+      const url = new URL('/store/products', base);
+      url.searchParams.set('handle', handle);
+      url.searchParams.set('limit', '1');
+      if (regionId) url.searchParams.set('region_id', regionId);
+      const response = await fetch(url.toString(), {
+        cache: 'no-store',
+        headers: getMedusaHeaders(),
+      });
+      if (!response.ok) continue;
+      const payload = (await response.json()) as { products?: Array<Record<string, unknown>> };
+      const row = (payload.products || [])[0];
+      if (!row) continue;
+      return mapStoreProduct(row);
+    } catch {
+      // Try next host.
+    }
+  }
+  return null;
 };
 
 const getRelatedProducts = async (_productId: string) => {
-  // TODO: Replace with actual API call
-  return [
-    {
-      id: '2',
-      name: 'Evening Gown',
-      handle: 'evening-gown',
-      price: 399.99,
-      image: 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=400',
-      rating: 4.8,
-      reviewCount: 95,
-    },
-    {
-      id: '3',
-      name: 'Cocktail Dress',
-      handle: 'cocktail-dress',
-      price: 199.99,
-      salePrice: 149.99,
-      image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400',
-      rating: 4.3,
-      reviewCount: 67,
-    },
-    {
-      id: '4',
-      name: 'Maxi Dress',
-      handle: 'maxi-dress',
-      price: 179.99,
-      image: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400',
-      rating: 4.6,
-      reviewCount: 112,
-    },
-    {
-      id: '5',
-      name: 'Summer Dress',
-      handle: 'summer-dress',
-      price: 129.99,
-      image: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=400',
-      rating: 4.4,
-      reviewCount: 89,
-    },
-  ];
+  for (const base of getMedusaCandidates()) {
+    try {
+      const regionId = await getDefaultRegionId(base);
+      const url = new URL('/store/products', base);
+      url.searchParams.set('limit', '8');
+      if (regionId) url.searchParams.set('region_id', regionId);
+      const response = await fetch(url.toString(), {
+        cache: 'no-store',
+        headers: getMedusaHeaders(),
+      });
+      if (!response.ok) continue;
+      const payload = (await response.json()) as { products?: Array<Record<string, unknown>> };
+      return (payload.products || []).slice(0, 4).map((row) => {
+        const product = mapStoreProduct(row);
+        return {
+          id: product.id,
+          name: product.name,
+          handle: product.handle,
+          price: product.price,
+          image: product.images[0],
+          rating: 4.6,
+          reviewCount: 0,
+        };
+      });
+    } catch {
+      // Try next host.
+    }
+  }
+  return [];
 };
 
 const getReviews = async (_productId: string) => {

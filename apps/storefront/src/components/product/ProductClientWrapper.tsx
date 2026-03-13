@@ -60,6 +60,7 @@ export function ProductClientWrapper({ product }: ProductClientWrapperProps) {
   const handleAddToCart = (data: { color: string; size: string; quantity: number }) => {
     addToCart({
       productId: product.id,
+      handle: product.handle,
       title: product.name,
       thumbnail: product.images[0] || null,
       variantId: `${product.id}-${data.color}-${data.size}`,

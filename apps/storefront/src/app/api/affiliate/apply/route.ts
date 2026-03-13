@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAffiliateApplication } from "@/lib/affiliate";
+import { getCurrentCustomer } from "@/lib/customer-account";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const firstName = String(body.firstName || "").trim();
-    const lastName = String(body.lastName || "").trim();
-    const email = String(body.email || "").trim().toLowerCase();
     const notes = String(body.notes || "").trim();
     const acceptedTerms = Boolean(body.acceptedTerms);
+    const customer = await getCurrentCustomer();
 
-    if (!firstName || !lastName || !email) {
-      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    if (!customer?.email) {
+      return NextResponse.json({ error: "Login required." }, { status: 401 });
     }
     if (!acceptedTerms) {
       return NextResponse.json(
@@ -22,10 +21,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const fullName = String(customer.full_name || "").trim();
+    const inferredFirst = String(customer.first_name || "").trim() || fullName.split(" ")[0] || "Customer";
+    const inferredLast =
+      String(customer.last_name || "").trim() ||
+      fullName.split(" ").slice(1).join(" ").trim() ||
+      "User";
+
     const affiliate = await createAffiliateApplication({
-      firstName,
-      lastName,
-      email,
+      firstName: inferredFirst,
+      lastName: inferredLast,
+      email: String(customer.email).trim().toLowerCase(),
       notes,
     });
 

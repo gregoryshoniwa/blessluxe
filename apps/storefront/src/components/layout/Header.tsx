@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, User, Heart, ShoppingBag, Menu, ChevronDown } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
 import { useCartStore } from "@/stores/cart";
@@ -20,7 +21,19 @@ export function Header() {
   const menuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchParamKey = searchParams.toString();
+  const { data: oauthSession } = useSession();
   const { navLinks } = useNavigation();
+  const affiliateCodeFromPage = useMemo(() => {
+    const match = pathname.match(/^\/affiliate\/shop\/([^/?#]+)/i);
+    return match?.[1] || "";
+  }, [pathname]);
+  const isAffiliateShopPage = useMemo(() => /^\/affiliate\/shop\/[^/?#]+/i.test(pathname), [pathname]);
+  const withAffiliateRef = (href: string) => {
+    if (!affiliateCodeFromPage || !href.startsWith("/shop")) return href;
+    const separator = href.includes("?") ? "&" : "?";
+    return `${href}${separator}ref=${encodeURIComponent(affiliateCodeFromPage)}`;
+  };
   
   const { isHeaderScrolled, setHeaderScrolled, openMobileNav, openSearch } = useUIStore();
   const cartItemCount = useCartStore((state) => state.getItemCount());
@@ -46,17 +59,20 @@ export function Header() {
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
     const loadSessionState = async () => {
       try {
         const res = await fetch("/api/account/me", { cache: "no-store" });
         const data = (await res.json()) as { customer?: unknown };
-        setIsLoggedIn(Boolean(data.customer));
+        setIsLoggedIn(Boolean(data.customer || oauthSession?.user?.email));
       } catch {
-        setIsLoggedIn(false);
+        setIsLoggedIn(Boolean(oauthSession?.user?.email));
       }
     };
     loadSessionState();
-  }, []);
+  }, [pathname, searchParamKey, oauthSession?.user?.email]);
 
   // Handle scroll effect
   useEffect(() => {
@@ -114,7 +130,10 @@ export function Header() {
             </button>
 
             {/* Logo - overflows header for larger appearance */}
-            <Link href="/" className="flex items-center flex-shrink-0">
+            <Link
+              href={affiliateCodeFromPage ? `/affiliate/shop/${encodeURIComponent(affiliateCodeFromPage)}` : "/"}
+              className="flex items-center flex-shrink-0"
+            >
               <Image
                 src="/logo.png"
                 alt="BLESSLUXE"
@@ -129,45 +148,45 @@ export function Header() {
             </Link>
 
             {/* Desktop Navigation with Mega Menu */}
-            <nav className="hidden lg:flex items-center gap-8">
-              {navLinks.map((link) => (
-                <div
-                  key={link.label}
-                  className="relative"
-                  onMouseEnter={() => link.submenu && handleMenuEnter(link.label)}
-                  onMouseLeave={handleMenuLeave}
-                >
-                  <Link
-                    href={link.href}
-                    className={cn(
-                      "relative flex items-center gap-1.5 font-body text-sm font-medium tracking-widest uppercase",
-                      "py-3 transition-colors",
-                      link.isSale ? "text-red-600" : "text-black hover:text-theme-primary",
-                      // Active state when hovering mega menu
-                      activeMenu === link.label && "text-theme-primary",
-                      // Active state when on corresponding page
-                      activeNavItem === link.label && "text-theme-primary",
-                      // Underline animation
-                      "after:absolute after:bottom-0 after:left-0",
-                      "after:w-0 after:h-0.5 after:transition-all after:duration-300",
-                      "hover:after:w-full",
-                      // Show underline when active (hover or current page)
-                      (activeMenu === link.label || activeNavItem === link.label) && "after:w-full"
-                    )}
+            {!isAffiliateShopPage ? (
+              <nav className="hidden lg:flex items-center gap-8">
+                {navLinks.map((link) => (
+                  <div
+                    key={link.label}
+                    className="relative"
+                    onMouseEnter={() => link.submenu && handleMenuEnter(link.label)}
+                    onMouseLeave={handleMenuLeave}
                   >
-                    {link.label}
-                    {link.submenu && (
-                      <ChevronDown
-                        className={cn(
-                          "w-3.5 h-3.5 transition-transform duration-200",
-                          activeMenu === link.label && "rotate-180"
-                        )}
-                      />
-                    )}
-                  </Link>
-                </div>
-              ))}
-            </nav>
+                    <Link
+                      href={withAffiliateRef(link.href)}
+                      className={cn(
+                        "relative flex items-center gap-1.5 font-body text-sm font-medium tracking-widest uppercase",
+                        "py-3 transition-colors",
+                        link.isSale ? "text-red-600" : "text-black hover:text-theme-primary",
+                        activeMenu === link.label && "text-theme-primary",
+                        activeNavItem === link.label && "text-theme-primary",
+                        "after:absolute after:bottom-0 after:left-0",
+                        "after:w-0 after:h-0.5 after:transition-all after:duration-300",
+                        "hover:after:w-full",
+                        (activeMenu === link.label || activeNavItem === link.label) && "after:w-full"
+                      )}
+                    >
+                      {link.label}
+                      {link.submenu && (
+                        <ChevronDown
+                          className={cn(
+                            "w-3.5 h-3.5 transition-transform duration-200",
+                            activeMenu === link.label && "rotate-180"
+                          )}
+                        />
+                      )}
+                    </Link>
+                  </div>
+                ))}
+              </nav>
+            ) : (
+              <div className="hidden lg:block flex-1" />
+            )}
 
             {/* Header Actions */}
             <div className="flex items-center gap-5">
@@ -180,7 +199,7 @@ export function Header() {
               </button>
 
               <Link
-                href="/account"
+                href={isLoggedIn ? "/account" : "/account/login"}
                 className="hidden sm:flex items-center gap-2 p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Account"
               >
@@ -221,7 +240,7 @@ export function Header() {
 
         {/* Mega Menu Dropdown */}
         <AnimatePresence>
-          {activeMenu && navLinks.find(l => l.label === activeMenu)?.submenu && (
+          {!isAffiliateShopPage && activeMenu && navLinks.find(l => l.label === activeMenu)?.submenu && (
             <motion.div
               key={activeMenu}
               initial={{ opacity: 0, y: -10 }}
@@ -246,7 +265,7 @@ export function Header() {
                           {section.items.map((item, index) => (
                             <li key={`${key}-${item.label}-${index}`}>
                               <Link
-                                href={item.href}
+                                href={withAffiliateRef(item.href)}
                                 className="flex items-center gap-2 text-sm text-black/70 hover:text-theme-primary transition-colors group"
                               >
                                 {"icon" in item && (
@@ -272,7 +291,7 @@ export function Header() {
                       <p className="text-black/70 text-sm mt-1">Up to 40% off selected styles</p>
                     </div>
                     <Link
-                      href="/shop"
+                      href={withAffiliateRef("/shop")}
                       className="inline-block bg-theme-primary text-white px-8 py-3 text-xs font-semibold tracking-widest uppercase hover:bg-theme-primary-dark theme-transition"
                     >
                       Shop Now

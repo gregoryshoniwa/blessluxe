@@ -106,6 +106,9 @@ Edit `.env` and fill in the **required** values:
 |---|---|---|
 | `MEDUSA_PUBLISHABLE_KEY` | Yes | Storefront API key (created after first setup, see step 3) |
 | `GOOGLE_AI_API_KEY` | Yes | Google Gemini API key from [AI Studio](https://aistudio.google.com/apikey) |
+| `SUPABASE_URL` | Recommended | Supabase project URL for affiliate media uploads |
+| `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Server-side key for secure Supabase Storage uploads |
+| `SUPABASE_STORAGE_BUCKET` | Recommended | Public storage bucket name (e.g. `affiliate-media`) |
 | `JWT_SECRET` | Prod | Change from default for production |
 | `COOKIE_SECRET` | Prod | Change from default for production |
 | `COOKIE_SECURE` | Prod | Set to `true` when behind HTTPS |
@@ -255,6 +258,10 @@ The seed script is idempotent — safe to run multiple times.
 | `NEXTAUTH_URL` | `http://localhost:3000` | Public storefront URL for auth callbacks |
 | `ADMIN_DASHBOARD_KEY` | — | Shared key for protecting affiliate admin routes |
 | `ADMIN_EMAILS` | — | Comma-separated admin emails (alternative to key) |
+| `SUPABASE_URL` | — | Supabase project URL for affiliate media storage |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key (server-side upload auth) |
+| `SUPABASE_STORAGE_BUCKET` | `affiliate-media` | Supabase public bucket used for affiliate uploads |
+| `GOOGLE_NANO_BANANA_MODEL` | `gemini-3.1-flash-image-preview` | Optional model override for affiliate AI photoshoot route |
 
 ### Where to get Google and admin keys
 
@@ -305,6 +312,16 @@ ADMIN_EMAILS=owner@blessluxe.com,ops@blessluxe.com
 ```
 
 If `ADMIN_EMAILS` is used, users must first login on `/account` with one of these emails before opening `/affiliate/admin`.
+
+#### Supabase storage keys (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`)
+
+1. Create a project at [Supabase](https://supabase.com/).
+2. Go to **Project Settings > API** and copy:
+   - `SUPABASE_URL` (Project URL)
+   - `SUPABASE_SERVICE_ROLE_KEY` (service_role key, server-side only)
+3. Go to **Storage** and create a bucket (example: `affiliate-media`).
+4. Set bucket to public for direct image rendering in storefront pages.
+5. Add bucket name to `SUPABASE_STORAGE_BUCKET`.
 
 ---
 
@@ -381,7 +398,24 @@ All providers load conditionally based on environment variables.
 
 ### File Storage
 
-- **Cloudinary** (custom) — set `CLOUDINARY_CLOUD_NAME`
+- **Supabase Storage** (recommended) — set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`
+
+---
+
+## Affiliate Social Commerce
+
+Affiliate social shop now supports:
+- Direct image upload for catalog posts and selfies (`/api/affiliate/social/upload`)
+- AI photoshoot generation route with saved media metadata (`/api/affiliate/social/photoshoot`)
+- Admin moderation queue before public visibility of affiliate social posts
+- Storage priority: Supabase -> local fallback (so uploads keep working)
+
+### Moderation flow
+
+1. Affiliate creates a social post from `/affiliate/shop/[code]`
+2. Post is saved as `pending` and hidden from public viewers
+3. Admin reviews post from `/affiliate/admin` and approves/rejects it
+4. Only approved posts appear in public affiliate feeds
 
 ---
 

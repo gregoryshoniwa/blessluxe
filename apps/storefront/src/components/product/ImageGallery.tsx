@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -14,13 +13,24 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
+  const normalizeImageUrl = (value: string) => {
+    const input = String(value || '').trim();
+    if (!input) return '';
+    const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
+    if (input.startsWith('/')) return `${publicBase}${input}`;
+    if (input.startsWith('http://medusa:9000')) return `${publicBase}${input.slice('http://medusa:9000'.length)}`;
+    if (input.startsWith('https://medusa:9000')) return `${publicBase}${input.slice('https://medusa:9000'.length)}`;
+    return input;
+  };
+  const galleryImages = images.map(normalizeImageUrl).filter(Boolean);
+  const selectedImage = galleryImages[selectedIndex] || '';
 
   const handlePrevious = () => {
-    setSelectedIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    setSelectedIndex((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1));
   };
 
   const handleNext = () => {
-    setSelectedIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    setSelectedIndex((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1));
   };
 
   return (
@@ -38,12 +48,10 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
             animate={{ scale: isZoomed ? 1.5 : 1 }}
             transition={{ duration: 0.3 }}
           >
-            <Image
-              src={images[selectedIndex]}
+            <img
+              src={selectedImage}
               alt={`${productName} - Image ${selectedIndex + 1}`}
-              fill
-              className="object-cover"
-              priority={selectedIndex === 0}
+              className="h-full w-full object-cover"
             />
           </motion.div>
 
@@ -55,7 +63,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
 
         {/* Thumbnail Strip */}
         <div className="grid grid-cols-4 gap-3">
-          {images.map((image, index) => (
+          {galleryImages.map((image, index) => (
             <button
               key={index}
               onClick={() => setSelectedIndex(index)}
@@ -65,11 +73,10 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
                   : 'border-gray-200 hover:border-gray-400'
               }`}
             >
-              <Image
+              <img
                 src={image}
                 alt={`${productName} thumbnail ${index + 1}`}
-                fill
-                className="object-cover"
+                className="h-full w-full object-cover"
               />
             </button>
           ))}
@@ -95,7 +102,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
             </button>
 
             {/* Navigation Buttons */}
-            {images.length > 1 && (
+            {galleryImages.length > 1 && (
               <>
                 <button
                   onClick={(e) => {
@@ -120,7 +127,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
 
             {/* Image Counter */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/50 px-4 py-2 rounded-full">
-              {selectedIndex + 1} / {images.length}
+              {selectedIndex + 1} / {galleryImages.length}
             </div>
 
             {/* Main Image */}
@@ -133,11 +140,10 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
               className="relative max-w-7xl max-h-[90vh] w-full h-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <Image
-                src={images[selectedIndex]}
+              <img
+                src={selectedImage}
                 alt={`${productName} - Image ${selectedIndex + 1}`}
-                fill
-                className="object-contain"
+                className="h-full w-full object-contain"
               />
             </motion.div>
           </motion.div>

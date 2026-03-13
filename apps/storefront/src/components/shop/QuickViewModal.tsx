@@ -52,10 +52,11 @@ export function QuickViewModal({ isOpen, onClose, product }: QuickViewModalProps
     addItem({
       variantId: `${product.id}-${selectedSize}`,
       productId: product.id,
+      handle: product.handle,
       title: product.title,
       thumbnail: product.thumbnail ?? null,
       quantity,
-      unitPrice: product.price,
+      unitPrice: product.price / 100,
       variant: { title: selectedSize, sku: null },
     });
 
@@ -229,7 +230,7 @@ export function QuickViewModal({ isOpen, onClose, product }: QuickViewModalProps
 
                 {/* View Full Details */}
                 <Link
-                  href={`/products/${product.handle}`}
+                  href={`/shop/${product.handle}`}
                   onClick={onClose}
                   className="block text-center mt-4 text-sm text-gold hover:underline"
                 >
