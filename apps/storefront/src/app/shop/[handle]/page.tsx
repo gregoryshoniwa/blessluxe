@@ -347,7 +347,7 @@ export default async function ProductPage({
     sku: product.id,
     offers: {
       '@type': 'Offer',
-      url: `https://blessluxe.com/shop/${product.handle}`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL}/shop/${product.handle}`,
       priceCurrency: 'USD',
       price: product.salePrice || product.price,
       priceValidUntil: '2026-12-31',

@@ -28,24 +28,31 @@ function getSendGridFrom(): { email: string; name?: string } {
   return { email: raw.trim() };
 }
 
+function sendGridKey(): string {
+  const raw = process.env.SENDGRID_API_KEY;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 export function isEmailConfigured(): boolean {
+  if (sendGridKey()) return true;
   return Boolean(
-    process.env.SENDGRID_API_KEY ||
-      (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    process.env.SMTP_HOST?.trim() &&
+      process.env.SMTP_USER?.trim() &&
+      process.env.SMTP_PASS?.trim()
   );
 }
 
 export async function sendTransactionalEmail(
   input: SendTransactionalEmailInput
 ): Promise<SendTransactionalEmailResult> {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = sendGridKey();
   if (apiKey) {
     return sendViaSendGrid(apiKey, input);
   }
 
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
   if (host && user && pass) {
     return sendViaSmtp(input);
   }
@@ -121,9 +128,28 @@ async function sendViaSmtp(input: SendTransactionalEmailInput): Promise<SendTran
     });
     return { ok: true, provider: 'smtp', messageId: info.messageId };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, provider: 'smtp', error: msg };
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, provider: 'smtp', error: formatSmtpFailureMessage(raw) };
   }
+}
+
+/** Nodemailer often returns "Invalid login" / 535 for bad SMTP_USER or SMTP_PASS — not storefront login. */
+function formatSmtpFailureMessage(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('invalid login') ||
+    lower.includes('authentication failed') ||
+    lower.includes('535') ||
+    lower.includes('534') ||
+    (lower.includes('auth') && lower.includes('failed'))
+  ) {
+    return (
+      'SMTP authentication failed (mail server rejected SMTP_USER / SMTP_PASS). ' +
+      'For Gmail/Google Workspace use an App Password, not your normal account password. ' +
+      'Confirm SMTP_HOST, SMTP_PORT, and that the account allows SMTP.'
+    );
+  }
+  return raw;
 }
 
 /** BLESSLUXE-branded HTML wrapper for agent emails */
@@ -150,23 +176,131 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Resolved catalog rows for product list blocks (no raw Medusa ids in customer-facing copy). */
+export interface AgentEmailProductLine {
+  title: string;
+  handle: string;
+  price: number;
+  currency: string;
+  thumbnail?: string;
+}
+
+/**
+ * Public site origin for email links.
+ *
+ * Prefer **non–NEXT_PUBLIC** vars (`SITE_URL`, `NEXTAUTH_URL`): Next.js inlines `NEXT_PUBLIC_*`
+ * at **build time**, so values added only in production `.env` at runtime are often missing.
+ * `SITE_URL` / `NEXTAUTH_URL` are read when the server sends mail (runtime).
+ */
+function getStorefrontOrigin(): string {
+  const raw =
+    process.env.SITE_URL ||
+    process.env.STOREFRONT_URL ||
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_STORE_URL ||
+    process.env.NEXT_PUBLIC_VERCEL_URL ||
+    '';
+  let t = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!t || t === 'undefined') return '';
+  if (!/^https?:\/\//i.test(t)) {
+    t = `https://${t}`;
+  }
+  return t;
+}
+
+function normalizeEmailOrigin(raw: string): string {
+  let t = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!t || t === 'undefined') return '';
+  if (!/^https?:\/\//i.test(t)) {
+    t = `https://${t}`;
+  }
+  return t.replace(/\/+$/, '');
+}
+
+/**
+ * Absolute site origin for email product links.
+ * Uses the same chain as `getStorefrontOrigin()` first; if everything is unset, uses
+ * `DEFAULT_SITE_URL` or `EMAIL_DEFAULT_SITE_URL` (runtime env — set in `.env` / deployment).
+ */
+function getEmailShopBaseUrl(): string {
+  const o = getStorefrontOrigin();
+  if (o) return o.replace(/\/+$/, '');
+  return normalizeEmailOrigin(
+    String(process.env.DEFAULT_SITE_URL || process.env.EMAIL_DEFAULT_SITE_URL || '')
+  );
+}
+
+function formatMoney(price: number, currency: string): string {
+  const c = (currency || 'USD').toUpperCase();
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).format(price);
+  } catch {
+    return `$${price.toFixed(2)}`;
+  }
+}
+
+function buildProductListHtml(products: AgentEmailProductLine[]): string {
+  const base = getEmailShopBaseUrl();
+  const blocks: string[] = [];
+  for (const p of products) {
+    const href = `${base}/shop/${encodeURIComponent(p.handle)}`;
+    const thumb = p.thumbnail?.trim();
+    const imgCell = thumb
+      ? `<td width="88" valign="top" style="padding-right:14px;">
+          <img src="${escapeHtml(thumb)}" width="80" height="100" alt="${escapeHtml(p.title)}" style="display:block;border-radius:8px;object-fit:cover;border:1px solid rgba(201,168,79,0.25);" />
+        </td>`
+      : '';
+    blocks.push(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;border-collapse:collapse;">
+      <tr>
+        ${imgCell}
+        <td valign="top" style="padding:14px 16px;border:1px solid rgba(201,168,79,0.35);border-radius:12px;background:#fdfcfa;">
+          <a href="${escapeHtml(href)}" style="font-size:16px;font-weight:600;color:#1a1a1a;text-decoration:none;line-height:1.35;">${escapeHtml(p.title)}</a>
+          <p style="margin:10px 0 0;font-size:15px;color:#c9a84f;font-weight:600;">${escapeHtml(formatMoney(p.price, p.currency))}</p>
+          <p style="margin:12px 0 0;">
+            <a href="${escapeHtml(href)}" style="display:inline-block;font-size:13px;color:#c9a84f;text-decoration:underline;letter-spacing:0.02em;">View on BLESSLUXE</a>
+          </p>
+        </td>
+      </tr>
+    </table>`);
+  }
+  return blocks.join('\n');
+}
+
+function buildProductListPlain(products: AgentEmailProductLine[]): string {
+  const base = getEmailShopBaseUrl();
+  return products
+    .map((p) => {
+      const href = `${base}/shop/${p.handle}`;
+      return `• ${p.title} — ${formatMoney(p.price, p.currency)}\n  ${href}`;
+    })
+    .join('\n\n');
+}
+
 export function buildAgentEmailBody(params: {
   template: string;
   subjectLine: string;
   customContent?: string;
   customerFirstName?: string;
   productIds?: string[];
+  /** When set (e.g. from Medusa), renders product cards instead of raw ids. */
+  products?: AgentEmailProductLine[];
 }): { html: string; text: string } {
   const name = params.customerFirstName || 'there';
-  const ids = params.productIds?.length
-    ? `<p style="margin:16px 0 0;font-size:13px;color:#666;">Referenced product IDs: ${escapeHtml(params.productIds.join(', '))}</p>`
-    : '';
+  const productHtml = params.products?.length ? buildProductListHtml(params.products) : '';
 
   let inner = '';
   switch (params.template) {
     case 'custom': {
       const safe = escapeHtml(params.customContent || '').replace(/\n/g, '<br/>');
       inner = `<p style="margin:0;line-height:1.6;">${safe}</p>`;
+      break;
+    }
+    case 'conversation_summary': {
+      const safe = escapeHtml(params.customContent || '').replace(/\n/g, '<br/>');
+      inner = `<p style="margin:0;line-height:1.6;">Hi ${escapeHtml(name)},</p>
+        <p style="margin:16px 0 0;line-height:1.6;">Here’s a summary of our chat:</p>
+        <p style="margin:16px 0 0;line-height:1.6;">${safe}</p>`;
       break;
     }
     case 'order_confirmation':
@@ -181,10 +315,14 @@ export function buildAgentEmailBody(params: {
       inner = `<p style="margin:0;line-height:1.6;">Hi ${escapeHtml(name)},</p>
         <p style="margin:16px 0 0;line-height:1.6;">As requested, here are style notes from your BLESSLUXE stylist. Pair classic silhouettes with one statement accessory, and keep hemlines balanced for your frame.</p>`;
       break;
-    case 'product_recommendations':
-      inner = `<p style="margin:0;line-height:1.6;">Hi ${escapeHtml(name)},</p>
-        <p style="margin:16px 0 0;line-height:1.6;">We picked these pieces based on what you’ve been browsing. Open the site to see live availability and pricing.</p>`;
+    case 'product_recommendations': {
+      const highlights = params.customContent?.trim()
+        ? `<p style="margin:16px 0 0;line-height:1.65;color:#3d3d3d;">${escapeHtml(params.customContent).replace(/\n/g, '<br/>')}</p>`
+        : '';
+      inner = `<p style="margin:0;line-height:1.65;">Hi ${escapeHtml(name)},</p>
+        <p style="margin:16px 0 0;line-height:1.65;color:#3d3d3d;">Here are the pieces we picked for you — tap a product below to see live availability and pricing on our site.</p>${highlights}${productHtml}`;
       break;
+    }
     case 'wishlist_summary':
       inner = `<p style="margin:0;line-height:1.6;">Hi ${escapeHtml(name)},</p>
         <p style="margin:16px 0 0;line-height:1.6;">Here’s a snapshot of your saved wishlist items. Sign in anytime to move them to your cart.</p>`;
@@ -202,12 +340,28 @@ export function buildAgentEmailBody(params: {
         <p style="margin:16px 0 0;line-height:1.6;">${escapeHtml(params.subjectLine)}</p>`;
   }
 
-  inner += ids;
   const html = wrapAgentEmailHtml(inner, params.subjectLine);
-  const text =
-    params.template === 'custom'
-      ? `${params.subjectLine}\n\n${params.customContent || ''}`
-      : `${params.subjectLine}\n\n${stripHtml(inner)}`;
+
+  let text: string;
+  if (params.template === 'custom' || params.template === 'conversation_summary') {
+    text = `${params.subjectLine}\n\n${params.customContent || ''}`;
+  } else if (params.template === 'product_recommendations' && params.products?.length) {
+    const intro = [
+      `Hi ${name},`,
+      '',
+      'Here are the pieces we picked for you — visit the links below for live availability and pricing.',
+      params.customContent?.trim() ? `\n${params.customContent.trim()}` : '',
+      '',
+      buildProductListPlain(params.products),
+      '',
+      '— BLESSLUXE',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    text = `${params.subjectLine}\n\n${intro}`;
+  } else {
+    text = `${params.subjectLine}\n\n${stripHtml(inner)}`;
+  }
   return { html, text };
 }
 

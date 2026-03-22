@@ -15,7 +15,8 @@ export class BrowseWebsiteTool extends BaseTool {
         },
         target: {
           type: 'string',
-          description: 'Target page/URL path/element. Examples: "/shop/dresses", "/product/silk-wrap-dress", "/cart"',
+          description:
+            'Target path. Examples: "/shop", "/shop?category=women", "/shop?category=men", "/shop?category=children", "/shop?sale=true", "/cart", product handles under /shop/[handle]',
         },
         scroll_to: {
           type: 'string',

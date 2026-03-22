@@ -13,6 +13,40 @@ const preferenceStore = new PreferenceStore();
 const interactionStore = new InteractionStore();
 const conversationStore = new ConversationStore();
 
+/**
+ * Account row only — used when full profile enrichment fails but the customer is signed in
+ * so LUXE still knows their name for greetings and “what’s my name?”.
+ */
+export async function loadMinimalCustomerProfileForAgent(customerId: string): Promise<CustomerProfile | null> {
+  const account = await getCustomerById(customerId);
+  if (!account) return null;
+
+  const firstName =
+    (typeof account.first_name === 'string' && account.first_name.trim()) ||
+    (typeof account.full_name === 'string' && String(account.full_name).split(/\s+/)[0]) ||
+    'there';
+  const lastName =
+    (typeof account.last_name === 'string' && account.last_name.trim()) ||
+    (typeof account.full_name === 'string' && String(account.full_name).split(/\s+/).slice(1).join(' ')) ||
+    '';
+  const email = typeof account.email === 'string' ? account.email : '';
+  const memberSince =
+    account?.created_at instanceof Date
+      ? account.created_at.toISOString()
+      : typeof account?.created_at === 'string'
+        ? account.created_at
+        : new Date().toISOString();
+
+  return {
+    id: customerId,
+    firstName,
+    lastName,
+    email,
+    memberSince,
+    loyaltyTier: 'Standard',
+  };
+}
+
 export async function loadCustomerProfileForAgent(customerId: string): Promise<CustomerProfile | null> {
   const [account, prefs] = await Promise.all([getCustomerById(customerId), preferenceStore.get(customerId)]);
 

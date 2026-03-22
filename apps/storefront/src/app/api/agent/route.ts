@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { AgentContext } from "@/lib/ai/types";
 import { ShoppingAgent } from "@/lib/ai/agent/agent-core";
+import { buildAgentSessionId } from "@/lib/ai/agent-session";
 import { getCurrentCustomer } from "@/lib/customer-account";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
       currentPage,
       cart,
       recentlyViewed,
+      opening,
     } = body;
 
     if (!sessionId) {
@@ -50,8 +52,10 @@ export async function POST(req: NextRequest) {
         ? String(sessionCustomer.id)
         : undefined;
 
+    const effectiveSessionId = buildAgentSessionId(resolvedCustomerId, String(sessionId));
+
     const context: AgentContext = {
-      sessionId: String(sessionId),
+      sessionId: effectiveSessionId,
       customerId: resolvedCustomerId,
       isAuthenticated: Boolean(resolvedCustomerId),
       currentPage: currentPage ? String(currentPage) : undefined,
@@ -63,6 +67,7 @@ export async function POST(req: NextRequest) {
       text: String(text ?? ""),
       context,
       clientMessageHistory,
+      opening: Boolean(opening),
     });
 
     return NextResponse.json(result);

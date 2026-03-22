@@ -34,6 +34,9 @@ export class ActionExecutor {
       if (Array.isArray(data.products)) {
         products.push(...(data.products as import('../types').ProductSummary[]));
       }
+      if (data.product && typeof data.product === 'object') {
+        products.push(data.product as import('../types').ProductSummary);
+      }
       if (Array.isArray(data.recommendations)) {
         products.push(...(data.recommendations as import('../types').ProductSummary[]));
       }

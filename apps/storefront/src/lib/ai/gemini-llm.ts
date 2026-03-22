@@ -51,11 +51,64 @@ export interface GeminiLLMMessage {
   toolResults?: { toolCallId: string; name: string; result: ToolResult }[];
 }
 
-function toolResultToResponsePayload(result: ToolResult): Record<string, unknown> {
+/** Large product payloads break Gemini follow-up turns (empty / truncated responses). Slim only for API round-trip. */
+function trimToolResultForGemini(result: ToolResult, toolName: string): ToolResult {
+  if (!result.success || result.data === undefined) return result;
+  const data = result.data as Record<string, unknown>;
+
+  const slimProduct = (p: Record<string, unknown>) => ({
+    id: p.id,
+    handle: p.handle,
+    title: p.title,
+    price: p.price,
+    inStock: p.inStock,
+    thumbnail:
+      typeof p.thumbnail === "string" ? p.thumbnail.slice(0, 240) : p.thumbnail,
+    variants: Array.isArray(p.variants)
+      ? (p.variants as Array<Record<string, unknown>>).slice(0, 6).map((v) => ({
+          id: v.id,
+          title: v.title,
+          price: v.price,
+        }))
+      : undefined,
+  });
+
+  if (toolName === "search_products" || toolName === "get_recommendations") {
+    const key = Array.isArray(data.products) ? "products" : "recommendations";
+    const arr = (data[key] as Array<Record<string, unknown>> | undefined) || [];
+    const slim = arr.slice(0, 12).map(slimProduct);
+    return {
+      ...result,
+      data: {
+        ...data,
+        [key]: slim,
+        _agent_note: `Showing ${slim.length} of ${arr.length} items in tool response (truncated for the model).`,
+      },
+    };
+  }
+
+  if (toolName === "view_product" && data.product && typeof data.product === "object") {
+    return {
+      ...result,
+      data: {
+        ...data,
+        product: slimProduct(data.product as Record<string, unknown>),
+        variants: Array.isArray(data.variants)
+          ? (data.variants as unknown[]).slice(0, 8)
+          : data.variants,
+      },
+    };
+  }
+
+  return result;
+}
+
+function toolResultToResponsePayload(result: ToolResult, toolName: string): Record<string, unknown> {
+  const trimmed = trimToolResultForGemini(result, toolName);
   return {
-    success: result.success,
-    ...(result.data !== undefined ? { data: result.data as unknown } : {}),
-    ...(result.error ? { error: result.error } : {}),
+    success: trimmed.success,
+    ...(trimmed.data !== undefined ? { data: trimmed.data as unknown } : {}),
+    ...(trimmed.error ? { error: trimmed.error } : {}),
   };
 }
 
@@ -98,28 +151,31 @@ function buildGeminiPayload(
       const parts = m.toolResults.map((tr) => ({
         functionResponse: {
           name: tr.name,
-          response: toolResultToResponsePayload(tr.result),
+          response: toolResultToResponsePayload(tr.result, tr.name),
         },
       }));
       contents.push({ role: "user", parts });
     }
   }
 
-  return {
+  const base: Record<string, unknown> = {
     system_instruction: { parts: [{ text: systemChunks.join("\n\n") }] },
     contents,
-    tools: [{ functionDeclarations }],
-    toolConfig: {
-      functionCallingConfig: {
-        mode: "AUTO",
-      },
-    },
     generationConfig: {
       temperature: 0.75,
       topP: 0.95,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 8192,
     },
   };
+  if (functionDeclarations.length > 0) {
+    base.tools = [{ functionDeclarations }];
+    base.toolConfig = {
+      functionCallingConfig: {
+        mode: "AUTO",
+      },
+    };
+  }
+  return base;
 }
 
 export async function callGeminiWithTools(
@@ -167,6 +223,10 @@ export async function callGeminiWithTools(
   }
 
   const candidate = data.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  if (finishReason && finishReason !== "STOP" && finishReason !== "FINISH_REASON_UNSPECIFIED") {
+    console.warn("[Gemini LLM] finishReason:", finishReason);
+  }
   if (!candidate?.content?.parts?.length) {
     return { content: "I'm here to help — what would you like to explore at BLESSLUXE?" };
   }

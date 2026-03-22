@@ -1,5 +1,5 @@
 import type { ChatMessage, Conversation, MessageRole } from '../types';
-import { query, queryOne } from '@/lib/db';
+import { execute, query, queryOne } from '@/lib/db';
 
 interface StoredConversation extends Conversation {
   messages: ChatMessage[];
@@ -23,6 +23,10 @@ export class ConversationStore {
     );
 
     if (existing) {
+      if (customerId && !existing.customer_id) {
+        await execute(`UPDATE ai_conversations SET customer_id = $1 WHERE id = $2`, [customerId, existing.id]);
+        existing.customer_id = customerId;
+      }
       const messages = await this.loadMessages(existing.id);
       return {
         id: existing.id,
@@ -60,9 +64,10 @@ export class ConversationStore {
     sessionId: string,
     role: MessageRole,
     content: string,
-    extra?: Partial<Pick<ChatMessage, 'toolCalls' | 'toolResults' | 'products' | 'suggestions' | 'uiUpdates'>>
+    extra?: Partial<Pick<ChatMessage, 'toolCalls' | 'toolResults' | 'products' | 'suggestions' | 'uiUpdates'>>,
+    customerId?: string
   ): Promise<ChatMessage> {
-    const convo = await this.getOrCreate(sessionId);
+    const convo = await this.getOrCreate(sessionId, customerId);
 
     const row = await queryOne<{ id: string; created_at: string }>(
       `INSERT INTO ai_messages (conversation_id, role, content, tool_calls, tool_results, products, suggestions, ui_updates)

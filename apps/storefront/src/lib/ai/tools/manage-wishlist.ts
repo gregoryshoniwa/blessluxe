@@ -36,7 +36,14 @@ export class ManageWishlistTool extends BaseTool {
         return {
           success: true,
           data: { movedToCart: true, productId: params.product_id, variantId: params.variant_id },
-          uiAction: { type: 'show_products', payload: { action: 'add_to_cart', productId: params.product_id, variantId: params.variant_id, quantity: 1 } },
+          uiAction: {
+            type: 'add_to_cart',
+            payload: {
+              variantId: params.variant_id,
+              productId: params.product_id,
+              quantity: 1,
+            },
+          },
         };
       default:
         return { success: false, error: `Unknown wishlist action: ${action}` };

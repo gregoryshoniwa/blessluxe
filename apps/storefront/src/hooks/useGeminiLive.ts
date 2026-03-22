@@ -2,8 +2,39 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { GeminiLiveState, GeminiLiveCallbacks } from '@/lib/ai/voice/gemini-live';
+import { LUXE_GEMINI_LIVE_CORE, LUXE_VOICE_OPENING_USER_TURN } from '@/lib/ai/config';
 import { useAgentChatStore } from '@/stores/agent-chat';
 import type { ChatMessage } from '@/lib/ai/types';
+
+function buildGeminiLiveSystemInstruction(customer: Record<string, unknown> | null | undefined): string {
+  const core = LUXE_GEMINI_LIVE_CORE;
+  if (!customer?.id) {
+    return (
+      `## GUEST\n` +
+        `Do not claim to know their name, email, or account unless they said it in this chat.\n\n` +
+        core
+    );
+  }
+
+  const firstName =
+    (typeof customer.first_name === 'string' && customer.first_name.trim()) ||
+    (typeof customer.full_name === 'string' && String(customer.full_name).split(/\s+/)[0]) ||
+    'there';
+  const lastName =
+    (typeof customer.last_name === 'string' && customer.last_name.trim()) ||
+    (typeof customer.full_name === 'string' && String(customer.full_name).split(/\s+/).slice(1).join(' ')) ||
+    '';
+  const email = typeof customer.email === 'string' ? customer.email : '';
+
+  return (
+    `## CUSTOMER PROFILE (BLESSLUXE account — same rules as text chat)\n` +
+      `Name: ${firstName}${lastName ? ` ${lastName}` : ''}\n` +
+      `Email: ${email}\n` +
+      `You may greet by first name and answer "what's my name?" using the first name above. ` +
+      `Do not refuse as "privacy" for data listed here — it is their session account context.\n\n` +
+      core
+  );
+}
 
 function getClientApiKey(): string | undefined {
   const k = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
@@ -17,6 +48,8 @@ export function useGeminiLive() {
   const clientRef = useRef<import('@/lib/ai/voice/gemini-live').GeminiLiveClient | null>(null);
   /** Accumulated assistant reply (ref avoids stale disconnect / turn-complete closures). */
   const responseTextRef = useRef('');
+  /** One proactive voice greeting per Live session (delayed kickoff may retry while text opening finishes). */
+  const voiceOpeningSentRef = useRef(false);
 
   /** Use getState() so this hook does not subscribe to the whole chat store (avoids callback churn + effect loops). */
   const flushAssistantMessage = useCallback(() => {
@@ -103,18 +136,26 @@ export function useGeminiLive() {
     const { sessionId } = useAgentChatStore.getState();
 
     let customerId: string | undefined;
+    let customerRow: Record<string, unknown> | null = null;
     try {
       const r = await fetch('/api/account/me', { cache: 'no-store', credentials: 'include' });
-      const data = (await r.json()) as { customer?: { id?: unknown } | null };
-      const raw = data?.customer?.id;
-      if (raw != null && raw !== '') customerId = String(raw);
+      const data = (await r.json()) as { customer?: Record<string, unknown> | null };
+      const c = data?.customer;
+      const raw = c?.id;
+      if (raw != null && raw !== '') {
+        customerId = String(raw);
+        customerRow = c ?? null;
+      }
     } catch {
       /* stay guest */
     }
 
+    const systemInstruction = buildGeminiLiveSystemInstruction(customerRow);
+
     const client = new GeminiLiveClient(
       {
         apiKey,
+        systemInstruction,
         context: {
           sessionId,
           customerId,
@@ -125,10 +166,27 @@ export function useGeminiLive() {
     );
 
     clientRef.current = client;
+    voiceOpeningSentRef.current = false;
     await client.connect();
+
+    const tryKickoffVoiceOpening = () => {
+      if (voiceOpeningSentRef.current) return;
+      const live = clientRef.current;
+      if (!live) return;
+      const s = useAgentChatStore.getState();
+      if (s.messages.length > 0 || s.isLoading) return;
+      live.sendText(LUXE_VOICE_OPENING_USER_TURN);
+      voiceOpeningSentRef.current = true;
+    };
+
+    // Setup + mic need a beat before the first client turn; retry while text opening is still loading.
+    setTimeout(tryKickoffVoiceOpening, 350);
+    setTimeout(tryKickoffVoiceOpening, 1100);
+    setTimeout(tryKickoffVoiceOpening, 2200);
   }, [flushAssistantMessage]);
 
   const disconnect = useCallback(() => {
+    voiceOpeningSentRef.current = false;
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;

@@ -1,6 +1,6 @@
 /**
- * Tool registry for Gemini Live (browser). Excludes server-only tools such as
- * `send_email` (nodemailer / DB) so the client bundle does not pull Node APIs.
+ * Tool registry for Gemini Live (browser). `send_email` is declared here but
+ * executed via POST /api/agent/execute-tool so nodemailer stays server-only.
  */
 import { BaseTool } from './base-tool';
 import { BrowseWebsiteTool } from './browse-website';
@@ -14,6 +14,7 @@ import { GetRecommendationsTool } from './get-recommendations';
 import { CheckInventoryTool } from './check-inventory';
 import { ApplyDiscountTool } from './apply-discount';
 import { ManageWishlistTool } from './manage-wishlist';
+import { SEND_EMAIL_TOOL_DEFINITION } from './send-email.definition';
 import type { ToolDefinition, ToolResult, AgentContext } from '../types';
 
 export const VOICE_TOOLS: BaseTool[] = [
@@ -36,7 +37,41 @@ for (const tool of VOICE_TOOLS) {
 }
 
 export function getVoiceToolDefinitions(): ToolDefinition[] {
-  return VOICE_TOOLS.map((t) => t.definition);
+  return [...VOICE_TOOLS.map((t) => t.definition), SEND_EMAIL_TOOL_DEFINITION];
+}
+
+const SERVER_PROXY_TOOLS = new Set(['send_email']);
+
+async function executeServerProxyTool(
+  name: string,
+  params: Record<string, unknown>,
+  context: AgentContext
+): Promise<ToolResult> {
+  try {
+    const res = await fetch('/api/agent/execute-tool', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toolName: name,
+        arguments: params,
+        sessionId: context.sessionId,
+      }),
+    });
+    const json = (await res.json()) as { result?: ToolResult; error?: string };
+    if (!res.ok) {
+      return {
+        success: false,
+        error: typeof json.error === 'string' ? json.error : 'Email request failed',
+      };
+    }
+    if (json.result && typeof json.result === 'object' && 'success' in json.result) {
+      return json.result;
+    }
+    return { success: false, error: 'Invalid response from server' };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Network error' };
+  }
 }
 
 export async function executeVoiceTool(
@@ -44,12 +79,8 @@ export async function executeVoiceTool(
   params: Record<string, unknown>,
   context: AgentContext
 ): Promise<ToolResult> {
-  if (name === 'send_email') {
-    return {
-      success: false,
-      error:
-        'Sending email from voice is not available. Ask the customer to use the text chat to send account emails.',
-    };
+  if (SERVER_PROXY_TOOLS.has(name)) {
+    return executeServerProxyTool(name, params, context);
   }
   const tool = voiceToolMap.get(name);
   if (!tool) {

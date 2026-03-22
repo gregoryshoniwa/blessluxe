@@ -17,6 +17,8 @@ export interface AgentInput {
   context: AgentContext;
   /** Client-side turns when the DB has no messages yet for this session. */
   clientMessageHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** First turn when the chat opens — LUXE speaks first (no user bubble). */
+  opening?: boolean;
 }
 
 export interface AgentResponse {
@@ -34,7 +36,17 @@ export interface AgentAction {
 }
 
 export interface UIUpdate {
-  type: 'navigate' | 'scroll' | 'click' | 'show_products' | 'back' | 'forward';
+  type:
+    | 'navigate'
+    | 'scroll'
+    | 'click'
+    | 'show_products'
+    | 'back'
+    | 'forward'
+    | 'add_to_cart'
+    | 'remove_from_cart'
+    | 'update_cart_quantity'
+    | 'clear_cart';
   payload: Record<string, unknown>;
 }
 

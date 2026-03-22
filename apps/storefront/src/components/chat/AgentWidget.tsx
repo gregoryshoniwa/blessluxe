@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { applyAgentUiUpdates } from '@/lib/apply-agent-ui-updates';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -14,9 +15,6 @@ import {
   Loader2,
   ExternalLink,
   Radio,
-  Video,
-  VideoOff,
-  MonitorUp,
 } from 'lucide-react';
 import { useAgentChatStore } from '@/stores/agent-chat';
 import { useCartStore } from '@/stores/cart';
@@ -146,6 +144,7 @@ export default function AgentWidget() {
     messages,
     isOpen,
     isLoading,
+    sessionId,
     voiceEnabled,
     suggestions,
     activeTools,
@@ -153,8 +152,11 @@ export default function AgentWidget() {
     toggle,
     setOpen,
     sendMessage,
+    sendOpeningMessage,
     setVoiceEnabled,
     resetSession,
+    setSessionId,
+    replaceMessages,
     setError,
   } = useAgentChatStore();
 
@@ -190,12 +192,11 @@ export default function AgentWidget() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasLoadingRef = useRef(false);
   const [mounted, setMounted] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const videoStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
   const prevOpenRef = useRef(false);
+  /** Apply cart / navigate instructions once per assistant message. */
+  const appliedUiMessageIdsRef = useRef<Set<string>>(new Set());
   /** Avoid effect deps on disconnect (identity can change); always call latest. */
   const disconnectLiveRef = useRef(disconnectLive);
   disconnectLiveRef.current = disconnectLive;
@@ -204,23 +205,23 @@ export default function AgentWidget() {
     setMounted(true);
   }, []);
 
-  /** Fresh chat + end live/media each time the panel opens (avoids stale thread and stuck voice). */
+  /** End live when the panel opens — keep chat thread (memory is per customer in Postgres). */
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       disconnectLiveRef.current();
-      useAgentChatStore.getState().resetSession();
       useAgentChatStore.getState().setError(null);
       setInput('');
-      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-      videoStreamRef.current = null;
-      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
-      screenStreamRef.current = null;
-      setIsVideoOn(false);
-      setIsScreenSharing(false);
     }
     prevOpenRef.current = isOpen;
-    /** Intentionally only `isOpen` — store actions + disconnect ref avoid max-update-depth loops. */
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!customerId) return;
+    const sid = `customer_${customerId}`;
+    if (useAgentChatStore.getState().sessionId !== sid) {
+      setSessionId(sid);
+    }
+  }, [customerId, setSessionId]);
 
   useEffect(() => {
     refreshCustomerId();
@@ -236,8 +237,32 @@ export default function AgentWidget() {
   }, [messages, isLoading]);
 
   useEffect(() => {
+    if (messages.length === 0) appliedUiMessageIdsRef.current.clear();
+  }, [messages.length]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant' || !last.uiUpdates?.length) return;
+    if (appliedUiMessageIdsRef.current.has(last.id)) return;
+    appliedUiMessageIdsRef.current.add(last.id);
+    void applyAgentUiUpdates(last.uiUpdates);
+  }, [messages]);
+
+  useEffect(() => {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
+
+  /** After sending (Enter) or when a reply finishes loading, keep focus in the text field. */
+  useEffect(() => {
+    if (!isOpen) {
+      wasLoadingRef.current = isLoading;
+      return;
+    }
+    if (wasLoadingRef.current && !isLoading) {
+      inputRef.current?.focus();
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, isOpen]);
 
   const sendContext = useCallback(() => {
     return {
@@ -247,11 +272,70 @@ export default function AgentWidget() {
     };
   }, [customerId, cartItems]);
 
+  /** Load server history for signed-in users, then LUXE opens the thread (text) when not in an active voice session. */
+  useEffect(() => {
+    if (!isOpen) return;
+    if (voiceEnabled && isLiveConnected) return;
+
+    let cancelled = false;
+    void (async () => {
+      if (customerId) {
+        try {
+          const res = await fetch('/api/agent/history', { credentials: 'include', cache: 'no-store' });
+          const data = (await res.json()) as {
+            messages?: Array<ChatMessage & { createdAt?: string }>;
+            sessionId?: string | null;
+          };
+          if (cancelled) return;
+          if (data.sessionId) setSessionId(data.sessionId);
+          if (data.messages?.length) {
+            replaceMessages(
+              data.messages.map((m) => ({
+                ...m,
+                createdAt: new Date(m.createdAt ?? Date.now()),
+              }))
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (cancelled) return;
+      const st = useAgentChatStore.getState();
+      if (st.messages.length > 0 || st.isLoading) return;
+      await sendOpeningMessage(sendContext());
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isOpen,
+    customerId,
+    voiceEnabled,
+    isLiveConnected,
+    sessionId,
+    replaceMessages,
+    setSessionId,
+    sendOpeningMessage,
+    sendContext,
+  ]);
+
+  const handleReset = useCallback(() => {
+    resetSession();
+    void sendOpeningMessage(sendContext()).finally(() => {
+      inputRef.current?.focus();
+    });
+  }, [resetSession, sendOpeningMessage, sendContext]);
+
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
     setInput('');
-    sendMessage(trimmed, sendContext());
+    void sendMessage(trimmed, sendContext()).finally(() => {
+      inputRef.current?.focus();
+    });
   }, [input, isLoading, sendMessage, sendContext]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -263,45 +347,9 @@ export default function AgentWidget() {
 
   const handleSuggestionClick = (suggestion: string) => {
     if (isLoading) return;
-    sendMessage(suggestion, sendContext());
-  };
-
-  const toggleVideo = async () => {
-    if (isVideoOn) {
-      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-      videoStreamRef.current = null;
-      setIsVideoOn(false);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoStreamRef.current = stream;
-      setIsVideoOn(true);
-    } catch (err) {
-      console.error('Camera access denied:', err);
-      setError('Camera access was denied. Please allow camera access in your browser settings.');
-    }
-  };
-
-  const toggleScreenShare = async () => {
-    if (isScreenSharing) {
-      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
-      screenStreamRef.current = null;
-      setIsScreenSharing(false);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = stream;
-      setIsScreenSharing(true);
-      stream.getVideoTracks()[0].onended = () => {
-        setIsScreenSharing(false);
-        screenStreamRef.current = null;
-      };
-    } catch (err) {
-      console.error('Screen share denied:', err);
-      setError('Screen sharing was cancelled or denied.');
-    }
+    void sendMessage(suggestion, sendContext()).finally(() => {
+      inputRef.current?.focus();
+    });
   };
 
   if (!mounted) return null;
@@ -358,7 +406,7 @@ export default function AgentWidget() {
                   {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </button>
                 <button
-                  onClick={resetSession}
+                  onClick={handleReset}
                   className="p-1.5 rounded-full hover:bg-white/15 transition-colors"
                   title="New conversation"
                 >
@@ -376,7 +424,11 @@ export default function AgentWidget() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-              {messages.length === 0 && (
+              {messages.length === 0 && isLoading && <TypingIndicator />}
+
+              {messages.length === 0 && !isLoading && isLiveConnected && <TypingIndicator />}
+
+              {messages.length === 0 && !isLoading && !isLiveConnected && (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 rounded-full bg-gold/10 flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-8 h-8 text-gold" />
@@ -444,10 +496,10 @@ export default function AgentWidget() {
               </div>
             )}
 
-            {/* Input */}
+            {/* Input — wide text field; mic + send only */}
             <div className="px-3 py-2.5 border-t border-black/5 flex-shrink-0 bg-white">
-              <div className="flex items-center gap-1.5">
-                <div className="flex-1 flex items-center bg-[#f7f5f2] rounded-xl px-3.5 py-2 border border-transparent focus-within:border-gold/30 focus-within:bg-white transition-all">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex-1 min-w-0 flex items-center bg-[#f7f5f2] rounded-xl px-3.5 py-2.5 border border-transparent focus-within:border-gold/30 focus-within:bg-white transition-all">
                   <input
                     ref={inputRef}
                     type="text"
@@ -455,108 +507,66 @@ export default function AgentWidget() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={isLiveConnected ? 'Speak or type...' : 'Ask LUXE anything...'}
-                    className="flex-1 bg-transparent text-sm outline-none focus:outline-none focus-visible:outline-none placeholder:text-black/30"
+                    className="w-full min-w-0 bg-transparent text-sm outline-none focus:outline-none focus-visible:outline-none placeholder:text-black/30"
                     style={{ outline: 'none', boxShadow: 'none' }}
                     disabled={isLoading}
                   />
                 </div>
 
-                {/* Video (camera) button */}
-                <button
-                  onClick={toggleVideo}
-                  className={cn(
-                    'p-2 rounded-xl transition-all flex-shrink-0',
-                    isVideoOn
-                      ? 'bg-blue-500 text-white shadow-sm shadow-blue-200'
-                      : 'bg-[#f7f5f2] text-black/40 hover:text-blue-500 hover:bg-blue-50'
-                  )}
-                  title={isVideoOn ? 'Stop camera' : 'Share camera with LUXE'}
-                >
-                  {isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={toggleLive}
+                    disabled={isLiveConnecting}
+                    className={cn(
+                      'p-2 rounded-xl transition-all relative',
+                      isLiveConnected
+                        ? 'bg-red-500 text-white shadow-sm shadow-red-200'
+                        : isLiveConnecting
+                          ? 'bg-gold/40 text-white'
+                          : 'bg-[#f7f5f2] text-black/40 hover:text-gold hover:bg-gold/10'
+                    )}
+                    title={
+                      isLiveConnected
+                        ? 'End voice session'
+                        : isLiveConnecting
+                          ? 'Connecting...'
+                          : 'Start live voice'
+                    }
+                  >
+                    {isLiveConnecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isLiveConnected ? (
+                      <MicOff className="w-4 h-4" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
+                    {isLiveConnected && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+                    )}
+                  </button>
 
-                {/* Screen share button */}
-                <button
-                  onClick={toggleScreenShare}
-                  className={cn(
-                    'p-2 rounded-xl transition-all flex-shrink-0',
-                    isScreenSharing
-                      ? 'bg-purple-500 text-white shadow-sm shadow-purple-200'
-                      : 'bg-[#f7f5f2] text-black/40 hover:text-purple-500 hover:bg-purple-50'
-                  )}
-                  title={isScreenSharing ? 'Stop screen share' : 'Share screen with LUXE'}
-                >
-                  <MonitorUp className="w-4 h-4" />
-                </button>
-
-                {/* Gemini Live voice button */}
-                <button
-                  onClick={toggleLive}
-                  disabled={isLiveConnecting}
-                  className={cn(
-                    'p-2 rounded-xl transition-all relative flex-shrink-0',
-                    isLiveConnected
-                      ? 'bg-red-500 text-white shadow-sm shadow-red-200'
-                      : isLiveConnecting
-                        ? 'bg-gold/40 text-white'
-                        : 'bg-[#f7f5f2] text-black/40 hover:text-gold hover:bg-gold/10'
-                  )}
-                  title={
-                    isLiveConnected
-                      ? 'End voice session'
-                      : isLiveConnecting
-                        ? 'Connecting...'
-                        : 'Start live voice (Gemini)'
-                  }
-                >
-                  {isLiveConnecting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : isLiveConnected ? (
-                    <MicOff className="w-4 h-4" />
-                  ) : (
-                    <Mic className="w-4 h-4" />
-                  )}
-                  {isLiveConnected && (
-                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
-                  )}
-                </button>
-
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  className={cn(
-                    'p-2 rounded-xl transition-all flex-shrink-0',
-                    input.trim() && !isLoading
-                      ? 'bg-gold text-white hover:bg-gold-dark shadow-sm shadow-gold/20'
-                      : 'bg-[#f7f5f2] text-black/20'
-                  )}
-                  title="Send message"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={!input.trim() || isLoading}
+                    className={cn(
+                      'p-2 rounded-xl transition-all',
+                      input.trim() && !isLoading
+                        ? 'bg-gold text-white hover:bg-gold-dark shadow-sm shadow-gold/20'
+                        : 'bg-[#f7f5f2] text-black/20'
+                    )}
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              {/* Status indicators */}
-              {(isLiveConnected || isVideoOn || isScreenSharing) && (
-                <div className="flex items-center justify-center gap-3 mt-2">
-                  {isLiveConnected && (
-                    <div className="flex items-center gap-1">
-                      <Radio className="w-3 h-3 text-red-500 animate-pulse" />
-                      <span className="text-[10px] text-red-500 font-medium tracking-wider uppercase">Live</span>
-                    </div>
-                  )}
-                  {isVideoOn && (
-                    <div className="flex items-center gap-1">
-                      <Video className="w-3 h-3 text-blue-500" />
-                      <span className="text-[10px] text-blue-500 font-medium tracking-wider uppercase">Camera</span>
-                    </div>
-                  )}
-                  {isScreenSharing && (
-                    <div className="flex items-center gap-1">
-                      <MonitorUp className="w-3 h-3 text-purple-500" />
-                      <span className="text-[10px] text-purple-500 font-medium tracking-wider uppercase">Screen</span>
-                    </div>
-                  )}
+              {isLiveConnected && (
+                <div className="flex items-center justify-center gap-1 mt-2">
+                  <Radio className="w-3 h-3 text-red-500 animate-pulse" />
+                  <span className="text-[10px] text-red-500 font-medium tracking-wider uppercase">Live</span>
                 </div>
               )}
             </div>

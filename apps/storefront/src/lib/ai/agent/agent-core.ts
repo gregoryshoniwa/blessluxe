@@ -16,9 +16,12 @@ import { ActionExecutor } from './action-executor';
 import { PreferenceLearner } from './preference-learner';
 import { ConversationStore } from '../memory/conversation-store';
 import { VectorStore } from '../memory/vector-store';
-import { getToolDefinitions } from '../tools';
+import { executeTool, getToolDefinitions } from '../tools';
 import { callGeminiWithTools, type GeminiLLMMessage } from '../gemini-llm';
-import { loadCustomerProfileForAgent } from './customer-intelligence';
+import {
+  loadCustomerProfileForAgent,
+  loadMinimalCustomerProfileForAgent,
+} from './customer-intelligence';
 
 type LLMMessage = GeminiLLMMessage;
 
@@ -30,6 +33,10 @@ export class ShoppingAgent {
   private vectorStore = new VectorStore();
 
   async processInput(input: AgentInput): Promise<AgentResponse> {
+    if (input.opening) {
+      return this.processOpeningTurn(input);
+    }
+
     const userMessage = input.text ?? '';
     if (!userMessage.trim()) {
       return { text: "Hello! ✨ I'm LUXE, your personal shopping assistant at BLESSLUXE. How can I help you today?" };
@@ -41,6 +48,13 @@ export class ShoppingAgent {
         profile = await loadCustomerProfileForAgent(input.context.customerId);
       } catch (err) {
         console.warn('[ShoppingAgent] profile load skipped:', err);
+      }
+      if (!profile) {
+        try {
+          profile = await loadMinimalCustomerProfileForAgent(input.context.customerId);
+        } catch (err) {
+          console.warn('[ShoppingAgent] minimal profile load skipped:', err);
+        }
       }
     }
 
@@ -67,7 +81,7 @@ export class ShoppingAgent {
       })) as ChatMessage[];
     } else {
       try {
-        recentMessages = await this.conversationStore.getRecentMessages(input.context.sessionId, 20);
+        recentMessages = await this.conversationStore.getRecentMessages(input.context.sessionId, 50);
       } catch (err) {
         console.warn('[ShoppingAgent] getRecentMessages failed (using empty history):', err);
       }
@@ -75,7 +89,7 @@ export class ShoppingAgent {
 
     const messages = this.buildMessages(systemPrompt, relevantMemories, recentMessages, userMessage);
 
-    const response = await this.executeWithTools(messages, input.context);
+    const response = await this.executeWithTools(messages, input.context, userMessage);
 
     await this.saveToMemory(input.context, userMessage, response);
 
@@ -90,9 +104,98 @@ export class ShoppingAgent {
     return response;
   }
 
+  /** LUXE opens the thread — no customer message, no tool calls. */
+  private async processOpeningTurn(input: AgentInput): Promise<AgentResponse> {
+    let profile: CustomerProfile | null = null;
+    if (input.context.customerId) {
+      try {
+        profile = await loadCustomerProfileForAgent(input.context.customerId);
+      } catch (err) {
+        console.warn('[ShoppingAgent] profile load skipped (opening):', err);
+      }
+      if (!profile) {
+        try {
+          profile = await loadMinimalCustomerProfileForAgent(input.context.customerId);
+        } catch (err) {
+          console.warn('[ShoppingAgent] minimal profile load skipped (opening):', err);
+        }
+      }
+    }
+
+    const systemPrompt = this.contextBuilder.buildSystemPrompt(profile, input.context);
+
+    let recentMessages: ChatMessage[] = [];
+    if (input.clientMessageHistory?.length) {
+      recentMessages = input.clientMessageHistory.map((m, i) => ({
+        id: `client_${i}`,
+        role: m.role,
+        content: m.content,
+        createdAt: new Date(),
+      })) as ChatMessage[];
+    } else {
+      try {
+        recentMessages = await this.conversationStore.getRecentMessages(input.context.sessionId, 50);
+      } catch (err) {
+        console.warn('[ShoppingAgent] getRecentMessages failed (opening):', err);
+      }
+    }
+
+    const openingUserTurn =
+      'The customer just opened the LUXE chat panel. You speak first. Reply with a warm greeting in 1–3 sentences only. ' +
+      'Use their first name from CUSTOMER PROFILE when it is present. Do not call tools in this turn — prose only.';
+
+    const messages = this.buildMessages(systemPrompt, [], recentMessages, openingUserTurn);
+
+    const tools: ToolDefinition[] = [];
+    let llmResponse = await this.callLLM(messages, tools);
+    if (llmResponse.toolCalls?.length) {
+      llmResponse = { content: llmResponse.content || '', toolCalls: undefined };
+    }
+
+    let text = (llmResponse.content || '').trim();
+    if (!text) {
+      text =
+        profile?.firstName && profile.firstName !== 'there'
+          ? `Welcome back, ${profile.firstName}! ✨ I'm LUXE — what can I help you find today?`
+          : "Welcome to BLESSLUXE! ✨ I'm LUXE — tell me what you're shopping for, or ask what's new.";
+    }
+
+    const response: AgentResponse = {
+      text,
+      suggestions: this.generateSuggestions(text),
+    };
+
+    await this.saveToMemory(input.context, '', response, { persistUserTurn: false });
+
+    return response;
+  }
+
+  private shouldAutoAddAfterSearch(
+    lastUserText: string,
+    calls: ToolCall[],
+    products: ProductSummary[]
+  ): boolean {
+    const t = lastUserText.toLowerCase();
+    if (!/\badd\b/.test(t) || !/\bcart\b/.test(t)) return false;
+    if (!calls.some((c) => c.name === 'search_products')) return false;
+    return products.length > 0;
+  }
+
+  private userIntentNeedsTools(text: string): boolean {
+    const t = text.toLowerCase();
+    return (
+      /\badd\s+.*\s+(to\s+)?(my\s+)?cart\b/.test(t) ||
+      /\b(search|find|show|looking\s+for)\b/.test(t) ||
+      /\b(send|email)\b/.test(t) ||
+      /\b(stock|inventory|in\s+stock)\b/.test(t) ||
+      /\b(recommend|suggest)\b/.test(t)
+    );
+  }
+
   private async executeWithTools(
     messages: LLMMessage[],
-    context: AgentContext
+    context: AgentContext,
+    lastUserText: string
   ): Promise<AgentResponse> {
     const tools = getToolDefinitions();
     const currentMessages = [...messages];
@@ -101,24 +204,88 @@ export class ShoppingAgent {
     const allUiUpdates: UIUpdate[] = [];
 
     while (iterations < AI_CONFIG.maxToolCalls) {
-      const llmResponse = await this.callLLM(currentMessages, tools);
+      let llmResponse = await this.callLLM(currentMessages, tools);
+
+      if (
+        !llmResponse.toolCalls?.length &&
+        this.userIntentNeedsTools(lastUserText) &&
+        iterations === 0
+      ) {
+        const nudge: LLMMessage[] = [
+          ...currentMessages,
+          {
+            role: 'system',
+            content:
+              'The customer request requires calling tools (search_products, manage_cart, send_email, check_inventory, etc.). Do not reply with only prose — emit the matching function call(s) in this turn.',
+          },
+        ];
+        llmResponse = await this.callLLM(nudge, tools);
+      }
+
+      if (!llmResponse.toolCalls?.length && this.userIntentNeedsTools(lastUserText) && iterations === 0) {
+        llmResponse = this.getFallbackResponse(messages);
+      }
 
       if (!llmResponse.toolCalls?.length) {
+        let text = (llmResponse.content || '').trim();
+        if (!text && allProducts.length > 0) {
+          text = `Here ${allProducts.length === 1 ? 'is' : 'are'} ${allProducts.length} option(s) from our catalog — tap a card to open the product page.`;
+        }
+        if (!text && allUiUpdates.some((u) => u.type === 'add_to_cart')) {
+          text = "That's been added to your cart — you can review it in the bag icon.";
+        }
+        if (!text) {
+          text =
+            llmResponse.content ||
+            "I'm here to help — tell me what you'd like to shop for or ask me to search the catalog.";
+        }
         return {
-          text: llmResponse.content,
+          text,
           products: allProducts.length > 0 ? allProducts : undefined,
           uiUpdates: allUiUpdates.length > 0 ? allUiUpdates : undefined,
-          suggestions: this.generateSuggestions(llmResponse.content),
+          suggestions: this.generateSuggestions(text),
         };
       }
 
-      const { results, uiUpdates } = await this.actionExecutor.executeToolCalls(
+      let { results, uiUpdates } = await this.actionExecutor.executeToolCalls(
         llmResponse.toolCalls,
         context
       );
       const products = this.actionExecutor.extractProducts(results);
       allProducts.push(...products);
       allUiUpdates.push(...uiUpdates);
+
+      const modelCalledCart = llmResponse.toolCalls.some((c) => c.name === 'manage_cart');
+      if (
+        !modelCalledCart &&
+        this.shouldAutoAddAfterSearch(lastUserText, llmResponse.toolCalls, products)
+      ) {
+        const first = products[0];
+        const vid = first?.variants?.[0]?.id;
+        if (first?.id && vid) {
+          const addRes = await executeTool(
+            'manage_cart',
+            {
+              action: 'add',
+              variant_id: vid,
+              product_id: first.id,
+              quantity: 1,
+            },
+            context
+          );
+          results = [
+            ...results,
+            {
+              toolCallId: 'auto_add_cart',
+              name: 'manage_cart',
+              result: addRes,
+            },
+          ];
+          if (addRes.uiAction) {
+            allUiUpdates.push(addRes.uiAction);
+          }
+        }
+      }
 
       currentMessages.push({
         role: 'assistant',
@@ -136,7 +303,10 @@ export class ShoppingAgent {
     }
 
     return {
-      text: "I apologize, but I'm having trouble completing this request. Could you try rephrasing or simplifying what you need?",
+      text:
+        allProducts.length > 0
+          ? `I found ${allProducts.length} product(s) — scroll the cards above. If something looks stuck, try your request again in one sentence.`
+          : "I apologize, but I'm having trouble completing this request. Could you try rephrasing or simplifying what you need?",
       products: allProducts.length > 0 ? allProducts : undefined,
       uiUpdates: allUiUpdates.length > 0 ? allUiUpdates : undefined,
     };
@@ -150,7 +320,7 @@ export class ShoppingAgent {
     tools: ToolDefinition[]
   ): Promise<{ content: string; toolCalls?: ToolCall[] }> {
     const hasKey = !!(process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY);
-    if (hasKey && tools.length > 0) {
+    if (hasKey) {
       try {
         return await callGeminiWithTools(messages, tools);
       } catch (err) {
@@ -189,6 +359,27 @@ export class ShoppingAgent {
       };
     }
 
+    if (/\badd\b/.test(query) && /\bcart\b/.test(query)) {
+      const quoted = query.match(/['"]([^'"]+)['"]/);
+      const extracted =
+        quoted?.[1]?.trim() ||
+        query
+          .replace(/.*\badd\b/i, '')
+          .replace(/\bto\s+(my\s+)?cart\b.*$/i, '')
+          .trim();
+      const searchQuery = extracted.length >= 2 ? extracted : query;
+      return {
+        content: '',
+        toolCalls: [
+          {
+            id: `call_${Date.now()}`,
+            name: 'search_products',
+            arguments: { query: searchQuery, limit: 8 },
+          },
+        ],
+      };
+    }
+
     if (query.includes('cart')) {
       return {
         content: "Let me check your cart for you! 🛍️",
@@ -203,6 +394,23 @@ export class ShoppingAgent {
     if (query.includes('order') || query.includes('track')) {
       return {
         content: "I can help you track your order! Could you share the order number?",
+      };
+    }
+
+    if (
+      /\b(send|email)\b/.test(query) &&
+      (query.includes('trend') ||
+        /\b(product|recommend|catalog|arrival|pick|piece)s?\b/.test(query))
+    ) {
+      return {
+        content: '',
+        toolCalls: [
+          {
+            id: `call_${Date.now()}`,
+            name: 'get_recommendations',
+            arguments: { type: 'trending', limit: 10 },
+          },
+        ],
       };
     }
 
@@ -239,22 +447,29 @@ export class ShoppingAgent {
   private async saveToMemory(
     context: AgentContext,
     userMessage: string,
-    response: AgentResponse
+    response: AgentResponse,
+    opts?: { persistUserTurn?: boolean }
   ): Promise<void> {
+    const persistUser = opts?.persistUserTurn !== false;
+
     try {
-      await this.conversationStore.addMessage(context.sessionId, 'user', userMessage);
+      if (persistUser && userMessage.trim().length > 0) {
+        await this.conversationStore.addMessage(context.sessionId, 'user', userMessage, undefined, context.customerId);
+      }
       await this.conversationStore.addMessage(context.sessionId, 'assistant', response.text, {
         products: response.products,
         suggestions: response.suggestions,
         uiUpdates: response.uiUpdates,
-      });
+      }, context.customerId);
     } catch (err) {
       console.warn('[ShoppingAgent] conversation persist skipped:', err);
     }
 
     if (context.customerId) {
       try {
-        await this.vectorStore.store(context.customerId, userMessage, 'conversation');
+        if (persistUser && userMessage.trim().length > 0) {
+          await this.vectorStore.store(context.customerId, userMessage, 'conversation');
+        }
         await this.vectorStore.store(context.customerId, response.text, 'conversation');
       } catch (err) {
         console.warn('[ShoppingAgent] vector store skipped:', err);

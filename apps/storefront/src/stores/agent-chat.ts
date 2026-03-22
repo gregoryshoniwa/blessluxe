@@ -30,6 +30,8 @@ interface AgentChatState {
   setError: (error: string | null) => void;
   clearMessages: () => void;
   resetSession: () => void;
+  setSessionId: (sessionId: string) => void;
+  replaceMessages: (messages: ChatMessage[]) => void;
 
   // Async actions (call the API)
   sendMessage: (
@@ -41,6 +43,13 @@ interface AgentChatState {
       recentlyViewed?: ProductSummary[];
     }
   ) => Promise<void>;
+  /** LUXE speaks first — no user bubble (opening turn). */
+  sendOpeningMessage: (context?: {
+    currentPage?: string;
+    customerId?: string;
+    cart?: CartItem[];
+    recentlyViewed?: ProductSummary[];
+  }) => Promise<void>;
 }
 
 function generateSessionId(): string {
@@ -81,17 +90,44 @@ export const useAgentChatStore = create<AgentChatState>()(
       clearMessages: () =>
         set({ messages: [], suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'] }),
 
-      resetSession: () =>
+      setSessionId: (sessionId) => set({ sessionId }),
+
+      replaceMessages: (messages) =>
         set({
-          messages: [],
-          sessionId: generateSessionId(),
-          activeTools: [],
-          suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'],
-          error: null,
-          isLoading: false,
-          isListening: false,
-          isSpeaking: false,
+          messages: messages.map((m) => ({
+            ...m,
+            createdAt:
+              m.createdAt instanceof Date ? m.createdAt : new Date(String(m.createdAt)),
+          })),
         }),
+
+      resetSession: () => {
+        const s = get();
+        if (s.sessionId.startsWith('customer_')) {
+          void fetch('/api/agent/history', { method: 'DELETE', credentials: 'include' }).catch(() => {});
+          set({
+            messages: [],
+            sessionId: s.sessionId,
+            activeTools: [],
+            suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'],
+            error: null,
+            isLoading: false,
+            isListening: false,
+            isSpeaking: false,
+          });
+        } else {
+          set({
+            messages: [],
+            sessionId: generateSessionId(),
+            activeTools: [],
+            suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'],
+            error: null,
+            isLoading: false,
+            isListening: false,
+            isSpeaking: false,
+          });
+        }
+      },
 
       sendMessage: async (text, context) => {
         const state = get();
@@ -111,13 +147,14 @@ export const useAgentChatStore = create<AgentChatState>()(
         }));
 
         try {
-          const recentMessages = state.messages.slice(-10).map((m) => ({
+          const recentMessages = state.messages.slice(-40).map((m) => ({
             role: m.role === 'assistant' ? 'model' : m.role,
             content: m.content,
           }));
 
           const res = await fetch('/api/agent', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               text,
@@ -166,13 +203,74 @@ export const useAgentChatStore = create<AgentChatState>()(
           }));
         }
       },
+
+      sendOpeningMessage: async (context) => {
+        const state = get();
+        if (state.messages.length > 0 || state.isLoading) return;
+
+        set({ isLoading: true, error: null });
+
+        try {
+          const res = await fetch('/api/agent', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              opening: true,
+              sessionId: state.sessionId,
+              messages: [],
+              currentPage: context?.currentPage || (typeof window !== 'undefined' ? window.location.pathname : '/'),
+              customerId: context?.customerId,
+              cart: context?.cart ?? [],
+              recentlyViewed: context?.recentlyViewed ?? [],
+            }),
+          });
+
+          if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+
+          const data: AgentResponse = await res.json();
+
+          const assistantMessage: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.text,
+            products: data.products,
+            suggestions: data.suggestions,
+            uiUpdates: data.uiUpdates,
+            createdAt: new Date(),
+          };
+
+          set((s) => ({
+            messages: [...s.messages, assistantMessage],
+            isLoading: false,
+            suggestions: data.suggestions || [],
+          }));
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : 'Something went wrong';
+
+          const fallback: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content:
+              "Hello! ✨ I'm LUXE, your personal shopping assistant at BLESSLUXE. How can I help you today?",
+            createdAt: new Date(),
+          };
+
+          set((s) => ({
+            messages: [...s.messages, fallback],
+            isLoading: false,
+            error: errorMsg,
+            suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'],
+          }));
+        }
+      },
     }),
     {
-      /** Bump storage key so old persisted threads (with messages) are dropped. */
-      name: 'blessluxe-agent-chat-v2',
-      /** Only voice toggle — chat/session stay in memory (fresh when panel opens). */
+      name: 'blessluxe-agent-chat-v3',
       partialize: (state) => ({
         voiceEnabled: state.voiceEnabled,
+        sessionId: state.sessionId,
+        messages: state.messages.slice(-80),
       }),
     }
   )

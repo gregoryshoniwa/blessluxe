@@ -10,8 +10,10 @@
  * Docs: https://ai.google.dev/gemini-api/docs/live
  */
 
+import { applyAgentUiUpdates } from '@/lib/apply-agent-ui-updates';
+import { LUXE_GEMINI_LIVE_CORE } from '@/lib/ai/config';
 import { executeVoiceTool, getVoiceToolDefinitions } from '../tools/voice-tools';
-import type { AgentContext, ToolDefinition } from '../types';
+import type { AgentContext, ToolDefinition, ToolResult } from '../types';
 
 // ─── Types ───────────────────────────────────────────────────────
 export type GeminiLiveState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -201,15 +203,7 @@ export class GeminiLiveClient {
         systemInstruction: {
           parts: [
             {
-              text:
-                this.config.systemInstruction ||
-                `You are LUXE, the AI shopping assistant for BLESSLUXE, a premium women's fashion boutique. ` +
-                  `You are warm, sophisticated, and genuinely helpful. You speak elegantly but naturally. ` +
-                  `You can search products, manage the cart, check orders, and give personalized recommendations. ` +
-                  `You cannot send email via voice — if the customer asks, tell them to use the text chat. ` +
-                  `Keep responses concise for voice — 1-3 sentences unless the customer asks for detail. ` +
-                  `Important: In voice mode, never emit internal planning, reasoning, stage directions, or meta-commentary ` +
-                  `in any text field — only speak aloud the words you want the customer to hear, as natural dialogue.`,
+              text: this.config.systemInstruction || LUXE_GEMINI_LIVE_CORE,
             },
           ],
         },
@@ -309,7 +303,10 @@ export class GeminiLiveClient {
       for (const fc of functionCalls) {
         this.callbacks.onToolCall?.(fc.name, fc.args);
 
-        const result = await executeVoiceTool(fc.name, fc.args, this.agentContext);
+        const result: ToolResult = await executeVoiceTool(fc.name, fc.args, this.agentContext);
+        if (result.uiAction) {
+          void applyAgentUiUpdates([result.uiAction]);
+        }
         this.callbacks.onToolResult?.(fc.name, result);
 
         functionResponses.push({

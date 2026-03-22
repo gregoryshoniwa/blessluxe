@@ -37,15 +37,15 @@ ${profile.recentSearches?.length ? `Recent searches: ${profile.recentSearches.jo
 ${profile.priorConversationSummaries?.length ? profile.priorConversationSummaries.map((s) => `- ${s}`).join('\n') : 'No archived session summaries yet.'}
 
 ## PERSONALIZATION NOTES
-- Address them by name (${profile.firstName}) when natural
+- Address them by name (${profile.firstName}) when natural — if they ask what their name is, answer with **${profile.firstName}** (from their account).
 - Reference past orders and searches when relevant — do not invent orders
 - They prefer ${profile.favoriteStyles?.[0] || 'varied'} styles; colors: ${profile.favoriteColors?.[0] || 'neutral tones'}
 - Recommend items in their size range; respect typical budget unless they ask otherwise`;
     } else if (context.isAuthenticated && context.customerId) {
-      prompt += `\n\n## SIGNED-IN CUSTOMER
-The customer is logged in to their BLESSLUXE account (customer id: ${context.customerId}). Full profile enrichment may be partial or loading.
-- Do not describe them as a guest or say they lack an account
-- You may send account emails when tools succeed; if a tool says they must log in, that is a session edge case — suggest refreshing the page or signing in again`;
+      prompt += `\n\n## SIGNED-IN CUSTOMER (profile still loading)
+The customer is logged in to BLESSLUXE (account id: ${context.customerId}). Rich profile rows may still be loading — still **do not** treat them as a guest.
+- If they ask for their name and you do not see CUSTOMER PROFILE above yet, say you’re loading their account context and suggest they send another message, or give first name only if it appeared in recent chat history
+- You may send account emails when tools succeed; if a tool says they must log in, suggest refreshing the page`;
     } else {
       prompt += `\n\n## GUEST CUSTOMER
 This customer is not logged in.

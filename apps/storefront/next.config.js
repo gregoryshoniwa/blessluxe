@@ -1,3 +1,12 @@
+const path = require("path");
+const { loadEnvConfig } = require("@next/env");
+
+// Next only auto-loads .env* from apps/storefront. Medusa/monorepo SMTP lives in repo root — load both so
+// /api/agent and send_email see SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM (same as backend).
+const repoRoot = path.join(__dirname, "../..");
+loadEnvConfig(repoRoot);
+loadEnvConfig(__dirname);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Gemini Live (browser WebSocket) needs a public key; Docker often only sets GOOGLE_AI_API_KEY.

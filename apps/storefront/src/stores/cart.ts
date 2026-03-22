@@ -150,6 +150,15 @@ export const useCartStore = create<CartState>()(
             const lines = applyAffiliateHints(raw, get().affiliateHints);
             set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
           }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("[cart] createLineItem failed:", msg);
+          if (/publishable|api key|401|unauthorized|invalid.*key/i.test(msg)) {
+            throw new Error(
+              "Medusa rejected the cart request (often wrong or missing NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY, or backend URL mismatch). This is not your account password."
+            );
+          }
+          throw e instanceof Error ? e : new Error(msg);
         } finally {
           set({ isLoading: false });
         }

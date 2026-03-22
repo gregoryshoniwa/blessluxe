@@ -1,14 +1,6 @@
 import { BaseTool } from './base-tool';
+import { fetchMedusaProductsForAgent } from '@/lib/medusa-agent-catalog';
 import type { ToolDefinition, ToolResult, AgentContext, ProductSummary } from '../types';
-
-const RECOMMENDATION_POOL: ProductSummary[] = [
-  { id: 'rec_1', handle: 'velvet-evening-gown', title: 'Velvet Evening Gown', description: 'Stunning velvet evening gown', thumbnail: '/images/products/velvet-gown.jpg', price: 340.00, currency: 'USD', category: 'dresses', tags: ['formal', 'evening', 'velvet'], inStock: true },
-  { id: 'rec_2', handle: 'silk-scarf', title: 'Silk Scarf — Floral', description: 'Hand-painted floral silk scarf', thumbnail: '/images/products/silk-scarf.jpg', price: 65.00, currency: 'USD', category: 'accessories', tags: ['silk', 'scarf', 'floral'], inStock: true },
-  { id: 'rec_3', handle: 'tailored-trousers', title: 'Tailored Wide-Leg Trousers', description: 'High-waisted wide-leg trousers in cream', thumbnail: '/images/products/trousers.jpg', price: 155.00, currency: 'USD', category: 'bottoms', tags: ['work', 'tailored', 'wide-leg'], inStock: true },
-  { id: 'rec_4', handle: 'gold-chain-necklace', title: 'Gold Chain Necklace', description: '18k gold-plated chain necklace', thumbnail: '/images/products/gold-necklace.jpg', price: 120.00, currency: 'USD', category: 'accessories', tags: ['jewelry', 'gold', 'necklace'], inStock: true },
-  { id: 'rec_5', handle: 'cotton-sundress', title: 'Cotton Sundress', description: 'Breezy cotton sundress with tie straps', thumbnail: '/images/products/sundress.jpg', price: 98.00, currency: 'USD', category: 'dresses', tags: ['casual', 'summer', 'cotton'], inStock: true },
-  { id: 'rec_6', handle: 'leather-tote', title: 'Leather Tote Bag', description: 'Genuine leather tote in cognac', thumbnail: '/images/products/leather-tote.jpg', price: 275.00, currency: 'USD', category: 'accessories', tags: ['bags', 'leather', 'work'], inStock: true },
-];
 
 const TITLES: Record<string, string> = {
   for_you: 'Picked For You',
@@ -24,7 +16,8 @@ const TITLES: Record<string, string> = {
 export class GetRecommendationsTool extends BaseTool {
   definition: ToolDefinition = {
     name: 'get_recommendations',
-    description: 'Get personalized product recommendations based on customer preferences, history, and context.',
+    description:
+      'Get personalized product recommendations from the live Medusa catalog (Women, Men, Children, Sale — same as the site). Uses recent storefront products when specific history is unavailable.',
     parameters: {
       type: 'object',
       properties: {
@@ -47,9 +40,25 @@ export class GetRecommendationsTool extends BaseTool {
     const budget = params.budget as number | undefined;
     const limit = (params.limit as number) || 6;
 
-    let recs = [...RECOMMENDATION_POOL];
+    let recs: ProductSummary[] = await fetchMedusaProductsForAgent({
+      limit: Math.max(limit * 2, 12),
+      price_max: budget,
+    });
+
     if (budget) recs = recs.filter((p) => p.price <= budget);
     recs = recs.slice(0, limit);
+
+    if (recs.length === 0) {
+      return {
+        success: true,
+        data: {
+          recommendations: [],
+          type: recType,
+          personalized: !!_context.customerId,
+          hint: 'No catalog products returned. Check Medusa is running and products are published.',
+        },
+      };
+    }
 
     return {
       success: true,
