@@ -5,21 +5,29 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShopFilters } from "@/hooks/useShopFilters";
-import { useCategories } from "@/hooks/useProducts";
+import { useCategories, useProducts } from "@/hooks/useProducts";
 const AUDIENCE_PREFIX_PATTERN = /^(women|men|children)[-\s_]+/i;
-
-const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
-
-const colors = [
-  { id: "black", hex: "#000000", label: "Black" },
-  { id: "white", hex: "#FFFFFF", label: "White" },
-  { id: "cream", hex: "#F5F5DC", label: "Cream" },
-  { id: "navy", hex: "#001F3F", label: "Navy" },
-  { id: "burgundy", hex: "#800020", label: "Burgundy" },
-  { id: "gold", hex: "#C9A84C", label: "Gold" },
-  { id: "blush", hex: "#F5E6E0", label: "Blush" },
-  { id: "olive", hex: "#556B2F", label: "Olive" },
-];
+const COLOR_HEX_BY_LABEL: Record<string, string> = {
+  black: "#111827",
+  white: "#F9FAFB",
+  cream: "#F5F5DC",
+  ivory: "#FFFFF0",
+  navy: "#1E3A8A",
+  blue: "#2563EB",
+  red: "#B91C1C",
+  burgundy: "#7F1D1D",
+  green: "#166534",
+  olive: "#556B2F",
+  pink: "#EC4899",
+  blush: "#F9A8D4",
+  gold: "#D4AF37",
+  silver: "#9CA3AF",
+  gray: "#6B7280",
+  grey: "#6B7280",
+  brown: "#92400E",
+  beige: "#D6D3C9",
+  camel: "#C19A6B",
+};
 
 const priceRanges = [
   { id: "0-50", label: "Under $50", min: 0, max: 50 },
@@ -45,6 +53,111 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
     clearFilters,
     hasActiveFilters,
   } = useShopFilters();
+  const normalizeColorId = (value: string) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  const looksLikeSize = (value: string) => {
+    const token = String(value || "").trim().toUpperCase();
+    if (!token) return false;
+    if (["XS", "S", "M", "L", "XL", "XXL", "XXXL"].includes(token)) return true;
+    if (/^\d{2}$/.test(token)) return true;
+    if (/^\d{1,2}(Y|M)$/.test(token)) return true;
+    return false;
+  };
+  const readOptionValues = (option: Record<string, unknown>) => {
+    const values = Array.isArray(option.values) ? option.values : [];
+    return values
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object") return String((entry as Record<string, unknown>).value || "");
+        return "";
+      })
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
+  const selectedCategoryIds = useMemo(() => {
+    if (!filters.category || !backendCategories) return undefined;
+    const selected = backendCategories.find((category) => category.handle === filters.category);
+    if (!selected) return undefined;
+    const childIds = backendCategories
+      .filter((category) => category.parent_category_id === selected.id)
+      .map((category) => category.id);
+    return [selected.id, ...childIds];
+  }, [filters.category, backendCategories]);
+  const { data: filterProducts } = useProducts({
+    limit: 200,
+    category_id: selectedCategoryIds,
+  });
+  const availableSizes = useMemo(() => {
+    const sizeSet = new Set<string>();
+    for (const product of filterProducts || []) {
+      const record = product as unknown as Record<string, unknown>;
+      const options = Array.isArray(record.options) ? (record.options as Array<Record<string, unknown>>) : [];
+      for (const option of options) {
+        const title = String(option.title || "").toLowerCase();
+        if (!title.includes("size")) continue;
+        for (const value of readOptionValues(option)) {
+          if (looksLikeSize(value)) sizeSet.add(value.toUpperCase());
+        }
+      }
+      for (const variant of product.variants || []) {
+        for (const part of String(variant.title || "").split(" / ").map((value) => value.trim())) {
+          if (looksLikeSize(part)) sizeSet.add(part.toUpperCase());
+        }
+      }
+    }
+    const alphaOrder = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+    return Array.from(sizeSet).sort((a, b) => {
+      const ai = alphaOrder.indexOf(a);
+      const bi = alphaOrder.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  }, [filterProducts]);
+  const availableColors = useMemo(() => {
+    const colorMap = new Map<string, { id: string; label: string; hex: string }>();
+    const formatLabel = (id: string) =>
+      id
+        .split("-")
+        .filter(Boolean)
+        .map((part) => part[0].toUpperCase() + part.slice(1))
+        .join(" ");
+    for (const product of filterProducts || []) {
+      const record = product as unknown as Record<string, unknown>;
+      const options = Array.isArray(record.options) ? (record.options as Array<Record<string, unknown>>) : [];
+      for (const option of options) {
+        const title = String(option.title || "").toLowerCase();
+        if (!title.includes("color")) continue;
+        for (const value of readOptionValues(option)) {
+          const id = normalizeColorId(value);
+          if (!id || colorMap.has(id)) continue;
+          colorMap.set(id, {
+            id,
+            label: formatLabel(id),
+            hex: COLOR_HEX_BY_LABEL[id] || "#9CA3AF",
+          });
+        }
+      }
+      for (const variant of product.variants || []) {
+        for (const part of String(variant.title || "").split(" / ").map((value) => value.trim())) {
+          if (looksLikeSize(part)) continue;
+          const id = normalizeColorId(part);
+          if (!id || colorMap.has(id)) continue;
+          colorMap.set(id, {
+            id,
+            label: formatLabel(id),
+            hex: COLOR_HEX_BY_LABEL[id] || "#9CA3AF",
+          });
+        }
+      }
+    }
+    return Array.from(colorMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [filterProducts]);
   const categories = useMemo(() => {
     if (!backendCategories || backendCategories.length === 0) {
       return [{ id: "all", label: "All Products", value: null }];
@@ -266,7 +379,7 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
               className="overflow-hidden"
             >
               <div className="pt-3 flex flex-wrap gap-2">
-                {sizes.map((size) => (
+                {availableSizes.map((size) => (
                   <button
                     key={size}
                     onClick={() => toggleSize(size)}
@@ -280,6 +393,9 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
                     {size}
                   </button>
                 ))}
+                {availableSizes.length === 0 ? (
+                  <p className="text-xs text-black/50">No size options available for this category yet.</p>
+                ) : null}
               </div>
             </motion.div>
           )}
@@ -361,7 +477,7 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
               className="overflow-hidden"
             >
               <div className="pt-3 flex flex-wrap gap-3">
-                {colors.map((color) => (
+                {availableColors.map((color) => (
                   <button
                     key={color.id}
                     onClick={() => toggleColor(color.id)}
@@ -379,6 +495,9 @@ export function FiltersPanel({ isMobileOpen, onCloseMobile }: FiltersPanelProps)
                     )}
                   </button>
                 ))}
+                {availableColors.length === 0 ? (
+                  <p className="text-xs text-black/50">No color options available for this category yet.</p>
+                ) : null}
               </div>
             </motion.div>
           )}

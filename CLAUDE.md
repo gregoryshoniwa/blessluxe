@@ -32,6 +32,9 @@ pnpm --filter @blessluxe/backend db:migrate    # Run database migrations
 pnpm --filter @blessluxe/backend db:generate   # Generate migrations for custom modules
 pnpm --filter @blessluxe/backend seed          # Seed database
 
+# Drop & recreate the Postgres DB from backend/medusa/.env DATABASE_URL, then migrate + seed (needs `psql`; destroys all data in that database)
+pnpm db:reset-medusa -- --yes
+
 # Infrastructure
 docker compose up -d          # Start PostgreSQL (5432) and Redis (6379)
 docker compose down           # Stop services

@@ -63,6 +63,28 @@ async function ensureSchema() {
       );
 
       await execute(
+        `CREATE TABLE IF NOT EXISTS customer_transaction_item (
+          id text PRIMARY KEY,
+          transaction_id text NOT NULL REFERENCES customer_transaction(id) ON DELETE CASCADE,
+          customer_id text NOT NULL REFERENCES customer_account(id) ON DELETE CASCADE,
+          product_id text NOT NULL,
+          product_handle text NULL,
+          product_title text NOT NULL,
+          quantity integer NOT NULL DEFAULT 1,
+          unit_price numeric NOT NULL DEFAULT 0,
+          created_at timestamptz NOT NULL DEFAULT NOW()
+        )`
+      );
+      await execute(
+        `CREATE INDEX IF NOT EXISTS idx_customer_transaction_item_customer_product
+         ON customer_transaction_item(customer_id, product_id)`
+      );
+      await execute(
+        `CREATE INDEX IF NOT EXISTS idx_customer_transaction_item_customer_handle
+         ON customer_transaction_item(customer_id, product_handle)`
+      );
+
+      await execute(
         `CREATE TABLE IF NOT EXISTS customer_support_ticket (
           id text PRIMARY KEY,
           customer_id text NOT NULL REFERENCES customer_account(id) ON DELETE CASCADE,
@@ -375,6 +397,94 @@ export async function listTransactions(customerId: string) {
      ORDER BY created_at DESC`,
     [customerId]
   );
+}
+
+/** Order + line items for a single customer (e.g. PDF invoice). */
+export async function getTransactionForInvoice(customerId: string, orderNumber: string) {
+  await ensureSchema();
+  const tx = await queryOne<{
+    id: string;
+    order_number: string;
+    amount: unknown;
+    currency_code: string;
+    status: string;
+    created_at: unknown;
+  }>(
+    `SELECT id, order_number, amount, currency_code, status, created_at
+     FROM customer_transaction
+     WHERE customer_id = $1 AND order_number = $2
+     LIMIT 1`,
+    [customerId, orderNumber]
+  );
+  if (!tx) return null;
+  const items = await query<{
+    product_title: string;
+    quantity: unknown;
+    unit_price: unknown;
+  }>(
+    `SELECT product_title, quantity, unit_price
+     FROM customer_transaction_item
+     WHERE transaction_id = $1 AND customer_id = $2
+     ORDER BY created_at`,
+    [tx.id, customerId]
+  );
+  return { transaction: tx, items };
+}
+
+export async function createTransactionRecord(
+  customerId: string,
+  input: {
+    orderNumber: string;
+    amount: number;
+    currencyCode?: string;
+    status?: string;
+    invoiceUrl?: string | null;
+    items: Array<{
+      productId: string;
+      productHandle?: string;
+      productTitle: string;
+      quantity: number;
+      unitPrice: number;
+    }>;
+  }
+) {
+  await ensureSchema();
+  const transactionId = randomUUID();
+  await execute(
+    `INSERT INTO customer_transaction
+      (id, customer_id, order_number, amount, currency_code, status, invoice_url, created_at)
+     VALUES
+      ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+    [
+      transactionId,
+      customerId,
+      input.orderNumber,
+      Number(input.amount || 0),
+      input.currencyCode || "usd",
+      input.status || "paid",
+      input.invoiceUrl || null,
+    ]
+  );
+
+  for (const item of input.items) {
+    if (!String(item.productId || "").trim()) continue;
+    await execute(
+      `INSERT INTO customer_transaction_item
+        (id, transaction_id, customer_id, product_id, product_handle, product_title, quantity, unit_price, created_at)
+       VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+      [
+        randomUUID(),
+        transactionId,
+        customerId,
+        String(item.productId),
+        item.productHandle ? String(item.productHandle) : null,
+        String(item.productTitle || "Product"),
+        Math.max(1, Number(item.quantity || 1)),
+        Math.max(0, Number(item.unitPrice || 0)),
+      ]
+    );
+  }
 }
 
 export async function listTickets(customerId: string) {

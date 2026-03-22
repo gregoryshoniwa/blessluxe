@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import "./globals.css";
-import { QueryProvider, CartProvider, AuthProvider, ThemeProvider } from "@/providers";
+import { QueryProvider, CartProvider, AuthProvider, ThemeProvider, ToastProvider } from "@/providers";
 import { Header, MobileNav, Footer, LoadingScreen } from "@/components/layout";
 import { CartSidebar } from "@/components/cart";
 import AgentWidget from "@/components/chat/AgentWidget";
@@ -56,15 +56,17 @@ export default function RootLayout({
             <CartProvider>
               <Suspense fallback={null}>
                 <ThemeProvider>
-                  <LoadingScreen />
-                  <CartSidebar />
-                  <div className="flex min-h-screen flex-col">
-                    <Header />
-                    <MobileNav />
-                    <main className="flex-1">{children}</main>
-                    <Footer />
-                  </div>
-                  <AgentWidget />
+                  <ToastProvider>
+                    <LoadingScreen />
+                    <CartSidebar />
+                    <div className="flex min-h-screen flex-col">
+                      <Header />
+                      <MobileNav />
+                      <main className="flex-1">{children}</main>
+                      <Footer />
+                    </div>
+                    <AgentWidget />
+                  </ToastProvider>
                 </ThemeProvider>
               </Suspense>
             </CartProvider>

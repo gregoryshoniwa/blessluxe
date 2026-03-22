@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowRight,
+  Coins,
+  Gift,
+  History,
+  Info,
+  Loader2,
+  Plus,
+  ShoppingBag,
+  Wallet,
+} from "lucide-react";
+import { addBlitsTopupToCart } from "@/lib/blits-topup";
 
 type AccountPayload = {
   customer: {
@@ -39,13 +51,14 @@ type WallPost = Record<string, unknown> & { comments?: Array<Record<string, unkn
 const tabs = [
   "Profile",
   "Transactions",
+  "Blits",
   "Tickets",
   "Affiliate",
   "Wall",
   "Inbox",
 ] as const;
 
-export default function AccountPage() {
+function AccountPageContent() {
   const router = useRouter();
   const { data: oauthSession } = useSession();
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Profile");
@@ -57,6 +70,28 @@ export default function AccountPage() {
   const oauthSyncInFlight = useRef(false);
 
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+
+  const [blitsBalance, setBlitsBalance] = useState<number | null>(null);
+  const [blitsLedger, setBlitsLedger] = useState<
+    Array<{
+      id: string;
+      delta_blits: string;
+      balance_after: string;
+      kind: string;
+      created_at: string;
+    }>
+  >([]);
+  const [blitsPublic, setBlitsPublic] = useState<{
+    settings?: {
+      usd_to_blits_per_dollar: number;
+      purchase_tiers?: Array<{ usd?: number; blits?: number; label?: string }>;
+    } | null;
+  } | null>(null);
+  const [blitsLoading, setBlitsLoading] = useState(false);
+  const [customUsd, setCustomUsd] = useState("");
+  const [blitsSubTab, setBlitsSubTab] = useState<"add" | "activity" | "payout">("add");
+
+  const searchParams = useSearchParams();
 
   const customer = payload?.customer || null;
 
@@ -85,6 +120,60 @@ export default function AccountPage() {
   useEffect(() => {
     loadAccount();
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const sub = searchParams.get("sub");
+    const map: Record<string, (typeof tabs)[number]> = {
+      profile: "Profile",
+      transactions: "Transactions",
+      blits: "Blits",
+      tickets: "Tickets",
+      affiliate: "Affiliate",
+      wall: "Wall",
+      inbox: "Inbox",
+    };
+    if (tab) {
+      const key = tab.toLowerCase();
+      if (map[key]) setActiveTab(map[key]);
+    }
+    if (tab?.toLowerCase() === "blits") {
+      if (sub === "activity") setBlitsSubTab("activity");
+      else if (sub === "payout") setBlitsSubTab("payout");
+      else setBlitsSubTab("add");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!customer || activeTab !== "Blits") return;
+    let cancelled = false;
+    (async () => {
+      setBlitsLoading(true);
+      try {
+        const [wRes, pRes] = await Promise.all([
+          fetch("/api/blits/wallet", { cache: "no-store" }),
+          fetch("/api/blits/public", { cache: "no-store" }),
+        ]);
+        if (cancelled) return;
+        if (wRes.ok) {
+          const w = (await wRes.json()) as { balance?: number; ledger?: typeof blitsLedger };
+          setBlitsBalance(Number(w.balance ?? 0));
+          setBlitsLedger(Array.isArray(w.ledger) ? w.ledger : []);
+        } else {
+          setBlitsBalance(null);
+          setBlitsLedger([]);
+        }
+        if (pRes.ok) {
+          setBlitsPublic(await pRes.json());
+        }
+      } finally {
+        if (!cancelled) setBlitsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customer, activeTab]);
 
   useEffect(() => {
     const syncOauthSession = async () => {
@@ -196,6 +285,15 @@ export default function AccountPage() {
     await loadAccount();
   };
 
+  const goToCheckoutForBlitsTopup = (amountUsd: number) => {
+    setError("");
+    if (!addBlitsTopupToCart(amountUsd)) {
+      setError("Invalid USD amount.");
+      return;
+    }
+    router.push("/checkout");
+  };
+
   if (loading) {
     return <div className="px-[5%] py-20 text-center text-black/60">Loading account...</div>;
   }
@@ -207,7 +305,7 @@ export default function AccountPage() {
           <p className="font-script text-3xl text-gold mb-2">Your Space</p>
           <h1 className="font-display text-3xl tracking-widest uppercase">Customer Account</h1>
           <p className="text-black/60 mt-2">
-            Orders, invoices, support, affiliate tools, profile, social page, and inbox in one place.
+            Orders, Blits wallet, invoices, support, affiliate tools, profile, social page, and inbox in one place.
           </p>
         </div>
         {customer ? (
@@ -312,6 +410,207 @@ export default function AccountPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          ) : null}
+
+          {activeTab === "Blits" ? (
+            <div className="space-y-6 border border-black/10 bg-white p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-5">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-gold/25 bg-cream-dark/80 text-gold">
+                    <Wallet className="h-5 w-5" strokeWidth={1.5} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-display text-lg tracking-widest uppercase text-black/90">Blits wallet</h3>
+                    <p className="mt-1 text-sm text-black/55">
+                      Use Blits for creator gifts and{" "}
+                      <span className="text-gold-dark">Pay with Blits</span> at checkout.
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  {blitsLoading ? (
+                    <div className="flex h-10 items-center justify-end">
+                      <Loader2 className="h-5 w-5 animate-spin text-gold" aria-label="Loading balance" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-black/40">Balance</p>
+                      <p className="mt-0.5 font-display text-2xl text-gold">
+                        {blitsBalance !== null ? blitsBalance.toLocaleString() : "—"}
+                        <span className="ml-1.5 text-sm font-body font-normal text-black/45">Blits</span>
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {!blitsLoading ? (
+                <>
+                  <div className="flex flex-wrap gap-2 border-b border-black/10 pb-5">
+                    <button
+                      type="button"
+                      onClick={() => setBlitsSubTab("add")}
+                      className={`px-4 py-2 text-xs tracking-[0.2em] uppercase border ${
+                        blitsSubTab === "add" ? "border-gold bg-gold/10" : "border-black/20"
+                      }`}
+                    >
+                      Add Blits (USD)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBlitsSubTab("activity")}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs tracking-[0.2em] uppercase border ${
+                        blitsSubTab === "activity" ? "border-gold bg-gold/10" : "border-black/20"
+                      }`}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                      Recent activity
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBlitsSubTab("payout")}
+                      className={`px-4 py-2 text-xs tracking-[0.2em] uppercase border ${
+                        blitsSubTab === "payout" ? "border-gold bg-gold/10" : "border-black/20"
+                      }`}
+                    >
+                      Payout
+                    </button>
+                  </div>
+
+                  {blitsSubTab === "add" ? (
+                    <div className="space-y-4 border border-black/8 bg-cream/40 p-5">
+                      <div className="flex gap-3 text-sm text-black/70">
+                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-black/40" />
+                        <p className="text-xs text-black/55">
+                          We add a wallet line to your cart. Complete checkout with card, mobile money, or bank transfer.
+                          Your Blits balance updates after payment. (Wallet top-ups cannot use “Pay with Blits”.)
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {(Array.isArray(blitsPublic?.settings?.purchase_tiers)
+                          ? blitsPublic.settings!.purchase_tiers!
+                          : []
+                        ).map((tier) => {
+                          const usd = Number(tier.usd);
+                          const blits = Number(tier.blits);
+                          const label = tier.label || `$${usd}`;
+                          if (!Number.isFinite(usd) || usd <= 0) return null;
+                          return (
+                            <button
+                              key={`${usd}-${label}`}
+                              type="button"
+                              onClick={() => goToCheckoutForBlitsTopup(usd)}
+                              className="group flex flex-col items-start gap-0.5 border border-black/12 bg-white px-3 py-2.5 text-left transition hover:border-gold/40 hover:bg-gold/5"
+                            >
+                              <span className="text-sm font-medium text-black/85">{label}</span>
+                              {Number.isFinite(blits) ? (
+                                <span className="flex items-center gap-1 text-[11px] text-black/50">
+                                  {blits.toLocaleString()} Blits
+                                  <ArrowRight className="h-3 w-3 opacity-50 transition group-hover:translate-x-0.5 group-hover:opacity-80" />
+                                </span>
+                              ) : null}
+                              <span className="text-[10px] uppercase tracking-wider text-gold">Add to cart & checkout</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                        <div className="min-w-0 flex-1">
+                          <label className="mb-1 text-xs font-medium text-black/50">Custom USD amount</label>
+                          <input
+                            type="number"
+                            min={0.01}
+                            step={0.01}
+                            value={customUsd}
+                            onChange={(e) => setCustomUsd(e.target.value)}
+                            className="w-full border border-black/15 bg-white px-3 py-2.5 text-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/30"
+                            placeholder="e.g. 15"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!customUsd.trim()}
+                          onClick={() => {
+                            const n = Number(customUsd);
+                            if (!Number.isFinite(n) || n <= 0) {
+                              setError("Enter a valid USD amount.");
+                              return;
+                            }
+                            goToCheckoutForBlitsTopup(n);
+                          }}
+                          className="inline-flex items-center justify-center gap-2 bg-gold px-5 py-2.5 text-xs font-semibold tracking-[0.2em] text-white transition hover:bg-gold-dark disabled:opacity-50"
+                        >
+                          Add to cart & checkout
+                        </button>
+                      </div>
+                    </div>
+                  ) : blitsSubTab === "activity" ? (
+                    <div className="border border-black/8 bg-cream/30 p-5">
+                      {blitsLedger.length === 0 ? (
+                        <div className="border border-dashed border-black/12 bg-white/60 py-8 text-center">
+                          <p className="text-sm text-black/50">No wallet movements yet.</p>
+                          <p className="mt-1 text-xs text-black/40">Gifts and purchases appear here.</p>
+                        </div>
+                      ) : (
+                        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                          {blitsLedger.map((row) => {
+                            const kind = row.kind;
+                            const positive = Number(row.delta_blits) >= 0;
+                            const Icon =
+                              kind === "gift_sent"
+                                ? Gift
+                                : kind === "checkout_payment"
+                                  ? ShoppingBag
+                                  : kind === "purchase_direct" || kind === "purchase_checkout"
+                                    ? Plus
+                                    : Coins;
+                            return (
+                              <div
+                                key={row.id}
+                                className="flex items-center justify-between gap-3 border border-black/8 bg-white px-3 py-2.5 text-xs"
+                              >
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-black/8 bg-cream text-black/55">
+                                    <Icon className="h-3.5 w-3.5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium capitalize text-black/80">{kind.replace(/_/g, " ")}</p>
+                                    <p className="text-[11px] text-black/45">{new Date(row.created_at).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p
+                                    className={`text-sm font-medium ${positive ? "text-gold-dark" : "text-black/55"}`}
+                                  >
+                                    {positive ? "+" : ""}
+                                    {row.delta_blits}
+                                  </p>
+                                  <p className="text-[10px] text-black/40">Balance {row.balance_after}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 border border-black/8 bg-cream/40 p-5 text-sm text-black/70">
+                      <p className="font-medium text-black/85">Cash out Blits</p>
+                      <p className="text-xs text-black/55">
+                        Payouts to your bank or mobile wallet are processed manually. Open a support ticket with your
+                        payout details and preferred method; our team will confirm using your account settings.
+                      </p>
+                      <Link
+                        href="/account?tab=tickets"
+                        className="inline-block border border-gold bg-gold/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-black/85 transition hover:bg-gold/20"
+                      >
+                        Open support ticket
+                      </Link>
+                    </div>
+                  )}
+                </>
+              ) : null}
             </div>
           ) : null}
 
@@ -431,5 +730,13 @@ export default function AccountPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense fallback={<div className="px-[5%] py-20 text-center text-black/60">Loading account…</div>}>
+      <AccountPageContent />
+    </Suspense>
   );
 }

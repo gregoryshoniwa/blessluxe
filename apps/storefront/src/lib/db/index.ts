@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 const pool = new Pool({
   connectionString:
@@ -16,7 +16,7 @@ pool.on('error', (err) => {
 
 export { pool };
 
-export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function query<T extends object = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<T[]> {
@@ -24,7 +24,7 @@ export async function query<T extends Record<string, unknown> = Record<string, u
   return rows;
 }
 
-export async function queryOne<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function queryOne<T extends object = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<T | null> {
@@ -35,4 +35,19 @@ export async function queryOne<T extends Record<string, unknown> = Record<string
 export async function execute(text: string, params?: unknown[]): Promise<number> {
   const result = await pool.query(text, params);
   return result.rowCount ?? 0;
+}
+
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

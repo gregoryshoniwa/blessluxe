@@ -1,3 +1,5 @@
+import { AFFILIATE_OWN_PAGE_COMMISSION_PERCENT } from "@/lib/affiliate-attribution";
+import { ensureBlitsSchema } from "@/lib/blits";
 import { execute, query, queryOne } from "@/lib/db";
 import { randomUUID } from "crypto";
 
@@ -14,6 +16,8 @@ export interface AffiliateRecord {
   status: AffiliateStatus;
   total_earnings: string;
   paid_out: string;
+  /** When false, public affiliate shop/social page is hidden (owner & admin still see dashboard). */
+  page_enabled?: boolean;
   metadata: Record<string, unknown> | null;
 }
 
@@ -220,6 +224,8 @@ async function ensureAffiliateTables() {
         `ALTER TABLE affiliate_social_media_asset
          ADD COLUMN IF NOT EXISTS published_post_id text NULL REFERENCES affiliate_social_post(id) ON DELETE SET NULL`
       );
+
+      await execute(`ALTER TABLE affiliate ADD COLUMN IF NOT EXISTS page_enabled boolean NOT NULL DEFAULT true`);
     })();
   }
 
@@ -228,6 +234,7 @@ async function ensureAffiliateTables() {
 
 export async function ensureAffiliateSchema() {
   await ensureAffiliateTables();
+  await ensureBlitsSchema();
 }
 
 function toNumber(value: string | number | null | undefined): number {
@@ -247,7 +254,8 @@ function generateAffiliateCode(firstName: string, lastName: string) {
 export async function getAffiliateByEmail(email: string) {
   await ensureAffiliateTables();
   return await queryOne<AffiliateRecord>(
-    `SELECT id, code, first_name, last_name, email, commission_rate, status, total_earnings, paid_out, metadata
+    `SELECT id, code, first_name, last_name, email, commission_rate, status, total_earnings, paid_out,
+            COALESCE(page_enabled, true) AS page_enabled, metadata
      FROM affiliate
      WHERE lower(email) = lower($1)
      LIMIT 1`,
@@ -258,7 +266,8 @@ export async function getAffiliateByEmail(email: string) {
 export async function getAffiliateByCode(code: string) {
   await ensureAffiliateTables();
   return await queryOne<AffiliateRecord>(
-    `SELECT id, code, first_name, last_name, email, commission_rate, status, total_earnings, paid_out, metadata
+    `SELECT id, code, first_name, last_name, email, commission_rate, status, total_earnings, paid_out,
+            COALESCE(page_enabled, true) AS page_enabled, metadata
      FROM affiliate
      WHERE lower(code) = lower($1)
      LIMIT 1`,
@@ -377,6 +386,8 @@ export async function createCommissionFromOrder(input: {
   orderTotal: number;
   currencyCode?: string;
   metadata?: Record<string, unknown>;
+  /** When set (e.g. own-shop 5%), overrides `affiliate.commission_rate` for this sale. */
+  commissionRatePercent?: number;
 }) {
   await ensureAffiliateTables();
   const affiliate = await getAffiliateByCode(input.affiliateCode);
@@ -388,9 +399,12 @@ export async function createCommissionFromOrder(input: {
   );
   if (existing) return affiliate;
 
-  const commissionAmount = Number(
-    ((input.orderTotal * affiliate.commission_rate) / 100).toFixed(2)
-  );
+  const rate =
+    input.commissionRatePercent != null && Number.isFinite(Number(input.commissionRatePercent))
+      ? Number(input.commissionRatePercent)
+      : affiliate.commission_rate;
+
+  const commissionAmount = Number(((input.orderTotal * rate) / 100).toFixed(2));
 
   await execute(
     `INSERT INTO affiliate_sale
@@ -404,7 +418,12 @@ export async function createCommissionFromOrder(input: {
       input.orderTotal,
       commissionAmount,
       input.currencyCode || "usd",
-      JSON.stringify(input.metadata || {}),
+      JSON.stringify({
+        ...(input.metadata || {}),
+        commission_rate_percent_used: rate,
+        commission_rate_source:
+          input.commissionRatePercent != null ? "override" : "affiliate_profile",
+      }),
     ]
   );
 
@@ -417,6 +436,61 @@ export async function createCommissionFromOrder(input: {
   );
 
   return await getAffiliateByCode(input.affiliateCode);
+}
+
+/**
+ * Create one affiliate_sale row per affiliate code, using only attributed line subtotals
+ * (products added from `/affiliate/shop/[code]` carry `affiliateCode` on cart lines).
+ */
+export async function createCommissionsFromAttributedLineItems(input: {
+  orderId: string;
+  currencyCode?: string;
+  lineItems: Array<{
+    affiliateCode?: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  metadata?: Record<string, unknown>;
+  /**
+   * `affiliate_commission_ref` cookie at checkout. When it matches an affiliate’s code on the lines,
+   * that affiliate’s commission uses {@link AFFILIATE_OWN_PAGE_COMMISSION_PERCENT} (5%) instead of their profile rate (e.g. 10%).
+   */
+  affiliateCommissionCookieRef?: string;
+}) {
+  const totalsByCode = new Map<string, number>();
+  for (const line of input.lineItems) {
+    const code = String(line.affiliateCode || "").trim();
+    if (!code) continue;
+    const qty = Math.max(0, Number(line.quantity) || 0);
+    const unit = Number(line.unitPrice);
+    if (!Number.isFinite(unit) || qty <= 0) continue;
+    const lineSubtotal = Number((unit * qty).toFixed(2));
+    if (lineSubtotal <= 0) continue;
+    totalsByCode.set(code, (totalsByCode.get(code) || 0) + lineSubtotal);
+  }
+
+  const cookieRef = String(input.affiliateCommissionCookieRef || "").trim();
+
+  for (const [affiliateCode, orderTotal] of totalsByCode) {
+    const ownShopCookieMatches =
+      cookieRef.length > 0 && cookieRef.toLowerCase() === affiliateCode.toLowerCase();
+
+    await createCommissionFromOrder({
+      affiliateCode,
+      orderId: input.orderId,
+      orderTotal,
+      currencyCode: input.currencyCode,
+      commissionRatePercent: ownShopCookieMatches ? AFFILIATE_OWN_PAGE_COMMISSION_PERCENT : undefined,
+      metadata: {
+        ...input.metadata,
+        attribution_source: ownShopCookieMatches
+          ? "affiliate_shop_own_page_5pct"
+          : "affiliate_shop_line_items",
+        affiliate_commission_cookie_matched: ownShopCookieMatches,
+        attributed_subtotal: orderTotal,
+      },
+    });
+  }
 }
 
 export async function requestAffiliatePayout(input: {
@@ -557,6 +631,11 @@ export async function getAffiliateSocialFeed(code: string, viewerCustomerId?: st
       )
     : null;
 
+  const pageEnabled = affiliate.page_enabled !== false;
+  if (!pageEnabled && !isOwner?.id) {
+    return null;
+  }
+
   const posts = await query<Record<string, unknown>>(
     `SELECT p.id, p.caption, p.image_url, p.created_at, p.moderation_status, p.moderation_notes
      FROM affiliate_social_post p
@@ -650,7 +729,7 @@ export async function getAffiliateSocialFeed(code: string, viewerCustomerId?: st
   );
 
   const mediaAssets = await query<Record<string, unknown>>(
-    `SELECT id, generated_url, original_url, created_at, published, published_post_id
+    `SELECT id, source, generated_url, original_url, created_at, published, published_post_id
      FROM affiliate_social_media_asset
      WHERE affiliate_id = $1
      ORDER BY created_at DESC

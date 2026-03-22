@@ -20,6 +20,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
+    // Do not pay commission on explicitly main-store / non-affiliate checkouts from Medusa metadata.
+    const attribution = String(metadata.affiliate_attribution || metadata.ref_source || "").toLowerCase();
+    if (
+      attribution === "main_shop" ||
+      metadata.skip_affiliate_commission === true ||
+      metadata.affiliate_commission === false
+    ) {
+      return NextResponse.json({ ok: true, skipped: true });
+    }
+
     await createCommissionFromOrder({
       affiliateCode: refCode,
       orderId,
@@ -27,6 +37,10 @@ export async function POST(req: NextRequest) {
       currencyCode,
       metadata: {
         source: "order-webhook",
+        attribution_source:
+          attribution === "affiliate_shop" || metadata.affiliate_commission_source === "affiliate_shop"
+            ? "affiliate_shop"
+            : "webhook_legacy",
         payload: body,
       },
     });

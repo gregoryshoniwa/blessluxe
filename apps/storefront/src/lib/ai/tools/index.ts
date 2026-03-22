@@ -1,32 +1,10 @@
 import { BaseTool } from './base-tool';
-import { BrowseWebsiteTool } from './browse-website';
-import { SearchProductsTool } from './search-products';
-import { ViewProductTool } from './view-product';
-import { ManageCartTool } from './manage-cart';
-import { CreateOrderTool } from './create-order';
-import { CheckOrderStatusTool } from './check-order-status';
 import { SendEmailTool } from './send-email';
-import { SetReminderTool } from './set-reminder';
-import { GetRecommendationsTool } from './get-recommendations';
-import { CheckInventoryTool } from './check-inventory';
-import { ApplyDiscountTool } from './apply-discount';
-import { ManageWishlistTool } from './manage-wishlist';
+import { VOICE_TOOLS } from './voice-tools';
 import type { ToolDefinition, ToolResult, AgentContext } from '../types';
 
-const ALL_TOOLS: BaseTool[] = [
-  new BrowseWebsiteTool(),
-  new SearchProductsTool(),
-  new ViewProductTool(),
-  new ManageCartTool(),
-  new CreateOrderTool(),
-  new CheckOrderStatusTool(),
-  new SendEmailTool(),
-  new SetReminderTool(),
-  new GetRecommendationsTool(),
-  new CheckInventoryTool(),
-  new ApplyDiscountTool(),
-  new ManageWishlistTool(),
-];
+/** Full tool set for server-side agent (includes email). Voice uses `voice-tools` only. */
+const ALL_TOOLS: BaseTool[] = [...VOICE_TOOLS, new SendEmailTool()];
 
 const toolMap = new Map<string, BaseTool>();
 for (const tool of ALL_TOOLS) {

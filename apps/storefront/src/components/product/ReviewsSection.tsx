@@ -12,6 +12,7 @@ interface Review {
   title: string;
   content: string;
   verified: boolean;
+  canEdit?: boolean;
 }
 
 interface ReviewsSectionProps {
@@ -26,6 +27,10 @@ interface ReviewsSectionProps {
   };
   reviews: Review[];
   onWriteReview?: () => void;
+  sortBy?: "newest" | "highest" | "lowest";
+  onSortChange?: (sortBy: "newest" | "highest" | "lowest") => void;
+  onEditReview?: (review: Review) => void;
+  onDeleteReview?: (review: Review) => void;
 }
 
 export function ReviewsSection({
@@ -34,6 +39,10 @@ export function ReviewsSection({
   ratingBreakdown,
   reviews,
   onWriteReview,
+  sortBy = "newest",
+  onSortChange,
+  onEditReview,
+  onDeleteReview,
 }: ReviewsSectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const reviewsPerPage = 5;
@@ -49,14 +58,27 @@ export function ReviewsSection({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Customer Reviews</h2>
-        {onWriteReview && (
-          <button
-            onClick={onWriteReview}
-            className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Write a Review
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onSortChange ? (
+            <select
+              value={sortBy}
+              onChange={(event) => onSortChange(event.target.value as "newest" | "highest" | "lowest")}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="newest">Newest</option>
+              <option value="highest">Highest rating</option>
+              <option value="lowest">Lowest rating</option>
+            </select>
+          ) : null}
+          {onWriteReview && (
+            <button
+              onClick={onWriteReview}
+              className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Write a Review
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Rating Summary */}
@@ -99,6 +121,11 @@ export function ReviewsSection({
 
       {/* Reviews List */}
       <div className="space-y-6">
+        {paginatedReviews.length === 0 ? (
+          <div className="border border-dashed border-gray-300 rounded-lg p-6 text-sm text-gray-600">
+            No reviews yet. Be the first to share your experience with this product.
+          </div>
+        ) : null}
         {paginatedReviews.map((review) => (
           <div key={review.id} className="border-b border-gray-200 pb-6 last:border-0">
             <div className="flex items-start justify-between mb-3">
@@ -117,6 +144,28 @@ export function ReviewsSection({
             </div>
             <h4 className="font-medium text-gray-900 mb-2">{review.title}</h4>
             <p className="text-sm text-gray-600 leading-relaxed">{review.content}</p>
+            {review.canEdit && (onEditReview || onDeleteReview) ? (
+              <div className="mt-3 flex items-center gap-2">
+                {onEditReview ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditReview(review)}
+                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                {onDeleteReview ? (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteReview(review)}
+                    className="px-3 py-1.5 text-xs border border-red-300 text-red-700 rounded-md hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Check, Lock } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
+import { CartLineThumbnail } from '@/components/cart/CartLineThumbnail';
 import { cn } from '@/lib/utils';
 
 const steps = [
@@ -23,7 +23,10 @@ export default function CheckoutLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const { items, getSubtotal } = useCartStore();
+  const medusaLines = useCartStore((s) => s.medusaLines);
+  const virtualLines = useCartStore((s) => s.virtualLines);
+  const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
+  const getSubtotal = useCartStore((s) => s.getSubtotal);
 
   useEffect(() => {
     setMounted(true);
@@ -149,7 +152,7 @@ export default function CheckoutLayout({
 
           {/* Order Summary Sidebar */}
           <div className="lg:col-span-5 mt-12 lg:mt-0">
-            <div className="bg-cream-dark/50 rounded-lg p-6 sticky top-8">
+            <div className="bg-cream-dark/50 rounded-none p-6 sticky top-8">
               <h2 className="font-display text-lg tracking-widest uppercase mb-6">
                 Order Summary
               </h2>
@@ -158,19 +161,14 @@ export default function CheckoutLayout({
               <div className="space-y-4 max-h-64 overflow-y-auto">
                 {items.map((item) => (
                   <div key={item.id} className="flex gap-3">
-                    <div className="relative w-16 h-20 bg-cream rounded flex-shrink-0 overflow-hidden">
-                      {item.thumbnail ? (
-                        <Image
-                          src={item.thumbnail}
-                          alt={item.title}
-                          fill
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-cream to-blush" />
-                      )}
+                    <div className="relative w-16 h-20 bg-cream rounded-none flex-shrink-0 overflow-hidden">
+                      <CartLineThumbnail
+                        src={item.thumbnail}
+                        alt={item.title}
+                        className="h-full w-full"
+                      />
                       {/* Quantity badge */}
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-white text-xs rounded-full flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-white text-xs rounded-none flex items-center justify-center">
                         {item.quantity}
                       </span>
                     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useState } from "react";
+import { useCartStore } from "@/stores/cart";
 
 interface CartProviderProps {
   children: ReactNode;
@@ -16,6 +17,14 @@ export function CartProvider({ children }: CartProviderProps) {
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const cartId = useCartStore.getState().medusaCartId;
+    if (cartId) {
+      void useCartStore.getState().refreshMedusaCart();
+    }
+  }, [isHydrated]);
 
   // Prevent hydration mismatch by not rendering cart-dependent UI until hydrated
   // The actual cart state is managed by Zustand store with persist middleware

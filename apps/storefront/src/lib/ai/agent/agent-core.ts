@@ -7,6 +7,7 @@ import type {
   Memory,
   ProductSummary,
   ToolCall,
+  ToolDefinition,
   UIUpdate,
 } from '../types';
 import { AI_CONFIG } from '../config';
@@ -14,25 +15,18 @@ import { ContextBuilder } from './context-builder';
 import { ActionExecutor } from './action-executor';
 import { PreferenceLearner } from './preference-learner';
 import { ConversationStore } from '../memory/conversation-store';
-import { PreferenceStore } from '../memory/preference-store';
-import { InteractionStore } from '../memory/interaction-store';
 import { VectorStore } from '../memory/vector-store';
 import { getToolDefinitions } from '../tools';
+import { callGeminiWithTools, type GeminiLLMMessage } from '../gemini-llm';
+import { loadCustomerProfileForAgent } from './customer-intelligence';
 
-interface LLMMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  toolCalls?: ToolCall[];
-  toolResults?: { toolCallId: string; name: string; result: unknown }[];
-}
+type LLMMessage = GeminiLLMMessage;
 
 export class ShoppingAgent {
   private contextBuilder = new ContextBuilder();
   private actionExecutor = new ActionExecutor();
   private preferenceLearner = new PreferenceLearner();
   private conversationStore = new ConversationStore();
-  private preferenceStore = new PreferenceStore();
-  private interactionStore = new InteractionStore();
   private vectorStore = new VectorStore();
 
   async processInput(input: AgentInput): Promise<AgentResponse> {
@@ -41,17 +35,43 @@ export class ShoppingAgent {
       return { text: "Hello! ✨ I'm LUXE, your personal shopping assistant at BLESSLUXE. How can I help you today?" };
     }
 
-    const profile = input.context.customerId
-      ? await this.getCustomerProfile(input.context.customerId)
-      : null;
+    let profile: CustomerProfile | null = null;
+    if (input.context.customerId) {
+      try {
+        profile = await loadCustomerProfileForAgent(input.context.customerId);
+      } catch (err) {
+        console.warn('[ShoppingAgent] profile load skipped:', err);
+      }
+    }
 
     const systemPrompt = this.contextBuilder.buildSystemPrompt(profile, input.context);
 
-    const relevantMemories = input.context.customerId
-      ? await this.vectorStore.search(input.context.customerId, userMessage, 5)
-      : [];
+    let relevantMemories: Memory[] = [];
+    if (input.context.customerId) {
+      try {
+        relevantMemories = await this.vectorStore.search(input.context.customerId, userMessage, 5);
+      } catch (err) {
+        console.warn('[ShoppingAgent] vector memory search skipped:', err);
+      }
+    }
 
-    const recentMessages = await this.conversationStore.getRecentMessages(input.context.sessionId, 20);
+    // Prefer client-supplied history: it matches the UI and includes voice turns (never persisted here).
+    // DB-only would drop voice context and can throw if Postgres is down — both caused generic API errors.
+    let recentMessages: ChatMessage[] = [];
+    if (input.clientMessageHistory?.length) {
+      recentMessages = input.clientMessageHistory.map((m, i) => ({
+        id: `client_${i}`,
+        role: m.role,
+        content: m.content,
+        createdAt: new Date(),
+      })) as ChatMessage[];
+    } else {
+      try {
+        recentMessages = await this.conversationStore.getRecentMessages(input.context.sessionId, 20);
+      } catch (err) {
+        console.warn('[ShoppingAgent] getRecentMessages failed (using empty history):', err);
+      }
+    }
 
     const messages = this.buildMessages(systemPrompt, relevantMemories, recentMessages, userMessage);
 
@@ -60,7 +80,11 @@ export class ShoppingAgent {
     await this.saveToMemory(input.context, userMessage, response);
 
     if (input.context.customerId) {
-      await this.preferenceLearner.learn(input.context.customerId, userMessage, response);
+      try {
+        await this.preferenceLearner.learn(input.context.customerId, userMessage, response);
+      } catch (err) {
+        console.warn('[ShoppingAgent] preference learn skipped:', err);
+      }
     }
 
     return response;
@@ -119,14 +143,20 @@ export class ShoppingAgent {
   }
 
   /**
-   * Calls the configured LLM provider. In production, replace this with a real
-   * API call to Anthropic / OpenAI / Google using server-side API keys.
-   * The current implementation uses keyword-based routing as a prototype.
+   * Gemini + function calling when `GOOGLE_AI_API_KEY` is set; otherwise keyword fallback.
    */
   private async callLLM(
     messages: LLMMessage[],
-    _tools: import('../types').ToolDefinition[]
+    tools: ToolDefinition[]
   ): Promise<{ content: string; toolCalls?: ToolCall[] }> {
+    const hasKey = !!(process.env.GOOGLE_AI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY);
+    if (hasKey && tools.length > 0) {
+      try {
+        return await callGeminiWithTools(messages, tools);
+      } catch (err) {
+        console.error('[ShoppingAgent] Gemini call failed:', err);
+      }
+    }
     return this.getFallbackResponse(messages);
   }
 
@@ -211,31 +241,25 @@ export class ShoppingAgent {
     userMessage: string,
     response: AgentResponse
   ): Promise<void> {
-    await this.conversationStore.addMessage(context.sessionId, 'user', userMessage);
-    await this.conversationStore.addMessage(context.sessionId, 'assistant', response.text, {
-      products: response.products,
-      suggestions: response.suggestions,
-      uiUpdates: response.uiUpdates,
-    });
+    try {
+      await this.conversationStore.addMessage(context.sessionId, 'user', userMessage);
+      await this.conversationStore.addMessage(context.sessionId, 'assistant', response.text, {
+        products: response.products,
+        suggestions: response.suggestions,
+        uiUpdates: response.uiUpdates,
+      });
+    } catch (err) {
+      console.warn('[ShoppingAgent] conversation persist skipped:', err);
+    }
 
     if (context.customerId) {
-      await this.vectorStore.store(context.customerId, userMessage, 'conversation');
-      await this.vectorStore.store(context.customerId, response.text, 'conversation');
+      try {
+        await this.vectorStore.store(context.customerId, userMessage, 'conversation');
+        await this.vectorStore.store(context.customerId, response.text, 'conversation');
+      } catch (err) {
+        console.warn('[ShoppingAgent] vector store skipped:', err);
+      }
     }
-  }
-
-  private async getCustomerProfile(customerId: string): Promise<CustomerProfile | null> {
-    const prefs = await this.preferenceStore.get(customerId);
-    if (!prefs) return null;
-
-    return {
-      id: customerId,
-      firstName: 'Valued',
-      lastName: 'Customer',
-      email: '',
-      memberSince: new Date().toISOString(),
-      ...prefs,
-    };
   }
 
   private generateSuggestions(responseText: string): string[] {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatMessage, ProductSummary, AgentResponse, UIUpdate } from '@/lib/ai/types';
+import type { CartItem } from '@/stores/cart';
 
 interface AgentChatState {
   messages: ChatMessage[];
@@ -31,7 +32,15 @@ interface AgentChatState {
   resetSession: () => void;
 
   // Async actions (call the API)
-  sendMessage: (text: string, context?: { currentPage?: string; customerId?: string }) => Promise<void>;
+  sendMessage: (
+    text: string,
+    context?: {
+      currentPage?: string;
+      customerId?: string;
+      cart?: CartItem[];
+      recentlyViewed?: ProductSummary[];
+    }
+  ) => Promise<void>;
 }
 
 function generateSessionId(): string {
@@ -79,6 +88,9 @@ export const useAgentChatStore = create<AgentChatState>()(
           activeTools: [],
           suggestions: ['Show me new arrivals', "What's trending?", 'Help me find an outfit'],
           error: null,
+          isLoading: false,
+          isListening: false,
+          isSpeaking: false,
         }),
 
       sendMessage: async (text, context) => {
@@ -113,6 +125,8 @@ export const useAgentChatStore = create<AgentChatState>()(
               messages: recentMessages,
               currentPage: context?.currentPage || (typeof window !== 'undefined' ? window.location.pathname : '/'),
               customerId: context?.customerId,
+              cart: context?.cart ?? [],
+              recentlyViewed: context?.recentlyViewed ?? [],
             }),
           });
 
@@ -154,10 +168,10 @@ export const useAgentChatStore = create<AgentChatState>()(
       },
     }),
     {
-      name: 'blessluxe-agent-chat',
+      /** Bump storage key so old persisted threads (with messages) are dropped. */
+      name: 'blessluxe-agent-chat-v2',
+      /** Only voice toggle — chat/session stay in memory (fresh when panel opens). */
       partialize: (state) => ({
-        messages: state.messages.slice(-50),
-        sessionId: state.sessionId,
         voiceEnabled: state.voiceEnabled,
       }),
     }

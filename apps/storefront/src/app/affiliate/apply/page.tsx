@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/providers";
 
 export default function AffiliateApplyPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [customerEmail, setCustomerEmail] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -49,14 +51,31 @@ export default function AffiliateApplyPage() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || "Application failed.");
+        const message = data.error || "Application failed.";
+        setError(message);
+        showToast({
+          title: "Application failed",
+          message,
+          variant: "error",
+        });
         setIsSubmitting(false);
         return;
       }
 
+      showToast({
+        title: "Application submitted",
+        message: "We will review your affiliate application shortly.",
+        variant: "success",
+      });
       router.push(`/affiliate/dashboard?email=${encodeURIComponent(customerEmail)}`);
     } catch {
-      setError("Application failed. Please try again.");
+      const message = "Application failed. Please try again.";
+      setError(message);
+      showToast({
+        title: "Application failed",
+        message,
+        variant: "error",
+      });
       setIsSubmitting(false);
     }
   };

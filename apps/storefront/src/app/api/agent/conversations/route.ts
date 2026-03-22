@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ConversationStore } from '@/lib/ai/memory/conversation-store';
 
+export const dynamic = 'force-dynamic';
+
 const conversationStore = new ConversationStore();
 
 /**

@@ -15,6 +15,7 @@ Built with **Next.js 14**, **Medusa.js v2**, and **Google Gemini** — structure
 - [Environment Variables Reference](#environment-variables-reference)
 - [Project Structure](#project-structure)
 - [AI Shopping Assistant (LUXE)](#ai-shopping-assistant-luxe)
+- [Commerce Admin (Affiliates & Blits)](#commerce-admin-affiliates--blits)
 - [Backend](#backend)
 - [Commands](#commands)
 - [Tech Stack](#tech-stack)
@@ -83,10 +84,12 @@ pnpm dev
 | App | URL |
 |---|---|
 | Storefront | http://localhost:3000 |
+| **Commerce admin** (affiliates, Blits, disputes, social moderation) | http://localhost:3000/affiliate/admin |
 | Medusa Admin | http://localhost:9000/app |
 | Medusa API | http://localhost:9000 |
 
-Admin login: `admin@blessluxe.com` / `admin123`
+Medusa admin login: `admin@blessluxe.com` / `admin123`  
+Commerce admin: set `ADMIN_DASHBOARD_KEY` or `ADMIN_EMAILS`, then open `/affiliate/admin` (see [Commerce Admin](#commerce-admin-affiliates--blits)).
 
 ---
 
@@ -181,6 +184,35 @@ Use these commands when you change code or environment values:
 docker compose up --build -d            # Full stack rebuild
 docker compose up --build -d storefront # Frontend-only rebuild
 docker compose up --build -d medusa     # Backend-only rebuild
+docker compose up --build -d --no-deps storefront # Fast storefront rebuild only
+```
+
+Convenience wrappers (from repo root):
+
+```bash
+pnpm dev:refresh-seed     # Rebuild medusa + rerun seed
+pnpm dev:refresh-catalog  # Rebuild medusa + rerun seed + rebuild storefront
+```
+
+### Easy development refresh (catalog + images)
+
+Use this when you want fresh catalog data with one flow (safe to run repeatedly):
+
+```bash
+# 1) Rebuild Medusa only (picks up seed script changes)
+docker compose up --build -d --no-deps medusa
+
+# 2) Rerun seed (categories, products, prices, tags, metadata, women image backfill)
+docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
+
+# 3) Rebuild storefront if UI/env changed
+docker compose up --build -d --no-deps storefront
+```
+
+Or use one command:
+
+```bash
+pnpm dev:refresh-catalog
 ```
 
 Common cases:
@@ -212,6 +244,13 @@ The seed script creates:
 - **4 Regions**: United States, United Kingdom, Europe, South Africa
 - **Audience-based category structure**: Women, Men, Children (+ branch-specific accessories/shoes/bags)
 - **Core + supplemental test products** across women, men, and children with multi-currency pricing
+- **Trending metadata defaults** for catalog badges/social-proof blocks
+- **Women catalog thumbnail sync** for legacy products (real fashion photos, idempotent backfill)
+
+Current seed behavior also includes:
+- Tag normalization for merchandising badges (`hot`, `sale`, `trending`, `new`, `bestseller`)
+- Supplemental catalog expansion for broad category coverage (women/men/children branches)
+- Editorial image URL normalization for Unsplash assets (`w=1200`, `auto=format`, `fit=crop`, `q=80`)
 
 ```bash
 # Local
@@ -222,6 +261,19 @@ docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
 ```
 
 The seed script is idempotent — safe to run multiple times.
+
+Tip: if you only changed `backend/medusa/src/scripts/seed.ts`, rebuild just Medusa before rerunning seed:
+
+```bash
+docker compose up --build -d --no-deps medusa
+docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
+```
+
+Equivalent shortcut:
+
+```bash
+pnpm dev:refresh-seed
+```
 
 ---
 
@@ -251,12 +303,12 @@ The seed script is idempotent — safe to run multiple times.
 | `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | `http://localhost:9000` | Medusa API URL (browser-accessible) |
 | `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | — | Publishable API key from Medusa admin |
 | `NEXT_PUBLIC_GOOGLE_AI_API_KEY` | — | Gemini API key for AI chat |
-| `AI_DATABASE_URL` | (set by compose) | PostgreSQL for AI memory tables |
+| `DATABASE_URL` or `AI_DATABASE_URL` | (often same DB as Medusa) | Storefront Postgres: AI memory, affiliates, Blits, customer sessions. `AI_DATABASE_URL` is preferred if both are set. |
 | `GOOGLE_CLIENT_ID` | — | Google OAuth client id for account login |
 | `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret for account login |
 | `NEXTAUTH_SECRET` | `change-me...` | Session signing secret for NextAuth |
 | `NEXTAUTH_URL` | `http://localhost:3000` | Public storefront URL for auth callbacks |
-| `ADMIN_DASHBOARD_KEY` | — | Shared key for protecting affiliate admin routes |
+| `ADMIN_DASHBOARD_KEY` | — | Shared key for protecting commerce admin (`/affiliate/admin`) |
 | `ADMIN_EMAILS` | — | Comma-separated admin emails (alternative to key) |
 | `SUPABASE_URL` | — | Supabase project URL for affiliate media storage |
 | `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key (server-side upload auth) |
@@ -404,18 +456,36 @@ All providers load conditionally based on environment variables.
 
 ## Affiliate Social Commerce
 
+**Commission attribution (storefront checkout):** Commission is calculated **only on cart lines** that were added from an affiliate social shop (`/affiliate/shop/[code]`). Those lines store `affiliateCode` in the cart; main-shop adds have no code. The **`affiliate_commission_ref`** cookie is read at checkout: when it **matches** the affiliate code on attributed lines, that sale uses the **own-shop rate (5%)** (`AFFILIATE_OWN_PAGE_COMMISSION_PERCENT` in `affiliate-attribution.ts`). If the cookie is missing or doesn’t match (e.g. customer browsed main `/shop` first), attributed lines still earn commission at the affiliate’s **profile rate** (often 10%). Shipping is excluded from the commission base. Admins see `attribution_source` and `commission_rate_percent_used` in sale metadata.
+
 Affiliate social shop now supports:
 - Direct image upload for catalog posts and selfies (`/api/affiliate/social/upload`)
 - AI photoshoot generation route with saved media metadata (`/api/affiliate/social/photoshoot`)
-- Admin moderation queue before public visibility of affiliate social posts
+- Post creation/edit/delete by affiliate owner from dashboard
+- Publish/unpublish media to control what appears in the public `Photos` tab
+- **Blits photo gifts** — logged-in customers send gifts from the gallery using configured gift types (`/api/blits/gift`, wallet `GET /api/blits/wallet`)
 - Storage priority: Supabase -> local fallback (so uploads keep working)
 
-### Moderation flow
+---
 
-1. Affiliate creates a social post from `/affiliate/shop/[code]`
-2. Post is saved as `pending` and hidden from public viewers
-3. Admin reviews post from `/affiliate/admin` and approves/rejects it
-4. Only approved posts appear in public affiliate feeds
+## Commerce Admin (Affiliates & Blits)
+
+The storefront exposes a **Commerce admin** UI for operations that live in the storefront Postgres (not Medusa admin).
+
+| | |
+|---|---|
+| **URL** | `/affiliate/admin` (e.g. `http://localhost:3000/affiliate/admin`) |
+| **Sign-in** | `/affiliate/admin/auth` — use **`ADMIN_DASHBOARD_KEY`**, or rely on **`ADMIN_EMAILS`** and log in as a matching customer on `/account` first |
+
+**Tabs:** Affiliates, Sales & commission, Payouts, Disputes, Messages, **Blits & gifts** (rates, purchase-tier JSON, gift types, recent photo gifts), Social moderation.
+
+**Blits (virtual currency)** — settings and tables are managed in the storefront app (`apps/storefront/src/lib/blits.ts`). Customers can:
+
+- **Checkout:** logged-in users see **Pay with Blits** on the payment step (hidden when the cart includes wallet top-up lines); the order applies the configured **loyalty discount %** on product subtotal, then charges Blits at **USD → Blits per $1** (`POST /api/blits/checkout-pay`).
+- **Photo gifts** on affiliate shop galleries (see above).
+- **Top-ups:** from **Account → Blits**, customers add a wallet line to the cart and complete **card / mobile / bank** checkout; Blits credit runs after payment via `POST /api/blits/credit-from-checkout` (replace with your payment-provider webhook in production if you process charges server-side).
+
+Public read-only config for the storefront UI: `GET /api/blits/public`.
 
 ---
 
@@ -425,6 +495,8 @@ Affiliate social shop now supports:
 # ─── Development ──────────────────────────────────────────
 pnpm install           # Install all dependencies
 pnpm dev               # Run all apps in dev mode
+pnpm dev:refresh-seed  # Rebuild medusa + rerun seed only
+pnpm dev:refresh-catalog # Rebuild medusa, rerun seed, rebuild storefront
 pnpm build             # Build all packages and apps
 pnpm lint              # Lint all packages
 pnpm format            # Format with Prettier
@@ -476,7 +548,69 @@ The session cookie requires matching `COOKIE_SECURE` settings:
 
 ### Products show $0.00 prices
 
-The Medusa Store API needs a `region_id` to calculate prices. The storefront hooks fetch regions automatically, but ensure at least one region exists by running the seed script.
+The Medusa Store API needs a `region_id` to calculate prices.  
+The shop listing and product detail routes now resolve a default region automatically, but you must still have seeded regions and linked sales channels.
+
+Checklist:
+- Run seed data so regions exist:
+  - `docker compose exec medusa npx medusa exec ./src/scripts/seed.ts`
+- Ensure your publishable API key is linked to active sales channels in Medusa admin
+- Rebuild storefront after env/config changes:
+  - `docker compose up --build -d --no-deps storefront`
+
+### Product page returns 404 after clicking a product
+
+This usually means the storefront is running an old build that still uses mock product handles.
+
+Fix:
+```bash
+docker compose up --build -d --no-deps storefront
+```
+Then hard refresh the browser (`Cmd+Shift+R`).
+
+### Product or cart images appear blank/broken
+
+Image URLs can fail when Medusa returns internal Docker host URLs (for example `http://medusa:9000/...`) or relative upload paths.
+
+Current storefront behavior normalizes these to browser-accessible URLs, including on:
+- Shop product cards
+- Product detail gallery
+- Cart drawer/cart items
+
+If images are still blank:
+- Hard refresh (`Cmd+Shift+R`)
+- Remove and re-add stale cart items (old persisted cart entries may contain outdated thumbnail URLs)
+- Rebuild storefront:
+  - `docker compose up --build -d --no-deps storefront`
+
+### Women catalog images missing after a data reset
+
+Run the Medusa rebuild + seed flow to re-apply image backfills from the seed script:
+
+```bash
+docker compose up --build -d --no-deps medusa
+docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
+```
+
+Quick command:
+
+```bash
+pnpm dev:refresh-seed
+```
+
+### Docker build fails on storefront compile after home-section edits
+
+If a recent UI refactor introduced a compile error, validate locally first:
+
+```bash
+pnpm --filter @blessluxe/storefront build
+```
+
+Then rebuild storefront container:
+
+```bash
+docker compose up --build -d --no-deps storefront
+```
 
 ### "Publishable API key required" error
 
@@ -505,14 +639,14 @@ Then rebuild storefront:
 docker compose up --build -d storefront
 ```
 
-### Affiliate admin endpoints return Unauthorized
+### Commerce / affiliate admin endpoints return Unauthorized
 
-Admin APIs now require explicit auth:
-- Set `ADMIN_DASHBOARD_KEY` and provide it from the admin page key prompt, or
-- Set `ADMIN_EMAILS` (comma-separated) and login with one of those account emails.
+The storefront **Commerce admin** (`/affiliate/admin`) and its `/api/admin/*` routes require explicit auth:
 
-The admin page is now server-side protected and redirects unauthenticated users to:
-- `/affiliate/admin/auth`
+- Set `ADMIN_DASHBOARD_KEY` and enter it at `/affiliate/admin/auth`, or
+- Set `ADMIN_EMAILS` (comma-separated) and sign in on `/account` with one of those emails.
+
+Unauthenticated visitors are redirected to `/affiliate/admin/auth`.
 
 ### Storefront startup env warnings
 

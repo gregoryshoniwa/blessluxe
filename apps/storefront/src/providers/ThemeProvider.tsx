@@ -12,7 +12,12 @@ interface ThemeProviderProps {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setTheme, resetTheme } = useThemeStore();
+  /** Primitives only — `searchParams` object identity can change every render and must not be a hook dep. */
+  const categoryParam = searchParams.get('category');
+  const parentParam = searchParams.get('parent');
+
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const resetTheme = useThemeStore((s) => s.resetTheme);
 
   // Determine theme from path/params
   const determineTheme = useCallback((): ThemeType => {
@@ -22,21 +27,19 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
 
     // First, check for parent param (used for subcategories like outerwear, accessories)
-    const parentParam = searchParams.get('parent');
     if (parentParam) {
       const parentTheme = getThemeForCategory(parentParam);
       if (parentTheme !== 'default') return parentTheme;
     }
 
     // Check URL search params for category
-    const categoryParam = searchParams.get('category');
     if (categoryParam) {
       return getThemeForCategory(categoryParam);
     }
 
     // Check path segments for category
     const segments = pathname.split('/').filter(Boolean);
-    
+
     // /shop/women, /shop/men, /shop/children
     if (segments.includes('shop')) {
       const categorySegment = segments[segments.length - 1];
@@ -51,25 +54,25 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
 
     return 'default';
-  }, [pathname, searchParams]);
+  }, [pathname, categoryParam, parentParam]);
 
-  // Apply theme to document
+  // Apply theme to document (avoid redundant Zustand updates — those retrigger renders and can loop with unstable searchParams)
   useEffect(() => {
     const theme = determineTheme();
-    
-    // Set theme on body element
+
     if (theme === 'default') {
       document.body.removeAttribute('data-theme');
-      resetTheme();
+      const current = useThemeStore.getState().currentTheme;
+      if (current !== 'default') {
+        resetTheme();
+      }
     } else {
       document.body.setAttribute('data-theme', theme);
-      setTheme(theme);
+      const current = useThemeStore.getState().currentTheme;
+      if (current !== theme) {
+        setTheme(theme);
+      }
     }
-
-    // Cleanup on unmount
-    return () => {
-      // Keep the theme attribute for smooth transitions
-    };
   }, [determineTheme, setTheme, resetTheme]);
 
   return <>{children}</>;

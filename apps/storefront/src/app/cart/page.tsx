@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Tag } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
+import { CartLineThumbnail } from '@/components/cart/CartLineThumbnail';
 import { cn } from '@/lib/utils';
 
 export default function CartPage() {
@@ -13,7 +13,12 @@ export default function CartPage() {
   const [promoCode, setPromoCode] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
   
-  const { items, updateQuantity, removeItem, getSubtotal } = useCartStore();
+  const medusaLines = useCartStore((s) => s.medusaLines);
+  const virtualLines = useCartStore((s) => s.virtualLines);
+  const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const removeItem = useCartStore((s) => s.removeItem);
+  const getSubtotal = useCartStore((s) => s.getSubtotal);
 
   useEffect(() => {
     setMounted(true);
@@ -93,16 +98,11 @@ export default function CartPage() {
                   {/* Image */}
                   <Link href={`/shop/${item.productId}`} className="flex-shrink-0">
                     <div className="relative w-24 h-32 bg-cream-dark rounded overflow-hidden">
-                      {item.thumbnail ? (
-                        <Image
-                          src={item.thumbnail}
-                          alt={item.title}
-                          fill
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-cream to-blush" />
-                      )}
+                      <CartLineThumbnail
+                        src={item.thumbnail}
+                        alt={item.title}
+                        className="h-full w-full"
+                      />
                     </div>
                   </Link>
 
@@ -173,7 +173,7 @@ export default function CartPage() {
 
           {/* Order Summary */}
           <div className="lg:col-span-5 mt-12 lg:mt-0">
-            <div className="bg-cream-dark/50 rounded-lg p-6 sticky top-24">
+            <div className="bg-cream-dark/50 rounded-none p-6 sticky top-24">
               <h2 className="font-display text-lg tracking-widest uppercase mb-6">
                 Order Summary
               </h2>
@@ -193,7 +193,7 @@ export default function CartPage() {
                       placeholder="Enter code"
                       disabled={promoApplied}
                       className={cn(
-                        "w-full pl-10 pr-4 py-2.5 border border-black/20 rounded bg-white text-sm",
+                        "w-full pl-10 pr-4 py-2.5 border border-black/20 rounded-none bg-white text-sm",
                         "focus:outline-none focus:border-gold",
                         promoApplied && "bg-green-50 border-green-500"
                       )}
@@ -203,7 +203,7 @@ export default function CartPage() {
                     onClick={handleApplyPromo}
                     disabled={promoApplied || !promoCode}
                     className={cn(
-                      "px-4 py-2 text-sm font-semibold rounded transition-colors",
+                      "px-4 py-2 text-sm font-semibold rounded-none transition-colors",
                       promoApplied
                         ? "bg-green-500 text-white"
                         : "bg-black text-white hover:bg-black/80 disabled:opacity-50"
@@ -244,7 +244,7 @@ export default function CartPage() {
               {/* Checkout */}
               <Link
                 href="/checkout"
-                className="flex items-center justify-center gap-2 w-full mt-6 bg-gold text-white py-4 text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+                className="flex items-center justify-center gap-2 w-full mt-6 bg-gold text-white py-4 rounded-none text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
               >
                 Proceed to Checkout
                 <ArrowRight className="w-4 h-4" />

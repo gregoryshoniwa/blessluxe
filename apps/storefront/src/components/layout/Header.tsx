@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, User, Heart, ShoppingBag, Menu, ChevronDown } from "lucide-react";
+import { Search, Heart, ShoppingBag, Menu, ChevronDown } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
@@ -13,6 +13,8 @@ import { useCartStore } from "@/stores/cart";
 import { useWishlistStore } from "@/stores/wishlist";
 import { useNavigation } from "@/hooks/useNavigation";
 import { AnnouncementBar } from "./AnnouncementBar";
+import { HeaderWalletMenu } from "./HeaderWalletMenu";
+import { HeaderProfileMenu } from "./HeaderProfileMenu";
 
 export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -21,8 +23,9 @@ export function Header() {
   const menuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const shopCategoryParam = searchParams.get("category");
   const searchParamKey = searchParams.toString();
-  const { data: oauthSession } = useSession();
+  const { data: oauthSession, status: oauthStatus } = useSession();
   const { navLinks } = useNavigation();
   const affiliateCodeFromPage = useMemo(() => {
     const match = pathname.match(/^\/affiliate\/shop\/([^/?#]+)/i);
@@ -43,18 +46,17 @@ export function Header() {
   // Determine which nav item is currently active based on URL
   const activeNavItem = useMemo(() => {
     if (pathname !== "/shop") return null;
-    const category = searchParams.get("category");
-    if (!category) return null;
+    if (!shopCategoryParam) return null;
 
     const match = navLinks.find((link) => {
-      if (link.categoryHandle === category) return true;
+      if (link.categoryHandle === shopCategoryParam) return true;
       if (!link.submenu) return false;
       return Object.values(link.submenu).some((section) =>
-        section.items.some((item) => item.href.includes(`category=${category}`))
+        section.items.some((item) => item.href.includes(`category=${shopCategoryParam}`))
       );
     });
     return match?.label ?? null;
-  }, [pathname, searchParams, navLinks]);
+  }, [pathname, shopCategoryParam, navLinks]);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -71,8 +73,8 @@ export function Header() {
         setIsLoggedIn(Boolean(oauthSession?.user?.email));
       }
     };
-    loadSessionState();
-  }, [pathname, searchParamKey, oauthSession?.user?.email]);
+    void loadSessionState();
+  }, [pathname, searchParamKey, oauthSession?.user?.email, oauthStatus]);
 
   // Handle scroll effect
   useEffect(() => {
@@ -198,16 +200,9 @@ export function Header() {
                 <Search className="w-5 h-5" strokeWidth={1.5} />
               </button>
 
-              <Link
-                href={isLoggedIn ? "/account" : "/account/login"}
-                className="hidden sm:flex items-center gap-2 p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
-                aria-label="Account"
-              >
-                <User className="w-5 h-5" strokeWidth={1.5} />
-                <span className="text-[10px] font-semibold tracking-[0.2em] uppercase">
-                  {isLoggedIn ? "Profile" : "Login"}
-                </span>
-              </Link>
+              <HeaderWalletMenu isLoggedIn={isLoggedIn} />
+
+              <HeaderProfileMenu isLoggedIn={isLoggedIn} />
 
               <Link
                 href="/wishlist"

@@ -4,8 +4,10 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useToast } from "@/providers";
 
 export default function LoginPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: oauthSession } = useSession();
@@ -55,9 +57,20 @@ export default function LoginPage() {
     setLoading(false);
 
     if (!response.ok) {
-      setError(data.error || "Unable to login.");
+      const message = data.error || "Unable to login.";
+      setError(message);
+      showToast({
+        title: "Login failed",
+        message,
+        variant: "error",
+      });
       return;
     }
+    showToast({
+      title: "Welcome back",
+      message: "You are now signed in.",
+      variant: "success",
+    });
     router.replace(nextPath);
   };
 

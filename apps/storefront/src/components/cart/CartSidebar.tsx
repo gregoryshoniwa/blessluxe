@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShoppingBag, ArrowRight } from 'lucide-react';
@@ -8,7 +8,13 @@ import { useCartStore } from '@/stores/cart';
 import { CartItem } from './CartItem';
 
 export function CartSidebar() {
-  const { items, isOpen, closeCart, getItemCount, getSubtotal } = useCartStore();
+  const isOpen = useCartStore((s) => s.isOpen);
+  const closeCart = useCartStore((s) => s.closeCart);
+  const getItemCount = useCartStore((s) => s.getItemCount);
+  const getSubtotal = useCartStore((s) => s.getSubtotal);
+  const medusaLines = useCartStore((s) => s.medusaLines);
+  const virtualLines = useCartStore((s) => s.virtualLines);
+  const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
 
   // Close on escape key
   useEffect(() => {

@@ -15,6 +15,8 @@ export interface AgentInput {
   text?: string;
   audio?: ArrayBuffer;
   context: AgentContext;
+  /** Client-side turns when the DB has no messages yet for this session. */
+  clientMessageHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export interface AgentResponse {
@@ -148,6 +150,20 @@ export interface CustomerProfile {
   purchaseOccasions?: string[];
   totalOrders?: number;
   lastPurchaseDate?: string;
+  /** Formatted recent orders + line items for the system prompt */
+  purchaseHistorySummary?: string;
+  /** Distinct product titles from recent orders */
+  recentProductTitles?: string[];
+  /** Recent on-site searches (from ai_customer_interactions) */
+  recentSearches?: string[];
+  interactionStats?: {
+    totalViews: number;
+    totalSearches: number;
+    totalCartAdds: number;
+    totalPurchases: number;
+  };
+  /** Summaries from past ai_conversations rows, when present */
+  priorConversationSummaries?: string[];
 
   // Communication
   preferredContact?: string;

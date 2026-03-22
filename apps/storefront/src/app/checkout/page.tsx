@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useCheckoutStore } from '@/stores/checkout';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/providers';
 
 const informationSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -25,6 +26,7 @@ const informationSchema = z.object({
 type InformationFormData = z.infer<typeof informationSchema>;
 
 export default function CheckoutInformationPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const { email, shippingAddress, setEmail, setShippingAddress, setCurrentStep } = useCheckoutStore();
 
@@ -84,9 +86,22 @@ export default function CheckoutInformationPage() {
             country: data.country,
           },
         }),
-      }).catch(() => null);
+      }).catch(() => {
+        showToast({
+          title: 'Address not saved to profile',
+          message: 'Checkout will continue with this address for this order.',
+          variant: 'info',
+        });
+        return null;
+      });
     }
 
+    showToast({
+      title: 'Information saved',
+      message: 'Continue with shipping method.',
+      variant: 'success',
+      durationMs: 2200,
+    });
     router.push('/checkout/shipping');
   };
 

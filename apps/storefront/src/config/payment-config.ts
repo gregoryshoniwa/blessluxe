@@ -13,10 +13,11 @@
 export interface PaymentMethod {
   id: string;
   name: string;
-  icon: 'CreditCard' | 'Smartphone' | 'Banknote' | 'Wallet';
+  icon: 'CreditCard' | 'Smartphone' | 'Wallet';
   description: string;
   enabled: boolean;
-  type: 'card' | 'mobile' | 'bank';
+  /** `blits` / `blits_split` are injected at runtime on checkout when the customer is logged in. */
+  type: 'card' | 'mobile' | 'bank' | 'blits' | 'blits_split';
   // For mobile money - phone format
   phoneFormat?: string;
   // For card - supported networks
@@ -43,13 +44,13 @@ export const paymentMethods: PaymentMethod[] = [
     phoneFormat: '+263 7X XXX XXXX',
   },
   {
-    id: 'zipit',
-    name: 'ZipIt',
-    icon: 'Banknote',
-    description: 'Instant bank transfer via ZipIt',
+    id: 'zimswitch',
+    name: 'ZIMSWITCH',
+    icon: 'CreditCard',
+    description: 'Pay with ZIMSWITCH using your card details',
     enabled: true,
-    type: 'bank',
-    phoneFormat: '+263 7X XXX XXXX',
+    type: 'card',
+    supportedNetworks: ['visa', 'mastercard'],
   },
   {
     id: 'innbucks',

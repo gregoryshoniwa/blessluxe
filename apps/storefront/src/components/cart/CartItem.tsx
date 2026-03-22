@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCartStore, CartItem as CartItemType } from '@/stores/cart';
+import { CartLineThumbnail } from './CartLineThumbnail';
 import { cn } from '@/lib/utils';
 
 interface CartItemProps {
@@ -12,7 +13,6 @@ interface CartItemProps {
 
 export function CartItem({ item }: CartItemProps) {
   const [isUpdating, setIsUpdating] = useState(false);
-  const [imageError, setImageError] = useState(false);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
   const productHref = item.handle ? `/shop/${item.handle}` : '/shop';
@@ -30,12 +30,15 @@ export function CartItem({ item }: CartItemProps) {
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1) return;
     setIsUpdating(true);
-    updateQuantity(item.id, newQuantity);
-    setIsUpdating(false);
+    try {
+      await updateQuantity(item.id, newQuantity);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleRemove = () => {
-    removeItem(item.id);
+    void removeItem(item.id);
   };
 
   return (
@@ -46,16 +49,7 @@ export function CartItem({ item }: CartItemProps) {
       {/* Product Image */}
       <Link href={productHref} className="flex-shrink-0">
         <div className="relative w-20 h-24 bg-cream-dark rounded overflow-hidden">
-          {thumbnailUrl && !imageError ? (
-            <img
-              src={thumbnailUrl}
-              alt={item.title}
-              className="w-full h-full object-cover"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-cream to-blush" />
-          )}
+          <CartLineThumbnail src={thumbnailUrl} alt={item.title} />
         </div>
       </Link>
 

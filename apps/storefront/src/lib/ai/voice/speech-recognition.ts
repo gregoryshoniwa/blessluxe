@@ -2,14 +2,30 @@ export interface STTProvider {
   transcribe(audio: Blob | ArrayBuffer): Promise<string>;
 }
 
+/** Minimal Web Speech API surface (not in all TS `lib` targets). */
+interface SpeechRecognitionInstance {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((ev: Event) => void) | null;
+  onerror: ((ev: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionInstance;
+
 export class BrowserSTTProvider implements STTProvider {
-  private recognition: SpeechRecognition | null = null;
+  private recognition: SpeechRecognitionInstance | null = null;
 
   async transcribe(_audio: Blob | ArrayBuffer): Promise<string> {
     return new Promise((resolve, reject) => {
-      const SpeechRecognition =
-        (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition;
+      const w = window as unknown as {
+        SpeechRecognition?: SpeechRecognitionCtor;
+        webkitSpeechRecognition?: SpeechRecognitionCtor;
+      };
+      const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
         reject(new Error('Speech recognition not supported in this browser'));
@@ -21,13 +37,15 @@ export class BrowserSTTProvider implements STTProvider {
       this.recognition.interimResults = false;
       this.recognition.maxAlternatives = 1;
 
-      this.recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results[0]?.[0]?.transcript ?? '';
+      this.recognition.onresult = (event: Event) => {
+        const results = (event as unknown as { results?: Array<Array<{ transcript?: string }>> }).results;
+        const transcript = results?.[0]?.[0]?.transcript ?? '';
         resolve(transcript);
       };
 
       this.recognition.onerror = (event: Event) => {
-        reject(new Error(`Speech recognition error: ${(event as SpeechRecognitionErrorEvent).error}`));
+        const err = (event as unknown as { error?: string }).error ?? 'unknown';
+        reject(new Error(`Speech recognition error: ${err}`));
       };
 
       this.recognition.onend = () => {

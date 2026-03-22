@@ -5,61 +5,93 @@ import type { GeminiLiveState, GeminiLiveCallbacks } from '@/lib/ai/voice/gemini
 import { useAgentChatStore } from '@/stores/agent-chat';
 import type { ChatMessage } from '@/lib/ai/types';
 
+function getClientApiKey(): string | undefined {
+  const k = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+  return typeof k === 'string' && k.trim().length > 0 ? k.trim() : undefined;
+}
+
 export function useGeminiLive() {
   const [liveState, setLiveState] = useState<GeminiLiveState>('disconnected');
   const [transcript, setTranscript] = useState('');
   const [responseText, setResponseText] = useState('');
   const clientRef = useRef<import('@/lib/ai/voice/gemini-live').GeminiLiveClient | null>(null);
-  const { addMessage, setListening, setSpeaking } = useAgentChatStore();
+  /** Accumulated assistant reply (ref avoids stale disconnect / turn-complete closures). */
+  const responseTextRef = useRef('');
+
+  /** Use getState() so this hook does not subscribe to the whole chat store (avoids callback churn + effect loops). */
+  const flushAssistantMessage = useCallback(() => {
+    const text = responseTextRef.current.trim();
+    if (!text) return;
+    const msg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: text,
+      createdAt: new Date(),
+    };
+    useAgentChatStore.getState().addMessage(msg);
+    responseTextRef.current = '';
+    setResponseText('');
+  }, []);
 
   const connect = useCallback(async () => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+    const apiKey = getClientApiKey();
     if (!apiKey) {
-      console.error('[GeminiLive] NEXT_PUBLIC_GOOGLE_AI_API_KEY is not set');
+      console.error(
+        '[GeminiLive] No API key: set NEXT_PUBLIC_GOOGLE_AI_API_KEY or GOOGLE_AI_API_KEY (next.config maps it for the client bundle).'
+      );
+      useAgentChatStore.getState().setError('Voice needs NEXT_PUBLIC_GOOGLE_AI_API_KEY (or GOOGLE_AI_API_KEY in Docker with next.config env).');
       return;
     }
 
-    // Dynamic import to keep the module client-only
     const { GeminiLiveClient } = await import('@/lib/ai/voice/gemini-live');
 
     const callbacks: GeminiLiveCallbacks = {
       onStateChange: (state) => {
         setLiveState(state);
-        if (state === 'connected') setListening(true);
+        const chat = useAgentChatStore.getState();
+        if (state === 'connected') chat.setListening(true);
         if (state === 'disconnected' || state === 'error') {
-          setListening(false);
-          setSpeaking(false);
+          chat.setListening(false);
+          chat.setSpeaking(false);
         }
       },
       onTranscript: (text, isFinal) => {
-        setTranscript(text);
-        if (isFinal && text.trim()) {
+        if (!isFinal) {
+          setTranscript(text);
+          return;
+        }
+        setTranscript('');
+        if (text.trim()) {
           const msg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'user',
-            content: text,
+            content: text.trim(),
             createdAt: new Date(),
           };
-          addMessage(msg);
-          setTranscript('');
+          useAgentChatStore.getState().addMessage(msg);
         }
       },
       onResponseText: (text) => {
-        setResponseText((prev) => prev + text);
+        responseTextRef.current += text;
+        setResponseText(responseTextRef.current);
+      },
+      onTurnComplete: () => {
+        flushAssistantMessage();
+        useAgentChatStore.getState().setSpeaking(false);
       },
       onAudioChunk: () => {
-        setSpeaking(true);
+        useAgentChatStore.getState().setSpeaking(true);
       },
       onToolCall: (name) => {
         const { addActiveTool } = useAgentChatStore.getState();
         addActiveTool(name);
       },
-      onToolResult: (name, result) => {
+      onToolResult: (name) => {
         const { removeActiveTool } = useAgentChatStore.getState();
         removeActiveTool(name);
       },
       onInterrupted: () => {
-        setSpeaking(false);
+        useAgentChatStore.getState().setSpeaking(false);
       },
       onError: (error) => {
         console.error('[GeminiLive] Error:', error);
@@ -68,11 +100,12 @@ export function useGeminiLive() {
       },
     };
 
+    const { sessionId } = useAgentChatStore.getState();
     const client = new GeminiLiveClient(
       {
         apiKey,
         context: {
-          sessionId: useAgentChatStore.getState().sessionId,
+          sessionId,
           isAuthenticated: false,
         },
       },
@@ -81,26 +114,15 @@ export function useGeminiLive() {
 
     clientRef.current = client;
     await client.connect();
-  }, [addMessage, setListening, setSpeaking]);
+  }, [flushAssistantMessage]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
     }
-
-    // Save the accumulated response as an assistant message
-    if (responseText.trim()) {
-      const msg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: responseText.trim(),
-        createdAt: new Date(),
-      };
-      addMessage(msg);
-      setResponseText('');
-    }
-  }, [addMessage, responseText]);
+    flushAssistantMessage();
+  }, [flushAssistantMessage]);
 
   const sendText = useCallback((text: string) => {
     clientRef.current?.sendText(text);
@@ -114,7 +136,6 @@ export function useGeminiLive() {
     }
   }, [liveState, connect, disconnect]);
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       clientRef.current?.disconnect();

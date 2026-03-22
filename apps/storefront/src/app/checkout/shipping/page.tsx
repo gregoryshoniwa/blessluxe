@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Truck, Clock, Package } from 'lucide-react';
 import { useCheckoutStore } from '@/stores/checkout';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/providers';
 
 const shippingMethods = [
   {
@@ -34,6 +35,7 @@ const shippingMethods = [
 ];
 
 export default function CheckoutShippingPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const { 
     shippingAddress, 
@@ -65,6 +67,12 @@ export default function CheckoutShippingPage() {
         price: method.price,
         estimatedDays: method.estimatedDays,
       });
+      showToast({
+        title: 'Shipping method selected',
+        message: `${method.name} has been applied.`,
+        variant: 'success',
+        durationMs: 2200,
+      });
     }
     setCurrentStep(3);
     router.push('/checkout/payment');
@@ -77,7 +85,7 @@ export default function CheckoutShippingPage() {
   return (
     <div>
       {/* Shipping Address Summary */}
-      <div className="bg-cream-dark/50 rounded-lg p-4 mb-6">
+      <div className="bg-cream-dark/50 rounded-none p-4 mb-6">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-black/60 mb-1">Ship to</p>
@@ -113,7 +121,7 @@ export default function CheckoutShippingPage() {
             <label
               key={method.id}
               className={cn(
-                "flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-all",
+                "flex items-center gap-4 p-4 border rounded-none cursor-pointer transition-all",
                 selectedMethod === method.id
                   ? "border-gold bg-gold/5"
                   : "border-black/20 hover:border-gold/50"
@@ -125,20 +133,15 @@ export default function CheckoutShippingPage() {
                 value={method.id}
                 checked={selectedMethod === method.id}
                 onChange={(e) => setSelectedMethod(e.target.value)}
-                className="sr-only"
-              />
-              <div
                 className={cn(
-                  "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                  "h-5 w-5 shrink-0 cursor-pointer appearance-none rounded-full border-2 transition-colors",
+                  "focus:outline-none focus:ring-2 focus:ring-gold/35 focus:ring-offset-2",
                   selectedMethod === method.id
-                    ? "border-gold"
-                    : "border-black/30"
+                    ? "border-gold bg-white bg-[radial-gradient(circle,_#C9A84C_45%,_transparent_46%)]"
+                    : "border-black/30 bg-white"
                 )}
-              >
-                {selectedMethod === method.id && (
-                  <div className="w-2.5 h-2.5 rounded-full bg-gold" />
-                )}
-              </div>
+                aria-label={method.name}
+              />
 
               <div className="flex-1 flex items-center gap-4">
                 <Icon
@@ -169,7 +172,7 @@ export default function CheckoutShippingPage() {
         onClick={handleSubmit}
         disabled={isSubmitting}
         className={cn(
-          "w-full mt-8 bg-gold text-white py-4 text-sm font-semibold tracking-widest uppercase",
+          "w-full mt-8 bg-gold text-white py-4 text-sm font-semibold tracking-widest uppercase rounded-none",
           "hover:bg-gold-dark transition-colors",
           "disabled:opacity-50 disabled:cursor-not-allowed"
         )}

@@ -8,17 +8,19 @@ export function useCart() {
   const { isHydrated } = useCartHydration();
   const store = useCartStore();
 
-  const addItem = (item: Omit<CartItem, "id">) => {
-    store.addItem(item);
+  const items = isHydrated ? [...store.medusaLines, ...store.virtualLines] : [];
+
+  const addItem = (item: Omit<CartItem, "id" | "source">) => {
+    store.addVirtualItem(item);
     store.openCart();
   };
 
   const removeItem = (id: string) => {
-    store.removeItem(id);
+    void store.removeItem(id);
   };
 
   const updateQuantity = (id: string, quantity: number) => {
-    store.updateQuantity(id, quantity);
+    void store.updateQuantity(id, quantity);
   };
 
   const clearCart = () => {
@@ -30,15 +32,16 @@ export function useCart() {
   };
 
   return {
-    items: isHydrated ? store.items : [],
+    items,
     itemCount: isHydrated ? store.getItemCount() : 0,
     subtotal: isHydrated ? store.getSubtotal() : 0,
     isOpen: store.isOpen,
     isLoading: store.isLoading,
     isHydrated,
 
-    // Actions
     addItem,
+    addMedusaVariant: store.addMedusaVariant,
+    refreshMedusaCart: store.refreshMedusaCart,
     removeItem,
     updateQuantity,
     clearCart,
@@ -47,7 +50,6 @@ export function useCart() {
     toggleCart: store.toggleCart,
     setLoading: store.setLoading,
 
-    // Formatted values
     getFormattedSubtotal,
   };
 }

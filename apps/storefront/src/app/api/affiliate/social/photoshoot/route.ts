@@ -19,25 +19,62 @@ const STYLE_PROMPTS: Record<string, string> = {
 
 function buildPhotoshootPrompt(input: {
   garmentDescription: string;
+  characterType?: string;
+  assetSummary?: string;
+  assetTransferSummary?: string;
+  strictnessMode?: "balanced" | "strict";
   style: string;
+  stylePrompt?: string;
+  cameraPrompt?: string;
   pose: string;
+  customPose?: string;
+  hairStylePrompt?: string;
+  hairStyleName?: string;
+  environmentPrompt?: string;
   mood: string;
 }) {
   const stylePrompt = STYLE_PROMPTS[input.style] || STYLE_PROMPTS.editorial;
+  const mergedStylePrompt = [input.stylePrompt, stylePrompt, input.cameraPrompt]
+    .filter(Boolean)
+    .join(", ");
+  const poseDirective = [input.pose, input.customPose].filter(Boolean).join(". ");
   return [
     "Transform the provided selfie into a world-class fashion campaign image.",
     "Primary output requirement: generate a polished photorealistic fashion image, not text-only advice.",
     "Identity lock requirement: preserve the exact same person from the selfie.",
-    "Do not change facial structure, skin tone, age, body shape, hairstyle, or ethnicity.",
+    "Critical identity rules: do not change facial structure, skin tone, age, body shape, or ethnicity.",
+    "Keep hairstyle exactly unchanged unless an explicit hairstyle option is provided below.",
     "Keep eyes, nose, lips, jawline, and smile characteristics consistent with the source face.",
     "Avoid beauty-filter effects, face swapping, cartoonization, or synthetic identity drift.",
     "The output must look like the same real person wearing styled fashion.",
+    "You must keep identity and outfit intent strict. Do not invent a different person or unrelated outfit.",
+    input.strictnessMode === "strict"
+      ? "Wardrobe transfer mandate: if any asset reference image contains a person wearing a suit, dress, or full outfit, transfer that exact outfit design onto the provided character."
+      : "Wardrobe transfer preference: strongly follow the selected asset outfit while keeping photorealistic coherence.",
+    input.strictnessMode === "strict"
+      ? "Do not replace wardrobe with generic alternatives. Match silhouette, garment type, layering, fit, and visible design details from asset references."
+      : "Match key outfit elements from selected assets (garment type, color family, and styling details).",
+    input.strictnessMode === "strict"
+      ? "The generated character must wear the selected asset outfit, not their original selfie clothing."
+      : "Ensure selected assets are clearly reflected in the final wardrobe.",
+    input.characterType ? `Character profile: ${input.characterType}.` : "",
     `Wardrobe focus: ${input.garmentDescription}.`,
-    `Pose direction: ${input.pose}.`,
+    input.assetSummary ? `Assets to include and style on character: ${input.assetSummary}.` : "",
+    input.assetTransferSummary ? `Strict asset transfer details: ${input.assetTransferSummary}.` : "",
+    input.assetSummary
+      ? "Use the attached clothing references exactly as primary wardrobe pieces on the same character."
+      : "",
+    `Pose direction: ${poseDirective}.`,
+    input.hairStylePrompt ? `Hair direction: ${input.hairStylePrompt}` : "",
+    input.hairStyleName ? `Selected hair style option: ${input.hairStyleName}.` : "",
+    input.environmentPrompt ? `Environment and location direction: ${input.environmentPrompt}.` : "",
     `Mood and expression: ${input.mood}.`,
-    `Visual direction: ${stylePrompt}.`,
+    `Visual direction: ${mergedStylePrompt}.`,
     "Maintain realistic human anatomy and facial identity.",
+    "Keep the same face identity in close-up and full-body framing consistently.",
+    "Do not alter the person's recognizability under any condition.",
     "Preserve garment details, fit, and fabric texture accurately.",
+    "Do not ignore asset references. Ensure the generated look clearly reflects selected product assets.",
     "Deliver polished commercial photography quality suitable for social commerce.",
   ].join(" ");
 }
@@ -89,21 +126,85 @@ async function resolveSelfieInlinePart(selfieImageData: string, selfieImageUrl: 
   return null;
 }
 
+async function resolveImageUrlInlinePart(imageUrl: string) {
+  const trimmed = imageUrl.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    const response = await fetch(trimmed);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    return {
+      inlineData: {
+        mimeType: contentType,
+        data: Buffer.from(arrayBuffer).toString("base64"),
+      },
+    };
+  }
+  return null;
+}
+
+async function resolveAssetInlineParts(selectedAssets: Array<Record<string, unknown>>) {
+  const candidates = selectedAssets
+    .map((asset) => ({
+      imageUrl: String(asset.imageUrl || "").trim(),
+      title: String(asset.title || asset.productTitle || "").trim() || "Selected asset",
+    }))
+    .filter((entry) => entry.imageUrl)
+    .filter(Boolean)
+    .slice(0, 3);
+  const parts: Array<{
+    title: string;
+    part: { inlineData: { mimeType: string; data: string } };
+  }> = [];
+  for (const candidate of candidates) {
+    try {
+      const part = await resolveImageUrlInlinePart(candidate.imageUrl);
+      if (part?.inlineData?.data) {
+        parts.push({
+          title: candidate.title,
+          part,
+        });
+      }
+    } catch {
+      // Ignore asset image fetch failures and continue.
+    }
+  }
+  return parts;
+}
+
 async function callGeminiGenerate(input: {
   apiKey: string;
   model: string;
   prompt: string;
   selfiePart: { inlineData: { mimeType: string; data: string } } | null;
+  assetParts: Array<{
+    title: string;
+    part: { inlineData: { mimeType: string; data: string } };
+  }>;
   includeImageResponse: boolean;
 }) {
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+    { text: input.prompt },
+  ];
+  if (input.selfiePart) {
+    parts.push({
+      text: "Character identity reference image (must keep this same person).",
+    });
+    parts.push(input.selfiePart);
+  }
+  input.assetParts.forEach((asset, index) => {
+    parts.push({
+      text: `Asset reference ${index + 1}: ${asset.title}. Strictly transfer this outfit onto the same character.`,
+    });
+    parts.push(asset.part);
+  });
+
   const body = {
     contents: [
       {
         role: "user",
-        parts: [
-          { text: input.prompt },
-          ...(input.selfiePart ? [input.selfiePart] : []),
-        ],
+        parts,
       },
     ],
     generationConfig: input.includeImageResponse
@@ -142,13 +243,42 @@ export async function POST(req: NextRequest) {
     const selfieImageUrl = String(body.selfieImageUrl || "").trim();
     const selfieImageData = String(body.selfieImageData || "").trim();
     const garmentDescription = String(body.garmentDescription || "").trim();
+    const characterType = String(body.characterType || "").trim();
+    const customPose = String(body.customPose || "").trim();
+    const environmentPrompt = String(body.environmentPrompt || "").trim();
+    const stylePrompt = String(body.stylePrompt || "").trim();
+    const cameraPrompt = String(body.cameraPrompt || "").trim();
+    const hairStylePrompt = String(body.hairStylePrompt || "").trim();
+    const hairStyleName = String(body.hairStyleName || "").trim();
+    const selectedAssets = Array.isArray(body.selectedAssets)
+      ? (body.selectedAssets as Array<Record<string, unknown>>)
+      : [];
+    const strictnessMode =
+      String(body.strictnessMode || "").trim().toLowerCase() === "balanced" ? "balanced" : "strict";
     const style = String(body.style || "editorial").trim();
     const pose = String(body.pose || "confident full-body stance").trim();
     const mood = String(body.mood || "elegant and confident").trim();
+    const assetSummary = selectedAssets
+      .map((asset) => {
+        const title = String(asset.title || asset.productTitle || "").trim();
+        const desc = String(asset.description || "").trim();
+        if (title && desc) return `${title} (${desc})`;
+        return title || desc;
+      })
+      .filter(Boolean)
+      .join("; ");
+    const assetTransferSummary = selectedAssets
+      .map((asset) => {
+        const title = String(asset.title || asset.productTitle || "").trim() || "Selected asset";
+        const handle = String(asset.handle || asset.productHandle || "").trim();
+        return handle ? `${title} [${handle}]` : title;
+      })
+      .filter(Boolean)
+      .join("; ");
 
-    if ((!selfieImageUrl && !selfieImageData) || !garmentDescription || !code) {
+    if ((!selfieImageUrl && !selfieImageData) || (!garmentDescription && !assetSummary) || !code) {
       return NextResponse.json(
-        { error: "code, garmentDescription and selfie image are required." },
+        { error: "code, selfie image and at least one garment/asset are required." },
         { status: 400 }
       );
     }
@@ -179,9 +309,25 @@ export async function POST(req: NextRequest) {
       "gemini-2.5-flash-image",
       "gemini-2.5-flash",
     ].filter((value, index, array) => Boolean(value) && array.indexOf(value) === index);
-    const prompt = buildPhotoshootPrompt({ garmentDescription, style, pose, mood });
+    const prompt = buildPhotoshootPrompt({
+      garmentDescription: garmentDescription || "Use selected clothing assets with realistic drape and fit.",
+      characterType,
+      assetSummary,
+      assetTransferSummary,
+      strictnessMode,
+      style,
+      stylePrompt,
+      cameraPrompt,
+      pose,
+      customPose,
+      hairStylePrompt,
+      hairStyleName,
+      environmentPrompt,
+      mood,
+    });
     const trimmedSelfieData = selfieImageData.length > 2_000_000 ? "" : selfieImageData;
     const selfiePart = await resolveSelfieInlinePart(trimmedSelfieData, selfieImageUrl);
+    const assetParts = await resolveAssetInlineParts(selectedAssets);
 
     let selectedModel = modelCandidates[0] || "gemini-2.5-flash";
     let payload: any = null;
@@ -193,6 +339,7 @@ export async function POST(req: NextRequest) {
         model,
         prompt,
         selfiePart,
+        assetParts,
         includeImageResponse: true,
       });
       if (imageAttempt.response.ok) {
@@ -206,6 +353,7 @@ export async function POST(req: NextRequest) {
         model,
         prompt,
         selfiePart,
+        assetParts,
         includeImageResponse: false,
       });
       if (fallbackAttempt.response.ok) {
@@ -248,16 +396,25 @@ export async function POST(req: NextRequest) {
       prompt,
       metadata: {
         model: selectedModel,
+        characterType,
         style,
+        stylePrompt,
+        cameraPrompt,
+        strictnessMode,
         pose,
+        customPose,
+        hairStylePrompt,
+        hairStyleName,
+        environmentPrompt,
         mood,
+        selectedAssets,
       },
     });
 
     return NextResponse.json({
       ok: true,
       prompt,
-      generatedCaption: textPart || "AI photoshoot generated.",
+      generatedCaption: textPart || "Photo generated successfully.",
       generatedImageUrl,
       usedModel: selectedModel,
       outputType: generatedImageUrl ? "image" : "text",

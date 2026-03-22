@@ -4,11 +4,14 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
+    "dev:refresh-catalog": "docker compose up --build -d --no-deps medusa && docker compose exec medusa npx medusa exec ./src/scripts/seed.ts && docker compose up --build -d --no-deps storefront",
+    "dev:refresh-seed": "docker compose up --build -d --no-deps medusa && docker compose exec medusa npx medusa exec ./src/scripts/seed.ts",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "type-check": "turbo type-check",
-    "clean": "turbo clean && rm -rf node_modules"
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:reset-medusa": "bash scripts/reset-medusa-db.sh"
   },
   "devDependencies": {
     "@blessluxe/eslint-config": "workspace:*",

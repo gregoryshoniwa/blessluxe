@@ -4,8 +4,10 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useToast } from "@/providers";
 
 export default function SignupPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: oauthSession } = useSession();
@@ -57,7 +59,13 @@ export default function SignupPage() {
     setLoading(false);
 
     if (!response.ok) {
-      setError(data.error || "Unable to create account.");
+      const message = data.error || "Unable to create account.";
+      setError(message);
+      showToast({
+        title: "Signup failed",
+        message,
+        variant: "error",
+      });
       return;
     }
 
@@ -68,6 +76,11 @@ export default function SignupPage() {
         body: JSON.stringify({ token: data.verifyEmailToken }),
       });
     }
+    showToast({
+      title: "Account created",
+      message: "Your account is ready.",
+      variant: "success",
+    });
     router.replace(nextPath);
   };
 

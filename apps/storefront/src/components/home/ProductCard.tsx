@@ -3,10 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Heart, Eye, ShoppingBag } from "lucide-react";
+import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWishlistStore } from "@/stores/wishlist";
-import { useCartStore } from "@/stores/cart";
 
 interface ProductCardProps {
   id: string;
@@ -15,8 +14,9 @@ interface ProductCardProps {
   price: number;
   compareAtPrice?: number;
   thumbnail?: string | null;
-  badge?: "new" | "sale" | null;
+  badge?: "new" | "sale" | "hot" | "trending" | "bestseller" | null;
   colors?: string[];
+  sizes?: string[];
 }
 
 export function ProductCard({
@@ -28,36 +28,39 @@ export function ProductCard({
   thumbnail,
   badge,
   colors = [],
+  sizes = [],
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const { isInWishlist, toggleItem } = useWishlistStore();
-  const { addItem, openCart } = useCartStore();
   const inWishlist = isInWishlist(id);
+  const normalizeProductImageUrl = (value: string | null | undefined) => {
+    const input = String(value || "").trim();
+    if (!input) return null;
+    const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "").replace(/\/+$/, "");
+    if (input.startsWith("/")) {
+      return publicBase ? `${publicBase}${input}` : input;
+    }
+    if (publicBase && input.startsWith("http://medusa:9000")) {
+      return `${publicBase}${input.slice("http://medusa:9000".length)}`;
+    }
+    if (publicBase && input.startsWith("https://medusa:9000")) {
+      return `${publicBase}${input.slice("https://medusa:9000".length)}`;
+    }
+    return input;
+  };
+  const normalizedThumbnail = normalizeProductImageUrl(thumbnail);
 
   const handleAddToWishlist = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     toggleItem({
       productId: id,
       title,
-      thumbnail: thumbnail ?? null,
+      thumbnail: normalizedThumbnail ?? null,
       price,
       handle,
     });
-  };
-
-  const handleQuickAdd = (e: React.MouseEvent) => {
-    e.preventDefault();
-    addItem({
-      variantId: `${id}-default`,
-      productId: id,
-      handle,
-      title,
-      thumbnail: thumbnail ?? null,
-      quantity: 1,
-      unitPrice: price / 100,
-      variant: { title: "Default", sku: null },
-    });
-    openCart();
   };
 
   const formatPrice = (amount: number) => {
@@ -66,6 +69,18 @@ export function ProductCard({
       currency: "USD",
     }).format(amount / 100);
   };
+  const badgeLabel =
+    badge === "new"
+      ? "New"
+      : badge === "sale"
+      ? "Sale"
+      : badge === "hot"
+      ? "Hot"
+      : badge === "trending"
+      ? "Trending"
+      : badge === "bestseller"
+      ? "Bestseller"
+      : "";
 
   return (
     <motion.article
@@ -86,13 +101,14 @@ export function ProductCard({
           style={{ background: 'linear-gradient(to bottom right, var(--theme-background-dark), var(--theme-secondary))' }}
         >
           {/* Placeholder or Image */}
-          {thumbnail ? (
+          {normalizedThumbnail && !imageError ? (
             <motion.img
-              src={thumbnail}
+              src={normalizedThumbnail}
               alt={title}
               className="w-full h-full object-cover"
               animate={{ scale: isHovered ? 1.08 : 1 }}
               transition={{ duration: 0.6 }}
+              onError={() => setImageError(true)}
             />
           ) : (
             <motion.div
@@ -109,10 +125,13 @@ export function ProductCard({
               className={cn(
                 "absolute top-4 left-4 px-3 py-1 text-xs font-semibold tracking-wide uppercase",
                 badge === "new" && "bg-gold text-white",
-                badge === "sale" && "bg-red-600 text-white"
+                badge === "sale" && "bg-red-600 text-white",
+                badge === "hot" && "bg-red-500 text-white",
+                badge === "trending" && "bg-black text-white",
+                badge === "bestseller" && "bg-zinc-800 text-white"
               )}
             >
-              {badge === "new" ? "New" : "-30%"}
+              {badgeLabel}
             </span>
           )}
 
@@ -136,27 +155,6 @@ export function ProductCard({
             />
           </motion.button>
 
-          {/* Quick Actions */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 20 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3"
-          >
-            <button
-              className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gold hover:text-white transition-colors"
-              aria-label="Quick view"
-            >
-              <Eye className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleQuickAdd}
-              className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gold hover:text-white transition-colors"
-              aria-label="Add to cart"
-            >
-              <ShoppingBag className="w-5 h-5" />
-            </button>
-          </motion.div>
         </div>
 
         {/* Info */}

@@ -60,9 +60,58 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
     }
     return input;
   };
+  const COLOR_HEX_BY_LABEL: Record<string, string> = {
+    black: "#111827",
+    white: "#F9FAFB",
+    cream: "#F5F5DC",
+    ivory: "#FFFFF0",
+    navy: "#1E3A8A",
+    blue: "#2563EB",
+    red: "#B91C1C",
+    burgundy: "#7F1D1D",
+    green: "#166534",
+    olive: "#556B2F",
+    pink: "#EC4899",
+    blush: "#F9A8D4",
+    gold: "#D4AF37",
+    silver: "#9CA3AF",
+    gray: "#6B7280",
+    grey: "#6B7280",
+    brown: "#92400E",
+    beige: "#D6D3C9",
+    camel: "#C19A6B",
+  };
+  const normalizeColorId = (value: string) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  const looksLikeSize = (value: string) => {
+    const token = String(value || "").trim().toUpperCase();
+    if (!token) return false;
+    if (["XS", "S", "M", "L", "XL", "XXL", "XXXL"].includes(token)) return true;
+    if (/^\d{2}$/.test(token)) return true;
+    if (/^\d{1,2}(Y|M)$/.test(token)) return true;
+    return false;
+  };
+  const readOptionValues = (option: Record<string, unknown>) => {
+    const values = Array.isArray(option.values) ? option.values : [];
+    return values
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object") {
+          return String((entry as Record<string, unknown>).value || "");
+        }
+        return "";
+      })
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
 
   const mappedProducts = useMemo(() => {
     return (rawProducts || []).map((p) => {
+      const record = p as unknown as Record<string, unknown>;
       const firstVariant = p.variants?.[0] as Record<string, unknown> | undefined;
       const calcPrice = firstVariant?.calculated_price as Record<string, unknown> | undefined;
       const price = (calcPrice?.calculated_amount as number) ?? (firstVariant?.prices as Array<{amount: number}>)?.[0]?.amount ?? 0;
@@ -72,10 +121,48 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         : tags.includes("sale")
           ? ("sale" as const)
           : null;
+      const options = Array.isArray(record.options)
+        ? (record.options as Array<Record<string, unknown>>)
+        : [];
+      const sizeSet = new Set<string>();
+      const colorIdSet = new Set<string>();
+      const colorHexSet = new Set<string>();
 
-      const sizes = p.variants
-        ?.flatMap((v) => v.title?.split(" / ") || [])
-        .filter((s) => ["XS", "S", "M", "L", "XL"].includes(s));
+      for (const option of options) {
+        const title = String(option.title || "").toLowerCase();
+        const optionValues = readOptionValues(option);
+        if (title.includes("size")) {
+          for (const value of optionValues) {
+            if (looksLikeSize(value)) sizeSet.add(value.toUpperCase());
+          }
+        }
+        if (title.includes("color")) {
+          for (const value of optionValues) {
+            const colorId = normalizeColorId(value);
+            if (!colorId) continue;
+            colorIdSet.add(colorId);
+            colorHexSet.add(COLOR_HEX_BY_LABEL[colorId] || "#9CA3AF");
+          }
+        }
+      }
+
+      for (const variant of p.variants || []) {
+        const parts = String(variant.title || "")
+          .split(" / ")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        for (const part of parts) {
+          if (looksLikeSize(part)) {
+            sizeSet.add(part.toUpperCase());
+            continue;
+          }
+          const colorId = normalizeColorId(part);
+          if (colorId) {
+            colorIdSet.add(colorId);
+            colorHexSet.add(COLOR_HEX_BY_LABEL[colorId] || "#9CA3AF");
+          }
+        }
+      }
 
       return {
         id: p.id,
@@ -84,8 +171,9 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         price,
         thumbnail: normalizeProductImageUrl(p.thumbnail || p.images?.[0]?.url || null),
         badge,
-        colors: [] as string[],
-        sizes: [...new Set(sizes)],
+        colorIds: Array.from(colorIdSet),
+        colors: Array.from(colorHexSet),
+        sizes: Array.from(sizeSet),
       };
     });
   }, [rawProducts]);
@@ -96,6 +184,11 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
     if (filters.sizes.length > 0) {
       result = result.filter((p) =>
         filters.sizes.some((s) => p.sizes.includes(s))
+      );
+    }
+    if (filters.colors.length > 0) {
+      result = result.filter((p) =>
+        filters.colors.some((color) => p.colorIds.includes(color))
       );
     }
 
@@ -244,6 +337,7 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
                   thumbnail={product.thumbnail}
                   badge={product.badge}
                   colors={product.colors}
+                  sizes={product.sizes}
                 />
               </motion.div>
             ))}

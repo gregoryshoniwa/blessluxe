@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -19,6 +19,7 @@ import {
   MonitorUp,
 } from 'lucide-react';
 import { useAgentChatStore } from '@/stores/agent-chat';
+import { useCartStore } from '@/stores/cart';
 import { useGeminiLive } from '@/hooks/useGeminiLive';
 import type { ChatMessage, ProductSummary } from '@/lib/ai/types';
 import { cn } from '@/lib/utils';
@@ -161,9 +162,16 @@ export default function AgentWidget() {
     liveState,
     transcript,
     toggleLive,
+    disconnect: disconnectLive,
     isConnected: isLiveConnected,
     isConnecting: isLiveConnecting,
   } = useGeminiLive();
+
+  /** Must not use `getMergedItems()` from a selector — it returns a new array every time and triggers infinite re-renders. */
+  const medusaLines = useCartStore((s) => s.medusaLines);
+  const virtualLines = useCartStore((s) => s.virtualLines);
+  const cartItems = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -173,9 +181,46 @@ export default function AgentWidget() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const videoStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const prevOpenRef = useRef(false);
+  /** Avoid effect deps on disconnect (identity can change); always call latest. */
+  const disconnectLiveRef = useRef(disconnectLive);
+  disconnectLiveRef.current = disconnectLive;
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  /** Fresh chat + end live/media each time the panel opens (avoids stale thread and stuck voice). */
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      disconnectLiveRef.current();
+      useAgentChatStore.getState().resetSession();
+      useAgentChatStore.getState().setError(null);
+      setInput('');
+      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
+      videoStreamRef.current = null;
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+      setIsVideoOn(false);
+      setIsScreenSharing(false);
+    }
+    prevOpenRef.current = isOpen;
+    /** Intentionally only `isOpen` — store actions + disconnect ref avoid max-update-depth loops. */
+  }, [isOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/account/me', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const id = data?.customer?.id;
+        setCustomerId(typeof id === 'string' ? id : undefined);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -186,12 +231,20 @@ export default function AgentWidget() {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
+  const sendContext = useCallback(() => {
+    return {
+      currentPage: typeof window !== 'undefined' ? window.location.pathname : '/',
+      customerId,
+      cart: cartItems,
+    };
+  }, [customerId, cartItems]);
+
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
     setInput('');
-    sendMessage(trimmed);
-  }, [input, isLoading, sendMessage]);
+    sendMessage(trimmed, sendContext());
+  }, [input, isLoading, sendMessage, sendContext]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -202,7 +255,7 @@ export default function AgentWidget() {
 
   const handleSuggestionClick = (suggestion: string) => {
     if (isLoading) return;
-    sendMessage(suggestion);
+    sendMessage(suggestion, sendContext());
   };
 
   const toggleVideo = async () => {

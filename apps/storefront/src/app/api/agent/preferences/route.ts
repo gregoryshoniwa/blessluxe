@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PreferenceStore } from '@/lib/ai/memory/preference-store';
 
+export const dynamic = 'force-dynamic';
+
 const preferenceStore = new PreferenceStore();
 
 /**

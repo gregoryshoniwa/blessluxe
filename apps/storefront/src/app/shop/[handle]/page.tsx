@@ -6,6 +6,9 @@ import { Accordion } from '@/components/product/Accordion';
 import { RelatedProducts } from '@/components/product/RelatedProducts';
 import { RecentlyViewed } from '@/components/product/RecentlyViewed';
 import { ProductViewTracker } from '@/components/product/ProductViewTracker';
+import { getProductReviewSummary, listProductReviews } from '@/lib/product-reviews';
+import { buildPdpVariantRows, type PdpVariantRow } from '@/lib/medusa-pdp';
+import { getStoreMedusaFetchHeaders } from '@/lib/medusa';
 
 interface Product {
   id: string;
@@ -20,20 +23,14 @@ interface Product {
   images: string[];
   colors: Array<{ name: string; value: string }>;
   sizes: Array<{ name: string; inStock: boolean }>;
+  /** Medusa variant rows (pricing + inventory). When present, add-to-cart uses real variant ids. */
+  variantRows?: PdpVariantRow[];
   details: {
     description: string;
     sizeAndFit: string;
     shippingAndReturns: string;
     careInstructions: string;
   };
-}
-
-function getMedusaHeaders() {
-  const key =
-    process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY ||
-    process.env.MEDUSA_PUBLISHABLE_KEY ||
-    '';
-  return key ? { 'x-publishable-api-key': key, accept: 'application/json' } : { accept: 'application/json' };
 }
 
 function getMedusaCandidates() {
@@ -49,7 +46,7 @@ async function getDefaultRegionId(base: string) {
     url.searchParams.set('limit', '1');
     const response = await fetch(url.toString(), {
       cache: 'no-store',
-      headers: getMedusaHeaders(),
+      headers: getStoreMedusaFetchHeaders(),
     });
     if (!response.ok) return '';
     const payload = (await response.json()) as { regions?: Array<Record<string, unknown>> };
@@ -90,7 +87,9 @@ function mapStoreProduct(raw: Record<string, unknown>): Product {
 
   const options = Array.isArray(raw.options) ? (raw.options as Array<Record<string, unknown>>) : [];
   const colorOption = options.find((o) => String(o.title || '').toLowerCase().includes('color'));
+  const sizeOption = options.find((o) => String(o.title || '').toLowerCase().includes('size'));
   const colorValues = Array.isArray(colorOption?.values) ? (colorOption?.values as Array<Record<string, unknown>>) : [];
+  const sizeValues = Array.isArray(sizeOption?.values) ? (sizeOption?.values as Array<Record<string, unknown>>) : [];
   const colors =
     colorValues.length > 0
       ? colorValues.map((v, index) => ({
@@ -99,15 +98,36 @@ function mapStoreProduct(raw: Record<string, unknown>): Product {
         }))
       : [{ name: 'Default', value: '#111827' }];
 
+  const looksLikeSize = (value: string) => {
+    const token = String(value || '').trim().toUpperCase();
+    if (!token) return false;
+    if (['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'].includes(token)) return true;
+    if (/^\d{2}$/.test(token)) return true;
+    if (/^\d{1,2}(Y|M)$/.test(token)) return true;
+    return false;
+  };
   const sizeSet = new Set<string>();
+  for (const value of sizeValues) {
+    const parsed = String(value.value || '').trim();
+    if (looksLikeSize(parsed)) sizeSet.add(parsed.toUpperCase());
+  }
   for (const variant of variants) {
     const title = String(variant.title || '');
     const parts = title.split(' / ').map((p) => p.trim());
     for (const part of parts) {
-      if (['XS', 'S', 'M', 'L', 'XL', 'XXL'].includes(part.toUpperCase())) sizeSet.add(part.toUpperCase());
+      if (looksLikeSize(part)) sizeSet.add(part.toUpperCase());
     }
   }
-  const sizes = (sizeSet.size ? Array.from(sizeSet) : ['Default']).map((size) => ({ name: size, inStock: true }));
+  const alphaOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+  const sortedSizes = Array.from(sizeSet).sort((a, b) => {
+    const ai = alphaOrder.indexOf(a);
+    const bi = alphaOrder.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b, undefined, { numeric: true });
+  });
+  const sizes = (sortedSizes.length ? sortedSizes : ['DEFAULT']).map((size) => ({ name: size, inStock: true }));
 
   const categories = Array.isArray(raw.categories) ? (raw.categories as Array<Record<string, unknown>>) : [];
   const firstCategory = categories[0];
@@ -115,11 +135,70 @@ function mapStoreProduct(raw: Record<string, unknown>): Product {
 
   const description = String(raw.description || '').trim() || 'Premium fashion piece from our curated collection.';
 
+  const variantRows = buildPdpVariantRows(raw);
+
+  const COLOR_HEX_BY_LABEL: Record<string, string> = {
+    black: '#111827',
+    white: '#F9FAFB',
+    cream: '#F5F5DC',
+    champagne: '#F7E7CE',
+    'champagne-gold': '#D4AF37',
+    'midnight-black': '#111827',
+    'rose-garden': '#EC4899',
+    'lavender-fields': '#A78BFA',
+    'ocean-blue': '#2563EB',
+    burgundy: '#7F1D1D',
+    'emerald-green': '#166534',
+    navy: '#1E3A8A',
+    terracotta: '#C2410C',
+    sage: '#84CC16',
+    default: '#111827',
+  };
+  const normalizeColorId = (value: string) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+  let outColors = colors;
+  let outSizes = sizes;
+  let listPrice = price;
+  let outSale: number | undefined;
+
+  if (variantRows.length > 0) {
+    const first = variantRows[0];
+    listPrice = first.price;
+    outSale = first.salePrice;
+    const uniqColors = [...new Set(variantRows.map((r) => r.color))];
+    outColors = uniqColors.map((name, index) => {
+      const id = normalizeColorId(name);
+      return {
+        name,
+        value: COLOR_HEX_BY_LABEL[id] || ['#111827', '#1f2937', '#7f1d1d', '#6b7280', '#0f766e'][index % 5],
+      };
+    });
+    const alphaOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+    const uniqSizes = [...new Set(variantRows.map((r) => r.size))].sort((a, b) => {
+      const ai = alphaOrder.indexOf(a);
+      const bi = alphaOrder.indexOf(b);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+    outSizes = uniqSizes.map((name) => ({
+      name,
+      inStock: variantRows.some((r) => r.size === name && r.inStock),
+    }));
+  }
+
   return {
     id: String(raw.id || ''),
     name: String(raw.title || 'Product'),
     handle: String(raw.handle || ''),
-    price,
+    price: listPrice,
+    salePrice: outSale,
     rating: 4.6,
     reviewCount: 0,
     description,
@@ -127,8 +206,9 @@ function mapStoreProduct(raw: Record<string, unknown>): Product {
     images: mergedImages.length
       ? mergedImages
       : ['https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=1200'],
-    colors,
-    sizes,
+    colors: outColors,
+    sizes: outSizes,
+    variantRows: variantRows.length > 0 ? variantRows : undefined,
     details: {
       description,
       sizeAndFit: 'Fits true to size. Please select your usual size.',
@@ -148,7 +228,7 @@ const getProduct = async (handle: string): Promise<Product | null> => {
       if (regionId) url.searchParams.set('region_id', regionId);
       const response = await fetch(url.toString(), {
         cache: 'no-store',
-        headers: getMedusaHeaders(),
+        headers: getStoreMedusaFetchHeaders(),
       });
       if (!response.ok) continue;
       const payload = (await response.json()) as { products?: Array<Record<string, unknown>> };
@@ -171,7 +251,7 @@ const getRelatedProducts = async (_productId: string) => {
       if (regionId) url.searchParams.set('region_id', regionId);
       const response = await fetch(url.toString(), {
         cache: 'no-store',
-        headers: getMedusaHeaders(),
+        headers: getStoreMedusaFetchHeaders(),
       });
       if (!response.ok) continue;
       const payload = (await response.json()) as { products?: Array<Record<string, unknown>> };
@@ -195,69 +275,15 @@ const getRelatedProducts = async (_productId: string) => {
 };
 
 const getReviews = async (_productId: string) => {
-  // TODO: Replace with actual API call
+  const [summary, reviews] = await Promise.all([
+    getProductReviewSummary({ productId: _productId }),
+    listProductReviews(_productId),
+  ]);
   return {
-    averageRating: 4.5,
-    totalReviews: 128,
-    ratingBreakdown: {
-      5: 78,
-      4: 32,
-      3: 12,
-      2: 4,
-      1: 2,
-    },
-    reviews: [
-      {
-        id: '1',
-        author: 'Sarah M.',
-        rating: 5,
-        date: 'January 15, 2026',
-        title: 'Absolutely stunning!',
-        content:
-          'This dress exceeded my expectations. The silk is incredibly soft and the fit is perfect. I wore it to a wedding and received so many compliments!',
-        verified: true,
-      },
-      {
-        id: '2',
-        author: 'Emily R.',
-        rating: 4,
-        date: 'January 10, 2026',
-        title: 'Beautiful dress, runs slightly small',
-        content:
-          'Love the quality and design. I would recommend sizing up if you want a more comfortable fit. The color is exactly as shown in the photos.',
-        verified: true,
-      },
-      {
-        id: '3',
-        author: 'Jessica L.',
-        rating: 5,
-        date: 'January 5, 2026',
-        title: 'Worth every penny',
-        content:
-          'The craftsmanship is exceptional. You can tell this is a high-quality piece. The fabric feels luxurious and the cut is very flattering.',
-        verified: true,
-      },
-      {
-        id: '4',
-        author: 'Amanda K.',
-        rating: 4,
-        date: 'December 28, 2025',
-        title: 'Great for special occasions',
-        content:
-          'Perfect for formal events. The dress photographs beautifully. Only minor issue is that it wrinkles easily, but that\'s expected with silk.',
-        verified: false,
-      },
-      {
-        id: '5',
-        author: 'Michelle T.',
-        rating: 5,
-        date: 'December 20, 2025',
-        title: 'My new favorite dress!',
-        content:
-          'I\'ve been looking for the perfect dress for months and finally found it. The quality is outstanding and it fits like a dream.',
-        verified: true,
-      },
-    ],
+    averageRating: summary.averageRating,
+    totalReviews: summary.totalReviews,
+    ratingBreakdown: summary.ratingBreakdown,
+    reviews,
   };
 };
 
@@ -305,6 +331,11 @@ export default async function ProductPage({
 
   const relatedProducts = await getRelatedProducts(product.id);
   const reviewsData = await getReviews(product.id);
+  const productWithReviews: Product = {
+    ...product,
+    rating: reviewsData.totalReviews > 0 ? reviewsData.averageRating : product.rating,
+    reviewCount: reviewsData.totalReviews,
+  };
 
   // JSON-LD structured data for SEO
   const jsonLd = {
@@ -324,8 +355,8 @@ export default async function ProductPage({
     },
     aggregateRating: {
       '@type': 'AggregateRating',
-      ratingValue: product.rating,
-      reviewCount: product.reviewCount,
+      ratingValue: reviewsData.totalReviews > 0 ? reviewsData.averageRating : product.rating,
+      reviewCount: reviewsData.totalReviews,
     },
   };
 
@@ -362,13 +393,13 @@ export default async function ProductPage({
         <ProductViewTracker
           product={{
             id: product.id,
-            name: product.name,
-            handle: product.handle,
-            price: product.price,
-            salePrice: product.salePrice,
-            image: product.images[0],
-            rating: product.rating,
-            reviewCount: product.reviewCount,
+            name: productWithReviews.name,
+            handle: productWithReviews.handle,
+            price: productWithReviews.price,
+            salePrice: productWithReviews.salePrice,
+            image: productWithReviews.images[0],
+            rating: productWithReviews.rating,
+            reviewCount: productWithReviews.reviewCount,
           }}
         />
 
@@ -379,7 +410,7 @@ export default async function ProductPage({
             <ImageGallery images={product.images} productName={product.name} />
 
             {/* Right: Product Info */}
-            <ProductClientWrapper product={product} />
+            <ProductClientWrapper product={productWithReviews} />
           </div>
 
           {/* Accordion Sections */}
@@ -389,7 +420,11 @@ export default async function ProductPage({
 
           {/* Reviews Section */}
           <div className="mb-16">
-            <ReviewsClientWrapper reviewsData={reviewsData} />
+            <ReviewsClientWrapper
+              reviewsData={reviewsData}
+              productId={product.id}
+              productHandle={product.handle}
+            />
           </div>
 
           {/* Related Products */}

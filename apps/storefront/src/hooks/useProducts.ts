@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { medusa } from "@/lib/medusa";
 
 // Placeholder product type until Medusa types are available
@@ -33,16 +33,21 @@ export interface Category {
   parent_category_id: string | null;
 }
 
+/** Minimal region shape for storefront pricing (avoids leaking Medusa internal types from hooks). */
+export interface MedusaRegionRef {
+  id: string;
+}
+
 /**
  * Fetch regions to get default region_id for pricing
  */
-export function useRegions() {
+export function useRegions(): UseQueryResult<MedusaRegionRef[], Error> {
   return useQuery({
     queryKey: ["regions"],
-    queryFn: async () => {
+    queryFn: async (): Promise<MedusaRegionRef[]> => {
       try {
         const response = await medusa.store.region.list();
-        return response.regions;
+        return (response.regions ?? []).map((r) => ({ id: String(r.id) }));
       } catch {
         return [];
       }

@@ -10,8 +10,7 @@
  * Docs: https://ai.google.dev/gemini-api/docs/live
  */
 
-import { getToolDefinitions } from '../tools';
-import { executeTool } from '../tools';
+import { executeVoiceTool, getVoiceToolDefinitions } from '../tools/voice-tools';
 import type { AgentContext, ToolDefinition } from '../types';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -21,6 +20,8 @@ export interface GeminiLiveCallbacks {
   onStateChange?: (state: GeminiLiveState) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onResponseText?: (text: string) => void;
+  /** Model finished a spoken/text turn — flush accumulated assistant text to chat. */
+  onTurnComplete?: () => void;
   onAudioChunk?: (pcm24k: ArrayBuffer) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => void;
   onToolResult?: (name: string, result: unknown) => void;
@@ -79,9 +80,13 @@ export class GeminiLiveClient {
   private mediaStream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
   private scriptProcessor: ScriptProcessorNode | null = null;
+  private micMuteGain: GainNode | null = null;
   private playbackContext: AudioContext | null = null;
-  private playbackQueue: ArrayBuffer[] = [];
-  private isPlaying = false;
+  /** Schedule PCM chunks back-to-back on the audio clock (avoids gaps/crackling from await-per-chunk). */
+  private nextPlaybackTime = 0;
+  private activePlaybackSources: AudioBufferSourceNode[] = [];
+  /** Latest cumulative user speech from input transcription; flushed to chat on turnComplete. */
+  private pendingUserTranscript = '';
   private state: GeminiLiveState = 'disconnected';
   private callbacks: GeminiLiveCallbacks;
   private config: GeminiLiveConfig;
@@ -146,6 +151,7 @@ export class GeminiLiveClient {
 
   // ── Disconnect ──────────────────────────────────────────────
   disconnect(): void {
+    this.pendingUserTranscript = '';
     this.stopMicrophone();
     this.stopPlayback();
     if (this.ws) {
@@ -174,7 +180,7 @@ export class GeminiLiveClient {
     if (!this.ws) return;
     console.log('[GeminiLive] Sending setup for model:', model);
 
-    const tools = getToolDefinitions();
+    const tools = getVoiceToolDefinitions();
 
     const setupMessage = {
       setup: {
@@ -189,6 +195,9 @@ export class GeminiLiveClient {
             },
           },
         },
+        /** Setup-level flags (see BidiGenerateContentSetup) — enables input/output speech transcriptions for the chat UI. */
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
         systemInstruction: {
           parts: [
             {
@@ -197,7 +206,10 @@ export class GeminiLiveClient {
                 `You are LUXE, the AI shopping assistant for BLESSLUXE, a premium women's fashion boutique. ` +
                   `You are warm, sophisticated, and genuinely helpful. You speak elegantly but naturally. ` +
                   `You can search products, manage the cart, check orders, and give personalized recommendations. ` +
-                  `Keep responses concise for voice — 1-3 sentences unless the customer asks for detail.`,
+                  `You cannot send email via voice — if the customer asks, tell them to use the text chat. ` +
+                  `Keep responses concise for voice — 1-3 sentences unless the customer asks for detail. ` +
+                  `Important: In voice mode, never emit internal planning, reasoning, stage directions, or meta-commentary ` +
+                  `in any text field — only speak aloud the words you want the customer to hear, as natural dialogue.`,
             },
           ],
         },
@@ -236,44 +248,52 @@ export class GeminiLiveClient {
 
     // Handle interruption
     if (serverContent?.interrupted) {
-      this.playbackQueue = [];
+      this.stopScheduledPlayback();
       this.callbacks.onInterrupted?.();
       return;
     }
 
-    // Handle model audio/text turn
+    // Handle model audio turn — do NOT forward part.text to the chat; it often contains chain-of-thought /
+    // "thought" lines. Chat copy comes from outputTranscription (what was spoken) only.
     if (serverContent?.modelTurn) {
       const modelTurn = serverContent.modelTurn as { parts?: Array<Record<string, unknown>> };
       for (const part of modelTurn.parts ?? []) {
-        if (part.text) {
-          this.callbacks.onResponseText?.(part.text as string);
-        }
         if (part.inlineData) {
           const inlineData = part.inlineData as { data?: string; mimeType?: string };
           if (inlineData.data) {
             const audioBuffer = base64ToArrayBuffer(inlineData.data);
             this.callbacks.onAudioChunk?.(audioBuffer);
-            this.playbackQueue.push(audioBuffer);
-            this.playNextChunk();
+            this.schedulePcmChunk(audioBuffer);
           }
         }
       }
     }
 
-    // Handle input transcription
+    // Input speech → live preview + buffer; committed to chat on turnComplete
     if (serverContent?.inputTranscription) {
       const transcript = serverContent.inputTranscription as { text?: string };
       if (transcript.text) {
-        this.callbacks.onTranscript?.(transcript.text, true);
+        this.pendingUserTranscript = transcript.text;
+        this.callbacks.onTranscript?.(transcript.text, false);
       }
     }
 
-    // Handle output transcription
+    // What the model actually said (for chat transcript) — not modelTurn text parts
     if (serverContent?.outputTranscription) {
       const transcript = serverContent.outputTranscription as { text?: string };
       if (transcript.text) {
         this.callbacks.onResponseText?.(transcript.text);
       }
+    }
+
+    // After modelTurn / transcriptions — same message often includes turnComplete last
+    if (serverContent?.turnComplete) {
+      const u = this.pendingUserTranscript.trim();
+      if (u) {
+        this.callbacks.onTranscript?.(u, true);
+        this.pendingUserTranscript = '';
+      }
+      this.callbacks.onTurnComplete?.();
     }
 
     // Handle tool/function calls
@@ -289,7 +309,7 @@ export class GeminiLiveClient {
       for (const fc of functionCalls) {
         this.callbacks.onToolCall?.(fc.name, fc.args);
 
-        const result = await executeTool(fc.name, fc.args, this.agentContext);
+        const result = await executeVoiceTool(fc.name, fc.args, this.agentContext);
         this.callbacks.onToolResult?.(fc.name, result);
 
         functionResponses.push({
@@ -322,7 +342,7 @@ export class GeminiLiveClient {
 
       // ScriptProcessorNode is deprecated but widely supported;
       // AudioWorklet would be the modern replacement.
-      this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+      this.scriptProcessor = this.audioContext.createScriptProcessor(2048, 1, 1);
 
       this.scriptProcessor.onaudioprocess = (e) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
@@ -345,7 +365,11 @@ export class GeminiLiveClient {
       };
 
       source.connect(this.scriptProcessor);
-      this.scriptProcessor.connect(this.audioContext.destination);
+      // Keep the graph “live” without routing mic to speakers (avoids echo / feedback).
+      this.micMuteGain = this.audioContext.createGain();
+      this.micMuteGain.gain.value = 0;
+      this.scriptProcessor.connect(this.micMuteGain);
+      this.micMuteGain.connect(this.audioContext.destination);
     } catch (err) {
       this.callbacks.onError?.(
         err instanceof Error ? err : new Error('Microphone access denied')
@@ -356,50 +380,75 @@ export class GeminiLiveClient {
   private stopMicrophone(): void {
     this.scriptProcessor?.disconnect();
     this.scriptProcessor = null;
+    this.micMuteGain?.disconnect();
+    this.micMuteGain = null;
     this.mediaStream?.getTracks().forEach((t) => t.stop());
     this.mediaStream = null;
     this.audioContext?.close();
     this.audioContext = null;
   }
 
-  // ── Playback ────────────────────────────────────────────────
-  private async playNextChunk(): Promise<void> {
-    if (this.isPlaying || this.playbackQueue.length === 0) return;
-    this.isPlaying = true;
-
+  // ── Playback (scheduled, gapless) ───────────────────────────
+  private schedulePcmChunk(chunk: ArrayBuffer): void {
     if (!this.playbackContext) {
       this.playbackContext = new AudioContext({ sampleRate: 24000 });
     }
+    const ctx = this.playbackContext;
+    void ctx.resume();
 
-    while (this.playbackQueue.length > 0) {
-      const chunk = this.playbackQueue.shift()!;
-      const int16 = new Int16Array(chunk);
-      const float32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 32768;
-      }
+    const int16 = new Int16Array(chunk);
+    if (int16.length === 0) return;
 
-      const audioBuffer = this.playbackContext.createBuffer(1, float32.length, 24000);
-      audioBuffer.copyToChannel(float32, 0);
-
-      const source = this.playbackContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.playbackContext.destination);
-
-      await new Promise<void>((resolve) => {
-        source.onended = () => resolve();
-        source.start();
-      });
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768;
     }
 
-    this.isPlaying = false;
+    const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
+    audioBuffer.copyToChannel(float32, 0);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    const start = Math.max(now + 0.01, this.nextPlaybackTime);
+    this.nextPlaybackTime = start + audioBuffer.duration;
+
+    this.activePlaybackSources.push(source);
+    source.onended = () => {
+      const idx = this.activePlaybackSources.indexOf(source);
+      if (idx >= 0) this.activePlaybackSources.splice(idx, 1);
+    };
+
+    try {
+      source.start(start);
+    } catch (e) {
+      console.warn('[GeminiLive] AudioBufferSource.start failed:', e);
+    }
+  }
+
+  private stopScheduledPlayback(): void {
+    for (const s of [...this.activePlaybackSources]) {
+      try {
+        s.stop(0);
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.activePlaybackSources = [];
+    if (this.playbackContext) {
+      this.nextPlaybackTime = this.playbackContext.currentTime;
+    } else {
+      this.nextPlaybackTime = 0;
+    }
   }
 
   private stopPlayback(): void {
-    this.playbackQueue = [];
-    this.isPlaying = false;
-    this.playbackContext?.close();
+    this.stopScheduledPlayback();
+    this.playbackContext?.close().catch(() => {});
     this.playbackContext = null;
+    this.nextPlaybackTime = 0;
   }
 
   // ── State ───────────────────────────────────────────────────

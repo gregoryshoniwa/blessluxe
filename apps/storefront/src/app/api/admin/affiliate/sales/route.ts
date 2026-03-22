@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const params = affiliateId ? [affiliateId] : [];
 
     const sales = await query<Record<string, unknown>>(
-      `SELECT s.id, s.affiliate_id, a.code, a.email, s.order_id, s.order_total, s.commission_amount, s.currency_code, s.status, s.created_at
+      `SELECT s.id, s.affiliate_id, a.code, a.email, s.order_id, s.order_total, s.commission_amount, s.currency_code, s.status, s.metadata, s.created_at
        FROM affiliate_sale s
        INNER JOIN affiliate a ON a.id = s.affiliate_id
        ${where}
