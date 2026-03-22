@@ -2,7 +2,11 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import type { GeminiLiveState, GeminiLiveCallbacks } from '@/lib/ai/voice/gemini-live';
-import { LUXE_GEMINI_LIVE_CORE, LUXE_VOICE_OPENING_USER_TURN } from '@/lib/ai/config';
+import {
+  LUXE_GEMINI_LIVE_CORE,
+  LUXE_VOICE_OPENING_AFTER_CHAT,
+  LUXE_VOICE_OPENING_USER_TURN,
+} from '@/lib/ai/config';
 import { useAgentChatStore } from '@/stores/agent-chat';
 import type { ChatMessage } from '@/lib/ai/types';
 
@@ -78,6 +82,18 @@ export function useGeminiLive() {
 
     const { GeminiLiveClient } = await import('@/lib/ai/voice/gemini-live');
 
+    const tryKickoffVoiceOpening = (client: InstanceType<typeof GeminiLiveClient>) => {
+      if (voiceOpeningSentRef.current) return;
+      const s = useAgentChatStore.getState();
+      if (s.isLoading) return;
+
+      const prompt =
+        s.messages.length === 0 ? LUXE_VOICE_OPENING_USER_TURN : LUXE_VOICE_OPENING_AFTER_CHAT;
+      if (client.sendText(prompt)) {
+        voiceOpeningSentRef.current = true;
+      }
+    };
+
     const callbacks: GeminiLiveCallbacks = {
       onStateChange: (state) => {
         setLiveState(state);
@@ -131,6 +147,10 @@ export function useGeminiLive() {
         const { setError } = useAgentChatStore.getState();
         setError(error.message);
       },
+      onSetupComplete: () => {
+        const live = clientRef.current;
+        if (live) tryKickoffVoiceOpening(live);
+      },
     };
 
     const { sessionId } = useAgentChatStore.getState();
@@ -169,20 +189,21 @@ export function useGeminiLive() {
     voiceOpeningSentRef.current = false;
     await client.connect();
 
-    const tryKickoffVoiceOpening = () => {
-      if (voiceOpeningSentRef.current) return;
+    // Proactive spoken greeting: text chat may already have an opening message — still send a voice kickoff.
+    // setupComplete + staggered retries cover API variance and isLoading from parallel text opening.
+    tryKickoffVoiceOpening(client);
+    setTimeout(() => {
       const live = clientRef.current;
-      if (!live) return;
-      const s = useAgentChatStore.getState();
-      if (s.messages.length > 0 || s.isLoading) return;
-      live.sendText(LUXE_VOICE_OPENING_USER_TURN);
-      voiceOpeningSentRef.current = true;
-    };
-
-    // Setup + mic need a beat before the first client turn; retry while text opening is still loading.
-    setTimeout(tryKickoffVoiceOpening, 350);
-    setTimeout(tryKickoffVoiceOpening, 1100);
-    setTimeout(tryKickoffVoiceOpening, 2200);
+      if (live) tryKickoffVoiceOpening(live);
+    }, 250);
+    setTimeout(() => {
+      const live = clientRef.current;
+      if (live) tryKickoffVoiceOpening(live);
+    }, 900);
+    setTimeout(() => {
+      const live = clientRef.current;
+      if (live) tryKickoffVoiceOpening(live);
+    }, 1800);
   }, [flushAssistantMessage]);
 
   const disconnect = useCallback(() => {

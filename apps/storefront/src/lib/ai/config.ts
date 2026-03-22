@@ -118,3 +118,7 @@ in any text field — only speak aloud the words you want the customer to hear, 
 /** Injected as the first user turn over Gemini Live so LUXE speaks before the customer (no tools). */
 export const LUXE_VOICE_OPENING_USER_TURN =
   '[Session start — you speak first. Give a brief warm welcome in 1–2 sentences as LUXE. Use first name from CUSTOMER PROFILE if present. Prose only, no tools.]';
+
+/** When text chat already has messages — still force a spoken first turn in voice (user expects LUXE to speak, not wait for mic). */
+export const LUXE_VOICE_OPENING_AFTER_CHAT =
+  '[Voice session is live — you speak first. Give a brief warm spoken line in 1–2 sentences; you may align with the chat above. Do not wait for the customer to speak. Prose only, no tools yet.]';

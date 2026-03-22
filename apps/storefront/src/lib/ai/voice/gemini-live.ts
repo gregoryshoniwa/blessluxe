@@ -29,6 +29,8 @@ export interface GeminiLiveCallbacks {
   onToolResult?: (name: string, result: unknown) => void;
   onError?: (error: Error) => void;
   onInterrupted?: () => void;
+  /** Server acknowledged Live session setup — safe to send the first client text turn. */
+  onSetupComplete?: () => void;
 }
 
 interface GeminiLiveConfig {
@@ -117,25 +119,13 @@ export class GeminiLiveClient {
 
       console.log('[GeminiLive] Connecting to:', wsUrl.replace(/key=.*/, 'key=***'));
       this.ws = new WebSocket(wsUrl);
+      const socket = this.ws;
 
-      this.ws.onopen = () => {
-        console.log('[GeminiLive] WebSocket connected, sending setup...');
-        this.sendSetup(model);
-        this.setState('connected');
-        this.startMicrophone();
-      };
-
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
         this.handleMessage(event.data);
       };
 
-      this.ws.onerror = (event) => {
-        console.error('[GeminiLive] WebSocket error:', event);
-        this.callbacks.onError?.(new Error('WebSocket connection error'));
-        this.setState('error');
-      };
-
-      this.ws.onclose = (event) => {
+      socket.onclose = (event) => {
         console.log('[GeminiLive] WebSocket closed:', event.code, event.reason);
         if (event.code !== 1000 && event.code !== 1005) {
           this.callbacks.onError?.(
@@ -145,6 +135,23 @@ export class GeminiLiveClient {
         this.setState('disconnected');
         this.stopMicrophone();
       };
+
+      await new Promise<void>((resolve, reject) => {
+        socket.onopen = () => {
+          console.log('[GeminiLive] WebSocket connected, sending setup...');
+          this.sendSetup(model);
+          this.setState('connected');
+          void this.startMicrophone();
+          resolve();
+        };
+
+        socket.onerror = () => {
+          console.error('[GeminiLive] WebSocket error');
+          this.callbacks.onError?.(new Error('WebSocket connection error'));
+          this.setState('error');
+          reject(new Error('WebSocket connection error'));
+        };
+      });
     } catch (err) {
       this.callbacks.onError?.(err instanceof Error ? err : new Error('Failed to connect'));
       this.setState('error');
@@ -164,8 +171,9 @@ export class GeminiLiveClient {
   }
 
   // ── Send text message ───────────────────────────────────────
-  sendText(text: string): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  /** Returns false if the socket is not ready (caller may retry). */
+  sendText(text: string): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
 
     this.ws.send(
       JSON.stringify({
@@ -175,6 +183,7 @@ export class GeminiLiveClient {
         },
       })
     );
+    return true;
   }
 
   // ── Setup message ───────────────────────────────────────────
@@ -229,6 +238,12 @@ export class GeminiLiveClient {
     } catch {
       console.warn('[GeminiLive] Non-JSON message:', data.slice(0, 200));
       return;
+    }
+
+    const setupDone =
+      (msg as Record<string, unknown>).setupComplete ?? (msg as Record<string, unknown>).setup_complete;
+    if (setupDone != null) {
+      this.callbacks.onSetupComplete?.();
     }
 
     // Log message type (but not audio data which is huge)
