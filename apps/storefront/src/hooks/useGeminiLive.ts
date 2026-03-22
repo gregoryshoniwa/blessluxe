@@ -101,12 +101,24 @@ export function useGeminiLive() {
     };
 
     const { sessionId } = useAgentChatStore.getState();
+
+    let customerId: string | undefined;
+    try {
+      const r = await fetch('/api/account/me', { cache: 'no-store', credentials: 'include' });
+      const data = (await r.json()) as { customer?: { id?: unknown } | null };
+      const raw = data?.customer?.id;
+      if (raw != null && raw !== '') customerId = String(raw);
+    } catch {
+      /* stay guest */
+    }
+
     const client = new GeminiLiveClient(
       {
         apiKey,
         context: {
           sessionId,
-          isAuthenticated: false,
+          customerId,
+          isAuthenticated: Boolean(customerId),
         },
       },
       callbacks

@@ -41,6 +41,11 @@ ${profile.priorConversationSummaries?.length ? profile.priorConversationSummarie
 - Reference past orders and searches when relevant — do not invent orders
 - They prefer ${profile.favoriteStyles?.[0] || 'varied'} styles; colors: ${profile.favoriteColors?.[0] || 'neutral tones'}
 - Recommend items in their size range; respect typical budget unless they ask otherwise`;
+    } else if (context.isAuthenticated && context.customerId) {
+      prompt += `\n\n## SIGNED-IN CUSTOMER
+The customer is logged in to their BLESSLUXE account (customer id: ${context.customerId}). Full profile enrichment may be partial or loading.
+- Do not describe them as a guest or say they lack an account
+- You may send account emails when tools succeed; if a tool says they must log in, that is a session edge case — suggest refreshing the page or signing in again`;
     } else {
       prompt += `\n\n## GUEST CUSTOMER
 This customer is not logged in.

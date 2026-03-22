@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { ShoppingAgent } from '@/lib/ai/agent/agent-core';
 import type { AgentContext } from '@/lib/ai/types';
+import { getCurrentCustomer } from '@/lib/customer-account';
 
 const agent = new ShoppingAgent();
 
@@ -14,7 +15,6 @@ export async function POST(req: NextRequest) {
       currentPage,
       cart,
       recentlyViewed,
-      customerId,
     } = body;
 
     if (!sessionId) {
@@ -24,10 +24,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const sessionCustomer = await getCurrentCustomer();
+    const resolvedCustomerId =
+      sessionCustomer?.id != null && sessionCustomer.id !== ''
+        ? String(sessionCustomer.id)
+        : undefined;
+
     const context: AgentContext = {
-      customerId: customerId || undefined,
+      customerId: resolvedCustomerId,
       sessionId,
-      isAuthenticated: !!customerId,
+      isAuthenticated: Boolean(resolvedCustomerId),
       currentPage: currentPage || undefined,
       cartItems: cart || [],
       recentlyViewed: recentlyViewed || [],

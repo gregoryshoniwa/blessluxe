@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { AgentContext } from "@/lib/ai/types";
 import { ShoppingAgent } from "@/lib/ai/agent/agent-core";
+import { getCurrentCustomer } from "@/lib/customer-account";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,6 @@ export async function POST(req: NextRequest) {
       sessionId,
       messages: conversationHistory,
       currentPage,
-      customerId,
       cart,
       recentlyViewed,
     } = body;
@@ -43,10 +43,17 @@ export async function POST(req: NextRequest) {
           .filter((m: { content: string }) => m.content.trim().length > 0)
       : undefined;
 
+    /** Session cookie is authoritative — do not rely on client-supplied customerId (stale / spoofable). */
+    const sessionCustomer = await getCurrentCustomer();
+    const resolvedCustomerId =
+      sessionCustomer?.id != null && sessionCustomer.id !== ""
+        ? String(sessionCustomer.id)
+        : undefined;
+
     const context: AgentContext = {
       sessionId: String(sessionId),
-      customerId: customerId ? String(customerId) : undefined,
-      isAuthenticated: Boolean(customerId),
+      customerId: resolvedCustomerId,
+      isAuthenticated: Boolean(resolvedCustomerId),
       currentPage: currentPage ? String(currentPage) : undefined,
       cartItems: Array.isArray(cart) ? cart : [],
       recentlyViewed: Array.isArray(recentlyViewed) ? recentlyViewed : [],

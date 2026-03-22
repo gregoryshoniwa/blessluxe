@@ -173,6 +173,20 @@ export default function AgentWidget() {
   const cartItems = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
 
+  const refreshCustomerId = useCallback(() => {
+    fetch('/api/account/me', { cache: 'no-store', credentials: 'include' })
+      .then((r) => r.json())
+      .then((data: { customer?: { id?: unknown } | null }) => {
+        const raw = data?.customer?.id;
+        if (raw == null || raw === '') {
+          setCustomerId(undefined);
+          return;
+        }
+        setCustomerId(String(raw));
+      })
+      .catch(() => setCustomerId(undefined));
+  }, []);
+
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -209,19 +223,13 @@ export default function AgentWidget() {
   }, [isOpen]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch('/api/account/me', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        const id = data?.customer?.id;
-        setCustomerId(typeof id === 'string' ? id : undefined);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    refreshCustomerId();
+  }, [refreshCustomerId]);
+
+  /** Re-sync after login / session cookie changes — mount alone misses client navigations without full reload. */
+  useEffect(() => {
+    if (isOpen) refreshCustomerId();
+  }, [isOpen, refreshCustomerId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
