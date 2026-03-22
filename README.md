@@ -1,6 +1,6 @@
 # BLESSLUXE
 
-> Luxury women's fashion e-commerce platform with an AI-powered personal shopping assistant.
+> Luxury fashion e-commerce platform (Women, Men, Children, Sale) with an AI-powered personal shopping assistant.
 
 Built with **Next.js 14**, **Medusa.js v2**, and **Google Gemini** — structured as a Turborepo monorepo.
 
@@ -397,31 +397,23 @@ packages/
 
 ## AI Shopping Assistant (LUXE)
 
-The storefront includes an AI-powered chat widget powered by Google Gemini.
+The storefront includes a floating chat widget (**LUXE**) powered by **Google Gemini**. Answers about **what we sell** are grounded in the **live Medusa catalog** and storefront navigation (Women, Men, Children, Sale)—the model is instructed not to assume the store is women-only.
 
-### Text Chat
-- Click the sparkle button (bottom-right) to open the chat
-- Messages are sent to **Gemini 2.5 Flash** via the `/api/agent` route
-- Conversation history is maintained for contextual responses
-- Fashion-aware system prompt trained on BLESSLUXE's brand voice
+### Text chat
+- Open the sparkle button (bottom-right). LUXE can **start the conversation** with a greeting (opening turn via `/api/agent` with `opening: true`).
+- Messages go to **Gemini** (e.g. `gemini-2.5-flash`) through **`POST /api/agent`**, with tool calling for search, cart, email, etc.
+- **Signed-in customers** get account context (name, preferences, history) from the session cookie; guests are assisted without pretending to know private details.
+- Chat history can be loaded from the server for logged-in users; optional vector **RAG** uses PostgreSQL + **pgvector** and embeddings.
 
-### Voice (Gemini Live API)
-- Click the microphone button for **real-time speech-to-speech** via Gemini Live
-- Uses WebSocket connection to `gemini-2.5-flash-native-audio-preview`
-- Supports voice activity detection and barge-in
+### Voice (Gemini Live)
+- Enable voice in the chat header, then use the **microphone** in the input bar for **speech-to-speech** (Gemini Live WebSocket, native audio preview model).
+- After connect, LUXE sends a **proactive first turn** so the assistant speaks before the customer when the thread is still empty (with retries if a text opening is still loading).
+- Type and voice can be used in the same session; the input field refocuses after sending.
 
-### Camera & Screen Share
-- **Camera button**: Share your camera feed with the AI (outfit checks, style advice)
-- **Screen share button**: Share your screen (help navigating the store, comparing products)
+### AI memory & RAG
 
-### AI Memory & RAG
-
-The AI agent has persistent memory backed by PostgreSQL + pgvector:
-
-- Conversation history stored per session
-- Customer preferences learned over time
-- Vector embeddings for semantic search (RAG) using `text-embedding-004`
-- Interaction tracking for analytics
+- Conversation persistence and **semantic memory** (per customer when logged in) use the storefront database and pgvector where configured.
+- **Interaction tracking** supports personalization and analytics.
 
 ---
 
