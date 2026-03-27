@@ -2,13 +2,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { medusa } from "@/lib/medusa";
 import { getDefaultStoreRegionId } from "@/lib/medusa-region";
-import {
-  medusaCartFromSdk,
-  medusaCartToCartItems,
-  enrichCartItemsWithVariantInventory,
-  isVirtualBlitsItem,
-} from "@/lib/medusa-cart-map";
+import { medusaCartFromSdk, medusaCartToCartItems, isVirtualBlitsItem } from "@/lib/medusa-cart-map";
 import { MEDUSA_STORE_CART_QUERY } from "@/lib/medusa-cart-query";
+import { enrichCartItemsWithStoreInventory } from "@/lib/medusa-variant-inventory";
 
 export interface CartItem {
   id: string;
@@ -102,11 +98,12 @@ export const useCartStore = create<CartState>()(
           MEDUSA_STORE_CART_QUERY
         );
         const id = String(cart?.id || "");
-        const raw = cart ? await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart)) : [];
+        const raw = cart ? medusaCartFromSdk(cart) : [];
         const lines = applyAffiliateHints(raw, get().affiliateHints);
+        const enriched = await enrichCartItemsWithStoreInventory(lines);
         set({
           medusaCartId: id || null,
-          medusaLines: lines,
+          medusaLines: enriched,
         });
         return id || null;
       },
@@ -121,9 +118,10 @@ export const useCartStore = create<CartState>()(
         try {
           const { cart } = await medusa.store.cart.retrieve(cartId, MEDUSA_STORE_CART_QUERY);
           if (cart) {
-            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
+            const raw = medusaCartFromSdk(cart);
             const lines = applyAffiliateHints(raw, get().affiliateHints);
-            set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
+            const enriched = await enrichCartItemsWithStoreInventory(lines);
+            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
           }
         } catch (e) {
           console.warn("[cart] Failed to refresh Medusa cart:", e);
@@ -152,9 +150,10 @@ export const useCartStore = create<CartState>()(
             MEDUSA_STORE_CART_QUERY
           );
           if (cart) {
-            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
+            const raw = medusaCartFromSdk(cart);
             const lines = applyAffiliateHints(raw, get().affiliateHints);
-            set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
+            const enriched = await enrichCartItemsWithStoreInventory(lines);
+            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -212,9 +211,10 @@ export const useCartStore = create<CartState>()(
           const res = await medusa.store.cart.deleteLineItem(cartId, id, MEDUSA_STORE_CART_QUERY);
           const parent = (res as { parent?: Record<string, unknown> }).parent;
           if (parent) {
-            const raw = await enrichCartItemsWithVariantInventory(medusaCartToCartItems(parent));
+            const raw = medusaCartToCartItems(parent);
             const lines = applyAffiliateHints(raw, get().affiliateHints);
-            set({ medusaLines: lines, medusaCartId: String(parent.id || cartId) });
+            const enriched = await enrichCartItemsWithStoreInventory(lines);
+            set({ medusaLines: enriched, medusaCartId: String(parent.id || cartId) });
           } else {
             await get().refreshMedusaCart();
           }
@@ -246,9 +246,10 @@ export const useCartStore = create<CartState>()(
             MEDUSA_STORE_CART_QUERY
           );
           if (cart) {
-            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
+            const raw = medusaCartFromSdk(cart);
             const lines = applyAffiliateHints(raw, get().affiliateHints);
-            set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
+            const enriched = await enrichCartItemsWithStoreInventory(lines);
+            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
           }
         } finally {
           set({ isLoading: false });

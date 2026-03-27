@@ -65,7 +65,12 @@ export function ProductInfo({
             typeof r.inventoryQuantity === 'number'
         );
         if (!matchingRows.length) return undefined;
-        return matchingRows.reduce((min, row) => Math.min(min, row.inventoryQuantity as number), matchingRows[0].inventoryQuantity as number);
+        const firstQty = matchingRows[0].inventoryQuantity;
+        if (typeof firstQty !== "number") return undefined;
+        return matchingRows.reduce((min, row) => {
+          const q = row.inventoryQuantity;
+          return typeof q === "number" ? Math.min(min, q) : min;
+        }, firstQty);
       })(),
     }));
   }, [product.sizes, product.variantRows, selectedColor]);

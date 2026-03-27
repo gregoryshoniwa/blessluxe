@@ -10,7 +10,7 @@ export type PdpVariantRow = {
   salePrice?: number;
   inStock: boolean;
   sku: string | null;
-  /** Present when the Store API returns `inventory_quantity` on the variant (e.g. product fetch). */
+  /** Present when the Store API returns `inventory_quantity` on the variant. */
   inventoryQuantity?: number;
 };
 
@@ -104,7 +104,9 @@ export function buildPdpVariantRows(raw: Record<string, unknown>): PdpVariantRow
     if (!id) continue;
     const { color, size } = optionLabels(v);
     const { price, salePrice } = variantUnitPrice(v);
-    const invRaw = v.inventory_quantity;
+    const rawQty = v.inventory_quantity;
+    const inventoryQuantity =
+      typeof rawQty === "number" && Number.isFinite(rawQty) && rawQty >= 0 ? rawQty : undefined;
     rows.push({
       id,
       color,
@@ -113,9 +115,7 @@ export function buildPdpVariantRows(raw: Record<string, unknown>): PdpVariantRow
       salePrice,
       inStock: variantInStock(v),
       sku: v.sku != null ? String(v.sku) : null,
-      ...(typeof invRaw === "number" && Number.isFinite(invRaw) && invRaw >= 0
-        ? { inventoryQuantity: invRaw }
-        : {}),
+      ...(inventoryQuantity !== undefined ? { inventoryQuantity } : {}),
     });
   }
   return rows;

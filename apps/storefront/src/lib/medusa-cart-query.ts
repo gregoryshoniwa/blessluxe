@@ -2,11 +2,11 @@
  * Query params for Medusa Store cart endpoints so line items include variant + product
  * (thumbnail and images for storefront cart/checkout UI).
  *
- * Do NOT request `*items.variant.inventory_quantity` here: the Store cart API rejects or
- * errors on that path (see medusajs/medusa#12884). Inventory for cart lines is merged
- * client-side via `enrichCartItemsWithVariantInventory` in `medusa-cart-map.ts`.
+ * Do not request `items.variant.inventory_quantity` on cart routes: cart `refetch` uses
+ * remote-query and that field is not wired there (it would 500 with "An unknown error occurred.").
+ * Use `enrichCartItemsWithStoreInventory` + `GET /store/product-variants/:id` for live stock.
  */
 export const MEDUSA_STORE_CART_QUERY = {
   fields:
-    "*items,*items.variant,*items.variant.product,*items.variant.product.images,*items.variant.product.thumbnail",
+    "*items,*items.variant,*items.variant.product,*items.variant.product.images,*items.product,*items.product.images,*items.product.thumbnail",
 } as const;

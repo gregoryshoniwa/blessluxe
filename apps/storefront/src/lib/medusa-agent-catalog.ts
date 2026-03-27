@@ -52,12 +52,18 @@ function fallbackPriceFromRawProduct(raw: Record<string, unknown>): number {
 }
 
 function rowToVariantSummary(row: PdpVariantRow): VariantSummary {
+  const inv =
+    typeof row.inventoryQuantity === "number"
+      ? row.inventoryQuantity
+      : row.inStock
+        ? 1
+        : 0;
   return {
     id: row.id,
     title: `${row.color} / ${row.size}`,
     sku: row.sku ?? undefined,
     price: row.salePrice ?? row.price,
-    inventoryQuantity: row.inStock ? 1 : 0,
+    inventoryQuantity: inv,
     options: { Color: row.color, Size: row.size },
   };
 }
@@ -323,10 +329,10 @@ export async function fetchMedusaProductsForAgent(params: {
         list = list.filter((p) => textMatchesProductQuery(p, queryRaw));
       }
 
-      const categoryParam = params.category;
-      if (categoryParam) {
+      const categoryFilter = params.category;
+      if (categoryFilter) {
         if (!categoryIds?.length) {
-          list = list.filter((p) => matchesCategoryParam(p, categoryParam));
+          list = list.filter((p) => matchesCategoryParam(p, categoryFilter));
         }
       }
 
