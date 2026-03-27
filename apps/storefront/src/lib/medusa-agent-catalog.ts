@@ -323,14 +323,17 @@ export async function fetchMedusaProductsForAgent(params: {
         list = list.filter((p) => textMatchesProductQuery(p, queryRaw));
       }
 
-      if (params.category) {
+      const categoryParam = params.category;
+      if (categoryParam) {
         if (!categoryIds?.length) {
-          list = list.filter((p) => matchesCategoryParam(p, params.category));
+          list = list.filter((p) => matchesCategoryParam(p, categoryParam));
         }
       }
 
-      if (params.price_min != null) list = list.filter((p) => p.price >= params.price_min);
-      if (params.price_max != null) list = list.filter((p) => p.price <= params.price_max);
+      const priceMin = params.price_min;
+      const priceMax = params.price_max;
+      if (priceMin != null) list = list.filter((p) => p.price >= priceMin);
+      if (priceMax != null) list = list.filter((p) => p.price <= priceMax);
 
       return list.slice(0, limit);
     } catch {

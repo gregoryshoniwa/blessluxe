@@ -2,7 +2,12 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { medusa } from "@/lib/medusa";
 import { getDefaultStoreRegionId } from "@/lib/medusa-region";
-import { medusaCartFromSdk, medusaCartToCartItems, isVirtualBlitsItem } from "@/lib/medusa-cart-map";
+import {
+  medusaCartFromSdk,
+  medusaCartToCartItems,
+  enrichCartItemsWithVariantInventory,
+  isVirtualBlitsItem,
+} from "@/lib/medusa-cart-map";
 import { MEDUSA_STORE_CART_QUERY } from "@/lib/medusa-cart-query";
 
 export interface CartItem {
@@ -25,6 +30,7 @@ export interface CartItem {
   variant: {
     title: string;
     sku: string | null;
+    inventoryQuantity?: number;
   };
 }
 
@@ -96,7 +102,7 @@ export const useCartStore = create<CartState>()(
           MEDUSA_STORE_CART_QUERY
         );
         const id = String(cart?.id || "");
-        const raw = cart ? medusaCartFromSdk(cart) : [];
+        const raw = cart ? await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart)) : [];
         const lines = applyAffiliateHints(raw, get().affiliateHints);
         set({
           medusaCartId: id || null,
@@ -115,7 +121,7 @@ export const useCartStore = create<CartState>()(
         try {
           const { cart } = await medusa.store.cart.retrieve(cartId, MEDUSA_STORE_CART_QUERY);
           if (cart) {
-            const raw = medusaCartFromSdk(cart);
+            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
             const lines = applyAffiliateHints(raw, get().affiliateHints);
             set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
           }
@@ -146,7 +152,7 @@ export const useCartStore = create<CartState>()(
             MEDUSA_STORE_CART_QUERY
           );
           if (cart) {
-            const raw = medusaCartFromSdk(cart);
+            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
             const lines = applyAffiliateHints(raw, get().affiliateHints);
             set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
           }
@@ -206,7 +212,7 @@ export const useCartStore = create<CartState>()(
           const res = await medusa.store.cart.deleteLineItem(cartId, id, MEDUSA_STORE_CART_QUERY);
           const parent = (res as { parent?: Record<string, unknown> }).parent;
           if (parent) {
-            const raw = medusaCartToCartItems(parent);
+            const raw = await enrichCartItemsWithVariantInventory(medusaCartToCartItems(parent));
             const lines = applyAffiliateHints(raw, get().affiliateHints);
             set({ medusaLines: lines, medusaCartId: String(parent.id || cartId) });
           } else {
@@ -240,7 +246,7 @@ export const useCartStore = create<CartState>()(
             MEDUSA_STORE_CART_QUERY
           );
           if (cart) {
-            const raw = medusaCartFromSdk(cart);
+            const raw = await enrichCartItemsWithVariantInventory(medusaCartFromSdk(cart));
             const lines = applyAffiliateHints(raw, get().affiliateHints);
             set({ medusaLines: lines, medusaCartId: String(cart.id || cartId) });
           }

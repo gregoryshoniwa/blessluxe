@@ -6,12 +6,14 @@
     "dev": "turbo dev",
     "dev:refresh-catalog": "docker compose up --build -d --no-deps medusa && docker compose exec medusa npx medusa exec ./src/scripts/seed.ts && docker compose up --build -d --no-deps storefront",
     "dev:refresh-seed": "docker compose up --build -d --no-deps medusa && docker compose exec medusa npx medusa exec ./src/scripts/seed.ts",
+    "dev:refresh-inventory": "docker compose up --build -d --no-deps medusa && docker compose exec medusa npx medusa exec ./src/scripts/seed.ts && bash scripts/backfill-medusa-inventory.sh && docker compose up --build -d --no-deps storefront",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "type-check": "turbo type-check",
     "clean": "turbo clean && rm -rf node_modules",
-    "db:reset-medusa": "bash scripts/reset-medusa-db.sh"
+    "db:reset-medusa": "bash scripts/reset-medusa-db.sh",
+    "inventory:backfill-medusa": "bash scripts/backfill-medusa-inventory.sh"
   },
   "devDependencies": {
     "@blessluxe/eslint-config": "workspace:*",

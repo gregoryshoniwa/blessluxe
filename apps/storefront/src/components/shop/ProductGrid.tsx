@@ -164,6 +164,25 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         }
       }
 
+      const variantRows = Array.isArray(p.variants) ? p.variants : [];
+      const variantQuantities = variantRows
+        .map((variant) => Number((variant as unknown as Record<string, unknown>).inventory_quantity))
+        .filter((n) => Number.isFinite(n) && n >= 0);
+      const aggregateQty =
+        variantQuantities.length > 0
+          ? variantQuantities.reduce((sum, n) => sum + n, 0)
+          : undefined;
+      const stockMeta =
+        aggregateQty == null
+          ? { stockLabel: undefined, stockTone: undefined }
+          : aggregateQty <= 0
+            ? { stockLabel: "Out of stock", stockTone: "out" as const }
+            : aggregateQty <= 2
+              ? { stockLabel: `Only ${aggregateQty} left`, stockTone: "critical" as const }
+              : aggregateQty <= 5
+                ? { stockLabel: `${aggregateQty} left`, stockTone: "low" as const }
+                : { stockLabel: "In stock", stockTone: "in" as const };
+
       return {
         id: p.id,
         title: p.title,
@@ -174,6 +193,8 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         colorIds: Array.from(colorIdSet),
         colors: Array.from(colorHexSet),
         sizes: Array.from(sizeSet),
+        stockLabel: stockMeta.stockLabel,
+        stockTone: stockMeta.stockTone,
       };
     });
   }, [rawProducts]);
@@ -338,6 +359,8 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
                   badge={product.badge}
                   colors={product.colors}
                   sizes={product.sizes}
+                  stockLabel={product.stockLabel}
+                  stockTone={product.stockTone}
                 />
               </motion.div>
             ))}

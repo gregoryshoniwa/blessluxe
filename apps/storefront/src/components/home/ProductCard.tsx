@@ -17,6 +17,8 @@ interface ProductCardProps {
   badge?: "new" | "sale" | "hot" | "trending" | "bestseller" | null;
   colors?: string[];
   sizes?: string[];
+  stockLabel?: string;
+  stockTone?: "in" | "low" | "critical" | "out";
 }
 
 export function ProductCard({
@@ -29,6 +31,8 @@ export function ProductCard({
   badge,
   colors = [],
   sizes = [],
+  stockLabel,
+  stockTone,
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -172,6 +176,19 @@ export function ProductCard({
               </span>
             )}
           </div>
+          {stockLabel ? (
+            <p
+              className={cn(
+                "mt-2 text-xs font-medium",
+                stockTone === "out" && "text-red-600",
+                stockTone === "critical" && "text-red-500",
+                stockTone === "low" && "text-amber-600",
+                stockTone === "in" && "text-emerald-700"
+              )}
+            >
+              {stockLabel}
+            </p>
+          ) : null}
           {colors.length > 0 && (
             <div className="flex gap-2 mt-3">
               {colors.map((color) => (

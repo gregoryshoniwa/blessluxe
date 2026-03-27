@@ -192,6 +192,7 @@ Convenience wrappers (from repo root):
 ```bash
 pnpm dev:refresh-seed     # Rebuild medusa + rerun seed
 pnpm dev:refresh-catalog  # Rebuild medusa + rerun seed + rebuild storefront
+pnpm dev:refresh-inventory # Rebuild medusa + seed + inventory backfill + storefront rebuild
 ```
 
 ### Easy development refresh (catalog + images)
@@ -261,6 +262,21 @@ docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
 ```
 
 The seed script is idempotent — safe to run multiple times.
+
+### Inventory backfill (low-stock visibility)
+
+If Medusa products are present but variant inventory levels are empty (for example all variants show `0`), run:
+
+```bash
+pnpm inventory:backfill-medusa
+```
+
+This command is idempotent and will:
+- ensure a stock location exists (`sl_main_warehouse`)
+- link sales channels to that location
+- enable `manage_inventory` on variants
+- create missing inventory items and variant-to-inventory links
+- create inventory levels with starter quantities (includes low-stock examples like `2` and `3`)
 
 Tip: if you only changed `backend/medusa/src/scripts/seed.ts`, rebuild just Medusa before rerunning seed:
 
@@ -489,6 +505,8 @@ pnpm install           # Install all dependencies
 pnpm dev               # Run all apps in dev mode
 pnpm dev:refresh-seed  # Rebuild medusa + rerun seed only
 pnpm dev:refresh-catalog # Rebuild medusa, rerun seed, rebuild storefront
+pnpm dev:refresh-inventory # Rebuild medusa, seed, inventory backfill, rebuild storefront
+pnpm inventory:backfill-medusa # Ensure inventory levels + low-stock quantities
 pnpm build             # Build all packages and apps
 pnpm lint              # Lint all packages
 pnpm format            # Format with Prettier
@@ -589,6 +607,17 @@ Quick command:
 ```bash
 pnpm dev:refresh-seed
 ```
+
+### Low stock ("Only X left") not appearing
+
+If PDP loads but low-stock badges/messages do not show:
+
+```bash
+pnpm inventory:backfill-medusa
+docker compose up --build -d --no-deps storefront
+```
+
+Then hard refresh the product page.
 
 ### Docker build fails on storefront compile after home-section edits
 

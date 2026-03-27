@@ -7,6 +7,7 @@ interface SizeSelectorProps {
   sizes: Array<{
     name: string;
     inStock: boolean;
+    stockLeft?: number;
   }>;
   selectedSize: string;
   onSizeChange: (size: string) => void;
@@ -42,7 +43,7 @@ export function SizeSelector({
             key={size.name}
             onClick={() => size.inStock && onSizeChange(size.name)}
             disabled={!size.inStock}
-            className={`py-3 px-4 text-sm font-medium rounded-lg border-2 transition-all ${
+            className={`py-2.5 px-3 text-sm rounded-lg border-2 transition-all ${
               selectedSize === size.name
                 ? 'border-black bg-black text-white'
                 : size.inStock
@@ -50,7 +51,16 @@ export function SizeSelector({
                   : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed line-through'
             }`}
           >
-            {size.name}
+            <div className="flex flex-col items-center leading-tight">
+              <span className="font-medium">{size.name}</span>
+              {!size.inStock ? (
+                <span className="mt-1 text-[10px] uppercase tracking-wide opacity-80">Out</span>
+              ) : size.stockLeft != null && size.stockLeft > 0 && size.stockLeft <= 2 ? (
+                <span className="mt-1 text-[10px] text-red-500">Only {size.stockLeft} left</span>
+              ) : size.stockLeft != null && size.stockLeft > 2 && size.stockLeft <= 5 ? (
+                <span className="mt-1 text-[10px] text-amber-500">{size.stockLeft} left</span>
+              ) : null}
+            </div>
           </button>
         ))}
       </div>

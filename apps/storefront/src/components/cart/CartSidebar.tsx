@@ -10,11 +10,48 @@ import { CartItem } from './CartItem';
 export function CartSidebar() {
   const isOpen = useCartStore((s) => s.isOpen);
   const closeCart = useCartStore((s) => s.closeCart);
+  const refreshMedusaCart = useCartStore((s) => s.refreshMedusaCart);
+  const isCartLoading = useCartStore((s) => s.isLoading);
   const getItemCount = useCartStore((s) => s.getItemCount);
   const getSubtotal = useCartStore((s) => s.getSubtotal);
   const medusaLines = useCartStore((s) => s.medusaLines);
   const virtualLines = useCartStore((s) => s.virtualLines);
   const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
+
+  // Auto-refresh stock/pricing while cart is open.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let alive = true;
+    const maybeRefresh = async () => {
+      if (!alive) return;
+      if (isCartLoading) return;
+      await refreshMedusaCart();
+    };
+
+    // Immediate refresh on open.
+    void maybeRefresh();
+
+    // Periodic refresh (keeps inventory warnings current).
+    const interval = window.setInterval(() => {
+      void maybeRefresh();
+    }, 15000);
+
+    // Refresh when returning to the tab/window.
+    const onFocus = () => void maybeRefresh();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void maybeRefresh();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isOpen, isCartLoading, refreshMedusaCart]);
 
   // Close on escape key
   useEffect(() => {
@@ -33,6 +70,11 @@ export function CartSidebar() {
 
   const itemCount = getItemCount();
   const subtotal = getSubtotal();
+  const hasInventoryIssue = items.some((item) => {
+    const qty = item.variant.inventoryQuantity;
+    if (typeof qty !== 'number') return false;
+    return qty <= 0 || item.quantity > qty;
+  });
 
   return (
     <AnimatePresence>
@@ -104,6 +146,12 @@ export function CartSidebar() {
 
                 {/* Footer */}
                 <div className="border-t border-gold/10 px-6 py-4 space-y-4">
+                  {hasInventoryIssue ? (
+                    <p className="text-xs font-medium text-red-600">
+                      Some cart items exceed available stock. Update quantities before checkout.
+                    </p>
+                  ) : null}
+
                   {/* Subtotal */}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-black/60">Subtotal</span>
@@ -120,8 +168,19 @@ export function CartSidebar() {
                   <div className="space-y-2">
                     <Link
                       href="/checkout"
-                      onClick={closeCart}
-                      className="flex items-center justify-center gap-2 w-full bg-gold text-white py-3 text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+                      onClick={(e) => {
+                        if (hasInventoryIssue) {
+                          e.preventDefault();
+                          return;
+                        }
+                        closeCart();
+                      }}
+                      aria-disabled={hasInventoryIssue}
+                      className={`flex items-center justify-center gap-2 w-full py-3 text-sm font-semibold tracking-widest uppercase transition-colors ${
+                        hasInventoryIssue
+                          ? 'bg-gold/40 text-white/80 cursor-not-allowed'
+                          : 'bg-gold text-white hover:bg-gold-dark'
+                      }`}
                     >
                       Checkout
                       <ArrowRight className="w-4 h-4" />

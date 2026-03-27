@@ -26,6 +26,12 @@ export function CartItem({ item }: CartItemProps) {
     return input;
   };
   const thumbnailUrl = normalizeThumbnailUrl(item.thumbnail);
+  const inventoryQty = item.variant.inventoryQuantity;
+  const hasInventory = typeof inventoryQty === 'number';
+  const isOutOfStock = hasInventory && inventoryQty <= 0;
+  const isOverRequested = hasInventory && inventoryQty > 0 && item.quantity > inventoryQty;
+  const isLowStock = hasInventory && inventoryQty > 0 && inventoryQty <= 5;
+  const canIncrease = !isUpdating && (!hasInventory || item.quantity < (inventoryQty as number));
 
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1) return;
@@ -69,6 +75,17 @@ export function CartItem({ item }: CartItemProps) {
         <p className="font-semibold text-sm mt-2">
           ${item.unitPrice.toFixed(2)}
         </p>
+        {isOutOfStock ? (
+          <p className="mt-1 text-xs font-medium text-red-600">Out of stock</p>
+        ) : isOverRequested ? (
+          <p className="mt-1 text-xs font-medium text-red-600">
+            Only {inventoryQty} left — reduce quantity
+          </p>
+        ) : isLowStock ? (
+          <p className="mt-1 text-xs font-medium text-amber-600">
+            Low stock: {inventoryQty} left
+          </p>
+        ) : null}
 
         {/* Quantity Controls */}
         <div className="flex items-center justify-between mt-3">
@@ -86,7 +103,7 @@ export function CartItem({ item }: CartItemProps) {
             </span>
             <button
               onClick={() => handleQuantityChange(item.quantity + 1)}
-              disabled={isUpdating}
+              disabled={!canIncrease}
               className="p-1.5 hover:bg-cream-dark transition-colors disabled:opacity-50"
               aria-label="Increase quantity"
             >

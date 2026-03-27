@@ -22,7 +22,7 @@ interface ProductInfoProps {
     description: string;
     category: string;
     colors: Array<{ name: string; value: string }>;
-    sizes: Array<{ name: string; inStock: boolean }>;
+    sizes: Array<{ name: string; inStock: boolean; stockLeft?: number }>;
     variantRows?: PdpVariantRow[];
   };
   onAddToCart?: (data: {
@@ -56,8 +56,37 @@ export function ProductInfo({
           r.size.trim().toUpperCase() === String(s.name || '').trim().toUpperCase() &&
           r.inStock
       ),
+      stockLeft: (() => {
+        const matchingRows = rows.filter(
+          (r) =>
+            r.color.trim().toLowerCase() === selectedColor.trim().toLowerCase() &&
+            r.size.trim().toUpperCase() === String(s.name || '').trim().toUpperCase() &&
+            r.inStock &&
+            typeof r.inventoryQuantity === 'number'
+        );
+        if (!matchingRows.length) return undefined;
+        return matchingRows.reduce((min, row) => Math.min(min, row.inventoryQuantity as number), matchingRows[0].inventoryQuantity as number);
+      })(),
     }));
   }, [product.sizes, product.variantRows, selectedColor]);
+
+  const selectedVariant = useMemo(() => {
+    if (!product.variantRows?.length || !selectedSize) return null;
+    return findVariantRow(product.variantRows, selectedColor, selectedSize) || null;
+  }, [product.variantRows, selectedColor, selectedSize]);
+
+  const selectedSizeMeta = useMemo(
+    () => sizesForColor.find((s) => s.name === selectedSize) || null,
+    [sizesForColor, selectedSize]
+  );
+
+  const selectedStockLeft =
+    typeof selectedVariant?.inventoryQuantity === 'number'
+      ? selectedVariant.inventoryQuantity
+      : selectedSizeMeta?.stockLeft;
+  const selectedIsOutOfStock =
+    !!selectedSize && (selectedVariant ? !selectedVariant.inStock : !selectedSizeMeta?.inStock);
+  const canAddToCart = !!selectedSize && !selectedIsOutOfStock && !isAddingToCart;
 
   useEffect(() => {
     if (product.sizes.length === 1) {
@@ -107,8 +136,17 @@ export function ProductInfo({
       return;
     }
 
+    if (selectedIsOutOfStock) {
+      showToast({
+        title: 'Out of stock',
+        message: 'This color/size is not available. Try another option.',
+        variant: 'error',
+      });
+      return;
+    }
+
     if (product.variantRows?.length) {
-      const row = findVariantRow(product.variantRows, selectedColor, selectedSize);
+      const row = selectedVariant;
       if (!row?.inStock) {
         showToast({
           title: 'Out of stock',
@@ -235,6 +273,18 @@ export function ProductInfo({
         onSizeGuideClick={() => setSizeGuideOpen(true)}
       />
 
+      {selectedSize ? (
+        selectedIsOutOfStock ? (
+          <p className="text-sm font-medium text-red-600">Out of stock for this selection</p>
+        ) : typeof selectedStockLeft === 'number' && selectedStockLeft > 0 && selectedStockLeft <= 2 ? (
+          <p className="text-sm font-medium text-red-600">Only {selectedStockLeft} left in this size</p>
+        ) : typeof selectedStockLeft === 'number' && selectedStockLeft > 2 && selectedStockLeft <= 5 ? (
+          <p className="text-sm font-medium text-amber-600">Low stock: {selectedStockLeft} left</p>
+        ) : (
+          <p className="text-sm text-emerald-700">In stock</p>
+        )
+      ) : null}
+
       {/* Quantity Selector */}
       <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
 
@@ -243,11 +293,17 @@ export function ProductInfo({
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={handleAddToCart}
-          disabled={isAddingToCart}
+          disabled={!canAddToCart}
           className="flex-1 bg-black text-white py-4 rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
         >
           <ShoppingCart className="w-5 h-5" />
-          {isAddingToCart ? 'Adding...' : 'Add to Cart'}
+          {isAddingToCart
+            ? 'Adding...'
+            : !selectedSize
+              ? 'Select Size'
+              : selectedIsOutOfStock
+                ? 'Out of Stock'
+                : 'Add to Cart'}
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.98 }}

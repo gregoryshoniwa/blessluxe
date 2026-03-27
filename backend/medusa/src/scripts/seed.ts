@@ -2149,6 +2149,76 @@ export default async function seed({ container }: ExecArgs) {
     { relations: ["variants"], take: 500 }
   );
 
+  // ═══════════════════ INVENTORY TRACKING ═══════════════════
+  const seedQtyForSku = (sku: string, fallbackId: string) => {
+    const key = (sku || fallbackId || "").toUpperCase();
+    if (!key) return 8;
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) % 9973;
+    if (hash % 13 === 0) return 2;
+    if (hash % 11 === 0) return 3;
+    if (hash % 7 === 0) return 5;
+    return 12;
+  };
+
+  let inventoryUpdated = 0;
+  for (const product of allProducts) {
+    const variants = product.variants || [];
+    if (!variants.length) continue;
+    const payload = variants.map((variant) => ({
+      id: variant.id,
+      manage_inventory: true,
+      allow_backorder: false,
+      inventory_quantity: seedQtyForSku(String(variant.sku || ""), String(variant.id || "")),
+    }));
+    try {
+      await (productService as any).updateProducts([{ id: product.id, variants: payload }]);
+      inventoryUpdated += payload.length;
+    } catch {
+      // Some Medusa runtimes ignore inventory_quantity at product-update level.
+    }
+  }
+  console.log(`📦 Inventory managed for ~${inventoryUpdated} variants (service update path).`);
+
+  if (inventoryUpdated === 0) {
+    try {
+      const pgMod = await (0, eval)("import('pg')");
+      const Client = (pgMod as any).Client;
+      const dbUrl = String(process.env.DATABASE_URL || "").trim();
+      if (Client && dbUrl) {
+        const client = new Client({ connectionString: dbUrl });
+        await client.connect();
+        await client.query(
+          "INSERT INTO stock_location (id, name, created_at, updated_at) VALUES ('sl_main_warehouse', 'Main Warehouse', NOW(), NOW()) ON CONFLICT (id) DO NOTHING"
+        );
+        await client.query(
+          "INSERT INTO sales_channel_stock_location (sales_channel_id, stock_location_id, id, created_at, updated_at) SELECT sc.id, 'sl_main_warehouse', 'scsl_' || sc.id || '_sl_main_warehouse', NOW(), NOW() FROM sales_channel sc WHERE NOT EXISTS (SELECT 1 FROM sales_channel_stock_location s WHERE s.sales_channel_id = sc.id AND s.stock_location_id = 'sl_main_warehouse' AND s.deleted_at IS NULL)"
+        );
+        await client.query(
+          "UPDATE product_variant SET manage_inventory = true, allow_backorder = false, updated_at = NOW() WHERE deleted_at IS NULL"
+        );
+        await client.query(
+          "INSERT INTO inventory_item (id, sku, title, requires_shipping, created_at, updated_at) SELECT 'ii_' || pv.id, NULLIF(pv.sku, ''), LEFT(COALESCE(NULLIF(pv.title, ''), pv.id), 255), true, NOW(), NOW() FROM product_variant pv WHERE pv.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM inventory_item ii WHERE ii.id = 'ii_' || pv.id)"
+        );
+        await client.query(
+          "INSERT INTO product_variant_inventory_item (variant_id, inventory_item_id, id, required_quantity, created_at, updated_at) SELECT pv.id, 'ii_' || pv.id, 'pvi_' || pv.id, 1, NOW(), NOW() FROM product_variant pv WHERE pv.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM product_variant_inventory_item pvi WHERE pvi.variant_id = pv.id AND pvi.inventory_item_id = 'ii_' || pv.id AND pvi.deleted_at IS NULL)"
+        );
+        await client.query(
+          "INSERT INTO inventory_level (id, inventory_item_id, location_id, stocked_quantity, reserved_quantity, incoming_quantity, raw_stocked_quantity, raw_reserved_quantity, raw_incoming_quantity, created_at, updated_at) SELECT 'il_' || pv.id, 'ii_' || pv.id, 'sl_main_warehouse', CASE WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 13) = 0 THEN 2 WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 11) = 0 THEN 3 WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 7) = 0 THEN 5 ELSE 12 END, 0, 0, jsonb_build_object('value', (CASE WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 13) = 0 THEN 2 WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 11) = 0 THEN 3 WHEN MOD(ABS((('x' || SUBSTRING(md5(pv.id), 1, 8))::bit(32)::int)), 7) = 0 THEN 5 ELSE 12 END)::text, 'precision', 20), jsonb_build_object('value', '0', 'precision', 20), jsonb_build_object('value', '0', 'precision', 20), NOW(), NOW() FROM product_variant pv WHERE pv.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM inventory_level il WHERE il.inventory_item_id = 'ii_' || pv.id AND il.location_id = 'sl_main_warehouse' AND il.deleted_at IS NULL)"
+        );
+        await client.query(
+          "UPDATE inventory_level SET raw_stocked_quantity = jsonb_build_object('value', stocked_quantity::text, 'precision', 20), raw_reserved_quantity = jsonb_build_object('value', reserved_quantity::text, 'precision', 20), raw_incoming_quantity = jsonb_build_object('value', incoming_quantity::text, 'precision', 20) WHERE deleted_at IS NULL"
+        );
+        await client.end();
+        console.log("📦 Inventory SQL backfill completed from seed script.");
+      } else {
+        console.log("⚠️ Inventory SQL backfill skipped (missing DATABASE_URL or pg client).");
+      }
+    } catch {
+      console.log("⚠️ Inventory SQL backfill skipped (runtime does not allow pg dynamic import).");
+    }
+  }
+
   console.log(`💰 Setting prices for ${allProducts.length} products...`);
 
   let pricesCreated = 0;

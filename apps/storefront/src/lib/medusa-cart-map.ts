@@ -1,5 +1,7 @@
 import type { CartItem } from "@/stores/cart";
 import { BLITS_TOPUP_PRODUCT_ID } from "@/lib/blits-topup";
+import { MEDUSA_BACKEND_URL, getStoreMedusaFetchHeaders } from "@/lib/medusa";
+import { getDefaultStoreRegionId } from "@/lib/medusa-region";
 
 /** Medusa line item + cart item shapes vary slightly by API version — read defensively. */
 type LooseLineItem = Record<string, unknown>;
@@ -63,6 +65,8 @@ export function medusaLineItemToCartItem(line: LooseLineItem): CartItem | null {
   const qty = Math.max(1, Math.floor(Number(line.quantity ?? 1)));
   const unit = lineUnitPriceUsd(line);
   const variantTitle = String(variant.title || line.description || "Variant");
+  const inventoryQuantity = Number(variant.inventory_quantity);
+  const hasInventoryQuantity = Number.isFinite(inventoryQuantity) && inventoryQuantity >= 0;
 
   return {
     id: lineId,
@@ -77,6 +81,7 @@ export function medusaLineItemToCartItem(line: LooseLineItem): CartItem | null {
     variant: {
       title: variantTitle,
       sku: variant.sku != null ? String(variant.sku) : null,
+      ...(hasInventoryQuantity ? { inventoryQuantity } : {}),
     },
     source: "medusa",
   };
@@ -85,6 +90,64 @@ export function medusaLineItemToCartItem(line: LooseLineItem): CartItem | null {
 /** Map SDK `StoreCart` (or any cart-shaped object) without unsafe casts at call sites. */
 export function medusaCartFromSdk(cart: unknown): CartItem[] {
   return medusaCartToCartItems(cart as unknown as Record<string, unknown>);
+}
+
+const PRODUCT_INVENTORY_FIELDS = "*variants,*variants.inventory_quantity";
+
+/**
+ * Fetches per-variant `inventory_quantity` from `/store/products/:id` (supported there)
+ * and merges into cart lines. Cart `fields` cannot safely include variant inventory (Store API).
+ */
+export async function enrichCartItemsWithVariantInventory(lines: CartItem[]): Promise<CartItem[]> {
+  const medusaLines = lines.filter((l) => l.source === "medusa" && l.productId);
+  const productIds = [...new Set(medusaLines.map((l) => l.productId))];
+  if (productIds.length === 0) return lines;
+
+  const regionId = await getDefaultStoreRegionId();
+  const base = MEDUSA_BACKEND_URL.replace(/\/+$/, "");
+  const variantQty = new Map<string, number>();
+
+  for (const pid of productIds) {
+    try {
+      const url = new URL(`/store/products/${encodeURIComponent(pid)}`, base);
+      if (regionId) url.searchParams.set("region_id", regionId);
+      url.searchParams.set("fields", PRODUCT_INVENTORY_FIELDS);
+      const res = await fetch(url.toString(), {
+        cache: "no-store",
+        headers: getStoreMedusaFetchHeaders(),
+      });
+      if (!res.ok) continue;
+      const payload = (await res.json()) as { product?: Record<string, unknown> };
+      const raw =
+        payload.product ||
+        ((payload as { data?: { product?: Record<string, unknown> } }).data?.product as
+          | Record<string, unknown>
+          | undefined);
+      if (!raw || typeof raw !== "object") continue;
+      const variants = Array.isArray(raw.variants) ? (raw.variants as Array<Record<string, unknown>>) : [];
+      for (const v of variants) {
+        const vid = String(v.id || "");
+        if (!vid) continue;
+        const qty = Number(v.inventory_quantity);
+        if (Number.isFinite(qty) && qty >= 0) variantQty.set(vid, qty);
+      }
+    } catch {
+      // ignore per-product failures
+    }
+  }
+
+  return lines.map((line) => {
+    if (line.source !== "medusa") return line;
+    const q = variantQty.get(line.variantId);
+    if (typeof q !== "number") return line;
+    return {
+      ...line,
+      variant: {
+        ...line.variant,
+        inventoryQuantity: q,
+      },
+    };
+  });
 }
 
 export function medusaCartToCartItems(cart: Record<string, unknown>): CartItem[] {
