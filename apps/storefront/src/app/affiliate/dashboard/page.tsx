@@ -1,6 +1,8 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useToast } from "@/providers";
 
@@ -81,6 +83,18 @@ interface SocialResponse {
     variant_title?: string;
     price_amount?: number;
     currency_code?: string;
+  }>;
+  shop_packs?: Array<{
+    id: string;
+    pack_campaign_id: string;
+    public_code: string;
+    status: string;
+    pack_title?: string | null;
+    pack_handle?: string | null;
+    thumbnail_url?: string | null;
+    product_handle?: string | null;
+    paid_slots?: number;
+    total_slots?: number;
   }>;
   canManage: boolean;
 }
@@ -387,9 +401,9 @@ export default function AffiliateDashboardPage() {
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutNote, setPayoutNote] = useState("");
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "posts" | "ai" | "media" | "catalog">(
-    "overview"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "posts" | "ai" | "media" | "catalog" | "packs"
+  >("overview");
 
   const [social, setSocial] = useState<SocialResponse | null>(null);
   const [socialLoading, setSocialLoading] = useState(true);
@@ -462,6 +476,43 @@ export default function AffiliateDashboardPage() {
   const [catalogViewTab, setCatalogViewTab] = useState<"all-clothes" | "page-products">(
     "all-clothes"
   );
+  const [shopPageSubTab, setShopPageSubTab] = useState<"products" | "packs">("products");
+
+  const [packDefinitions, setPackDefinitions] = useState<
+    Array<{
+      id: string;
+      title: string;
+      handle: string;
+      description: string | null;
+      product_id?: string;
+      thumbnail_url?: string | null;
+      product_handle?: string | null;
+    }>
+  >([]);
+  const [packCampaigns, setPackCampaigns] = useState<
+    Array<{
+      id: string;
+      public_code: string;
+      status: string;
+      pack_title: string | null;
+      created_at?: string;
+      gift_countdown_ends_at?: string | null;
+      gift_blits_prize?: number | null;
+      gift_allocation_type?: string;
+      gift_blits_pool?: number | null;
+      gift_custom_per_size?: Record<string, number> | null;
+      pack_handle?: string | null;
+      thumbnail_url?: string | null;
+      product_handle?: string | null;
+    }>
+  >([]);
+  const [packsLoading, setPacksLoading] = useState(false);
+  const [packCreatingId, setPackCreatingId] = useState<string | null>(null);
+  const [packCopiedCode, setPackCopiedCode] = useState<string | null>(null);
+  const [packClosingId, setPackClosingId] = useState<string | null>(null);
+  const [packGiftSavingId, setPackGiftSavingId] = useState<string | null>(null);
+  const [packWholesaleSubTab, setPackWholesaleSubTab] = useState<"start" | "links">("start");
+
   const notifyError = (message: string) =>
     showToast({
       title: "Action failed",
@@ -1023,6 +1074,159 @@ export default function AffiliateDashboardPage() {
     }
   };
 
+  const loadPackDashboard = useCallback(async () => {
+    if (!stats?.affiliate?.code) return;
+    setPacksLoading(true);
+    try {
+      const [defRes, campRes] = await Promise.all([
+        fetch("/api/packs", { cache: "no-store" }),
+        fetch(`/api/affiliate/pack-campaigns?code=${encodeURIComponent(stats.affiliate.code)}`, {
+          cache: "no-store",
+        }),
+      ]);
+      const defJson = (await defRes.json()) as { packs?: typeof packDefinitions; error?: string };
+      const campJson = (await campRes.json()) as { campaigns?: typeof packCampaigns; error?: string };
+      if (!defRes.ok) {
+        notifyError(String(defJson.error || "Could not load packs."));
+        return;
+      }
+      if (!campRes.ok) {
+        notifyError(String(campJson.error || "Could not load pack campaigns."));
+        return;
+      }
+      setPackDefinitions(defJson.packs || []);
+      setPackCampaigns(campJson.campaigns || []);
+    } catch {
+      notifyError("Could not load pack data.");
+    } finally {
+      setPacksLoading(false);
+    }
+  }, [stats?.affiliate?.code]);
+
+  const startPackCampaign = async (packDefinitionId: string) => {
+    if (!stats?.affiliate?.code) return;
+    setPackCreatingId(packDefinitionId);
+    try {
+      const res = await fetch("/api/pack-campaigns", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          affiliate_code: stats.affiliate.code,
+          pack_definition_id: packDefinitionId,
+        }),
+      });
+      const payload = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        notifyError(String(payload.error || "Failed to create pack campaign."));
+        return;
+      }
+      notifySuccess("Pack campaign live", "Copy the link below and share it with your audience.");
+      setPackWholesaleSubTab("links");
+      await loadPackDashboard();
+    } finally {
+      setPackCreatingId(null);
+    }
+  };
+
+  const copyPackCampaignLink = async (publicCode: string) => {
+    if (!stats?.affiliate?.code) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/affiliate/shop/${encodeURIComponent(stats.affiliate.code)}/pack/${encodeURIComponent(publicCode)}`;
+    await navigator.clipboard.writeText(url);
+    setPackCopiedCode(publicCode);
+    window.setTimeout(() => setPackCopiedCode(null), 2000);
+    notifySuccess("Link copied", url);
+  };
+
+  const closeAffiliatePackCampaign = async (campaignId: string, reason: "cancelled" | "rejected") => {
+    if (!stats?.affiliate?.code) return;
+    const verb = reason === "rejected" ? "reject" : "cancel";
+    if (
+      !window.confirm(
+        `This will ${verb} the pack, email everyone involved, and credit paid participants’ Blits wallets (no loyalty penalty). Continue?`
+      )
+    ) {
+      return;
+    }
+    setPackClosingId(campaignId);
+    try {
+      const res = await fetch(`/api/affiliate/pack-campaigns/${encodeURIComponent(campaignId)}/close`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ affiliate_code: stats.affiliate.code, reason }),
+      });
+      const payload = (await res.json()) as { error?: string; refundedSlots?: number };
+      if (!res.ok) {
+        notifyError(String(payload.error || "Could not close pack."));
+        return;
+      }
+      notifySuccess(
+        "Pack closed",
+        `${payload.refundedSlots ?? 0} paid slot(s) credited to Blits where we had a line total.`
+      );
+      await loadPackDashboard();
+    } finally {
+      setPackClosingId(null);
+    }
+  };
+
+  const isoToDatetimeLocalInput = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const savePackGiftCountdown = async (campaignId: string, form: HTMLFormElement) => {
+    if (!stats?.affiliate?.code) return;
+    const fd = new FormData(form);
+    const endsLocal = String(fd.get("gift_ends") || "").trim();
+    const prizeRaw = String(fd.get("gift_prize") || "").trim();
+    const poolRaw = String(fd.get("gift_pool") || "").trim();
+    const alloc = String(fd.get("gift_allocation_type") || "fixed_per_payment").trim();
+    const customRaw = String(fd.get("gift_custom_json") || "").trim();
+    let gift_custom_per_size: Record<string, number> | null = null;
+    if (customRaw) {
+      try {
+        const parsed = JSON.parse(customRaw) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          gift_custom_per_size = parsed as Record<string, number>;
+        }
+      } catch {
+        notifyError("Custom per size must be valid JSON (variant id → Blits number).");
+        return;
+      }
+    }
+    setPackGiftSavingId(campaignId);
+    try {
+      const res = await fetch(`/api/affiliate/pack-campaigns/${encodeURIComponent(campaignId)}/gift`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          affiliate_code: stats.affiliate.code,
+          gift_countdown_ends_at: endsLocal ? new Date(endsLocal).toISOString() : null,
+          gift_blits_prize: prizeRaw ? Number(prizeRaw) : null,
+          gift_allocation_type: alloc,
+          gift_blits_pool: poolRaw ? Number(poolRaw) : null,
+          gift_custom_per_size,
+        }),
+      });
+      const payload = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        notifyError(String(payload.error || "Could not save early-bird settings."));
+        return;
+      }
+      notifySuccess(
+        "Early-bird Blits saved",
+        "Eligibility is checked on the server when payment completes. Clear both fields to remove the offer."
+      );
+      await loadPackDashboard();
+    } finally {
+      setPackGiftSavingId(null);
+    }
+  };
+
   useEffect(() => {
     if (activeTab !== "catalog" || !stats?.affiliate?.code) return;
     const timeoutId = window.setTimeout(() => {
@@ -1038,6 +1242,11 @@ export default function AffiliateDashboardPage() {
     }, 250);
     return () => window.clearTimeout(timeoutId);
   }, [activeTab, photoStudioAssetQuery, photoStudioAudience, stats?.affiliate?.code]);
+
+  useEffect(() => {
+    if (activeTab !== "packs" || !stats?.affiliate?.code) return;
+    void loadPackDashboard();
+  }, [activeTab, stats?.affiliate?.code, loadPackDashboard]);
 
   const addCatalogProduct = async (product: Record<string, unknown>) => {
     if (!stats?.affiliate?.code) return;
@@ -1071,6 +1280,39 @@ export default function AffiliateDashboardPage() {
     }
     await loadSocial(stats.affiliate.code);
     notifySuccess("Product added", "Product added to your affiliate page.");
+  };
+
+  const toggleShopPack = async (packCampaignId: string, add: boolean) => {
+    if (!stats?.affiliate?.code) return;
+    try {
+      if (add) {
+        const res = await fetch("/api/affiliate/shop/packs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code: stats.affiliate.code, pack_campaign_id: packCampaignId }),
+        });
+        const payload = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          notifyError(String(payload.error || "Could not add pack to shop."));
+          return;
+        }
+        notifySuccess("Pack on shop", "Customers will see it under Products → Packs on your page.");
+      } else {
+        const res = await fetch(
+          `/api/affiliate/shop/packs?code=${encodeURIComponent(stats.affiliate.code)}&pack_campaign_id=${encodeURIComponent(packCampaignId)}`,
+          { method: "DELETE" }
+        );
+        const payload = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          notifyError(String(payload.error || "Could not remove pack from shop."));
+          return;
+        }
+        notifySuccess("Removed from shop", "This pack no longer appears on your public page.");
+      }
+      await loadSocial(stats.affiliate.code);
+    } catch {
+      notifyError("Could not update featured packs.");
+    }
   };
 
   const removeCatalogProduct = async (productId: string) => {
@@ -1165,6 +1407,11 @@ export default function AffiliateDashboardPage() {
   const affiliateProductIds = useMemo(
     () => new Set((social?.products || []).map((product) => String(product.product_id))),
     [social?.products]
+  );
+
+  const shopPackCampaignIds = useMemo(
+    () => new Set((social?.shop_packs || []).map((p) => String(p.pack_campaign_id))),
+    [social?.shop_packs]
   );
 
   const catalogCategories = useMemo(() => {
@@ -1289,14 +1536,14 @@ export default function AffiliateDashboardPage() {
           </div>
         </section>
 
-        <section className="bg-white rounded-lg border border-theme-primary/20 p-3 flex gap-2 w-fit">
-          {(["overview", "posts", "ai", "media", "catalog"] as const).map((tab) => (
+        <section className="bg-white rounded-lg border border-theme-primary/20 p-3 flex gap-2 w-fit flex-wrap">
+          {(["overview", "posts", "ai", "media", "catalog", "packs"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 rounded-md text-sm capitalize ${activeTab === tab ? "bg-theme-primary text-white" : "text-black/70 border border-black/10"}`}
             >
-              {tab === "ai" ? "Photo Studio" : tab === "media" ? "Media Library" : tab}
+              {tab === "ai" ? "Photo Studio" : tab === "media" ? "Media Library" : tab === "packs" ? "Packs" : tab}
             </button>
           ))}
         </section>
@@ -2027,7 +2274,7 @@ export default function AffiliateDashboardPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setMediaPublished(item.id, !Boolean(item.published))}
+                        onClick={() => setMediaPublished(item.id, !item.published)}
                         className={`px-3 py-1.5 rounded-md text-xs ${
                           item.published ? "border border-black/20" : "bg-theme-primary text-white"
                         }`}
@@ -2078,7 +2325,7 @@ export default function AffiliateDashboardPage() {
                     : "border border-black/20 text-black/70"
                 }`}
               >
-                Page Products ({(social?.products || []).length})
+                Your shop ({(social?.products || []).length + (social?.shop_packs || []).length})
               </button>
             </div>
 
@@ -2181,42 +2428,506 @@ export default function AffiliateDashboardPage() {
             ) : null}
 
             {catalogViewTab === "page-products" ? (
-              <div className="bg-white rounded-lg border border-theme-primary/20 p-5 space-y-3">
-                <h2 className="font-semibold">Products currently in your affiliate shop</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                  {(social?.products || []).map((product) => (
-                    <div
-                      key={product.id}
-                      className="border border-black/10 rounded-lg bg-white shadow-sm p-2.5 flex items-center gap-2.5"
-                    >
-                      <div className="w-14 h-16 rounded-md overflow-hidden bg-black/[0.03] shrink-0">
-                        {product.image_url ? (
-                          <img
-                            src={product.image_url}
-                            alt={product.product_title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-cream to-blush" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs leading-5 line-clamp-2">{product.product_title}</p>
-                          <p className="text-[11px] text-black/60 truncate">{product.product_handle}</p>
-                        </div>
-                        <button
-                          onClick={() => removeCatalogProduct(product.product_id)}
-                          className="px-2.5 py-1.5 border border-red-300 text-red-700 rounded-md text-[11px] shrink-0"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="bg-white rounded-lg border border-theme-primary/20 p-4 sm:p-5 space-y-4">
+                <div>
+                  <h2 className="font-semibold">Your shop</h2>
+                  <p className="text-xs text-black/55 mt-1 max-w-2xl">
+                    Listed items appear on your public page under Products. Add group packs from{" "}
+                    <strong className="font-medium text-black/70">Wholesale packs → Your pack links</strong> with Add to
+                    shop.
+                  </p>
                 </div>
+
+                <div className="flex flex-wrap gap-2 border-b border-black/10 pb-3" role="tablist" aria-label="Your shop">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={shopPageSubTab === "products"}
+                    onClick={() => setShopPageSubTab("products")}
+                    className={`px-3 py-1.5 rounded-lg text-sm ${
+                      shopPageSubTab === "products"
+                        ? "bg-theme-primary text-white"
+                        : "border border-black/15 text-black/75 bg-white"
+                    }`}
+                  >
+                    Products ({(social?.products || []).length})
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={shopPageSubTab === "packs"}
+                    onClick={() => setShopPageSubTab("packs")}
+                    className={`px-3 py-1.5 rounded-lg text-sm ${
+                      shopPageSubTab === "packs"
+                        ? "bg-theme-primary text-white"
+                        : "border border-black/15 text-black/75 bg-white"
+                    }`}
+                  >
+                    Group packs ({(social?.shop_packs || []).length})
+                  </button>
+                </div>
+
+                {shopPageSubTab === "products" ? (
+                  (social?.products || []).length === 0 ? (
+                    <p className="text-sm text-black/55 py-4">No catalog products on your shop yet. Add some from All Clothes.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {(social?.products || []).map((product) => (
+                        <article
+                          key={product.id}
+                          className="flex flex-col rounded-xl border border-black/10 overflow-hidden bg-white shadow-sm"
+                        >
+                          <div className="aspect-[3/4] bg-black/[0.03] relative">
+                            {product.image_url ? (
+                              <img
+                                src={product.image_url}
+                                alt={product.product_title}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-gradient-to-br from-cream to-blush" />
+                            )}
+                          </div>
+                          <div className="p-3 flex flex-col flex-1 gap-2 min-w-0">
+                            <p className="text-sm font-medium line-clamp-2 leading-snug min-h-[2.5rem]">
+                              {product.product_title}
+                            </p>
+                            <p className="text-[11px] text-black/55 truncate" title={product.product_handle}>
+                              {product.product_handle}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => removeCatalogProduct(product.product_id)}
+                              className="mt-auto w-full px-3 py-2 border border-red-300 text-red-700 rounded-lg text-xs font-medium hover:bg-red-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )
+                ) : (social?.shop_packs || []).length === 0 ? (
+                  <p className="text-sm text-black/55 py-4">
+                    No group packs on your shop yet. Open Wholesale packs → Your pack links and use Add to shop.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {(social?.shop_packs || []).map((p) => (
+                      <article
+                        key={p.pack_campaign_id}
+                        className="flex flex-col rounded-xl border border-black/10 overflow-hidden bg-white shadow-sm"
+                      >
+                        <div className="aspect-[3/4] bg-black/[0.04] relative">
+                          {p.thumbnail_url ? (
+                            <img
+                              src={p.thumbnail_url}
+                              alt={p.pack_title || "Pack"}
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#F5F0E8] to-[#E8D5D0]" />
+                          )}
+                          <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-black/65 text-white">
+                            Pack
+                          </span>
+                        </div>
+                        <div className="p-3 flex flex-col flex-1 gap-2 min-w-0">
+                          <p className="text-sm font-medium line-clamp-2 leading-snug min-h-[2.5rem]">
+                            {p.pack_title || "Wholesale pack"}
+                          </p>
+                          <p className="text-[11px] text-black/50 font-mono line-clamp-2 break-all">
+                            #{p.public_code} · {String(p.status || "").replace(/_/g, " ")}
+                          </p>
+                          <div className="mt-auto flex flex-col gap-1.5">
+                            <a
+                              href={`/affiliate/shop/${encodeURIComponent(stats?.affiliate?.code || "")}/pack/${encodeURIComponent(p.public_code)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full text-center px-3 py-2 rounded-lg border border-black/15 text-xs font-medium text-black/80 hover:bg-black/[0.03]"
+                            >
+                              Preview
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void toggleShopPack(p.pack_campaign_id, false)}
+                              className="w-full px-3 py-2 border border-red-300 text-red-700 rounded-lg text-xs font-medium hover:bg-red-50"
+                            >
+                              Remove from shop
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {activeTab === "packs" ? (
+          <section>
+            <div className="bg-white rounded-xl border border-theme-primary/20 overflow-hidden">
+              <div className="p-4 sm:p-5 pb-0">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="font-display text-xl sm:text-2xl text-black mb-1">Wholesale pack campaigns</h2>
+                    <p className="text-sm text-black/60 max-w-2xl">
+                      Start a group pack for any published wholesale pack. Share the link so buyers can claim one size each
+                      — checkout uses your existing payment flow. When every size is paid, the pack is ready to process.
+                    </p>
+                  </div>
+                  <Link
+                    href="/shop/packs"
+                    className="shrink-0 inline-flex items-center justify-center px-3 py-2 rounded-lg border border-theme-primary text-theme-primary text-sm font-medium hover:bg-theme-primary/5 transition-colors"
+                  >
+                    View all packs
+                  </Link>
+                </div>
+
+                <div
+                  className="flex gap-1 border-b border-black/10 -mb-px"
+                  role="tablist"
+                  aria-label="Wholesale pack campaigns"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    id="pack-tab-start"
+                    aria-selected={packWholesaleSubTab === "start"}
+                    aria-controls="pack-panel-start"
+                    onClick={() => setPackWholesaleSubTab("start")}
+                    className={`px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                      packWholesaleSubTab === "start"
+                        ? "border-theme-primary text-theme-primary bg-white"
+                        : "border-transparent text-black/55 hover:text-black/80 hover:bg-black/[0.02]"
+                    }`}
+                  >
+                    Start a new campaign
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="pack-tab-links"
+                    aria-selected={packWholesaleSubTab === "links"}
+                    aria-controls="pack-panel-links"
+                    onClick={() => setPackWholesaleSubTab("links")}
+                    className={`px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors inline-flex items-center gap-2 ${
+                      packWholesaleSubTab === "links"
+                        ? "border-theme-primary text-theme-primary bg-white"
+                        : "border-transparent text-black/55 hover:text-black/80 hover:bg-black/[0.02]"
+                    }`}
+                  >
+                    Your pack links
+                    {packCampaigns.length > 0 ? (
+                      <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full bg-black/[0.06] text-black/70">
+                        {packCampaigns.length}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                id="pack-panel-start"
+                role="tabpanel"
+                aria-labelledby="pack-tab-start"
+                hidden={packWholesaleSubTab !== "start"}
+                className="p-4 sm:p-5 pt-4 border-t border-black/10"
+              >
+                {packsLoading ? (
+                  <p className="text-sm text-black/60">Loading pack catalog…</p>
+                ) : packDefinitions.length === 0 ? (
+                  <p className="text-sm text-black/60">
+                    No published packs in the store yet. Run Medusa migrations and seed, or publish pack definitions in
+                    admin.
+                  </p>
+                ) : (
+                  <ul className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {packDefinitions.map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex flex-col rounded-xl border border-black/10 overflow-hidden bg-white shadow-sm"
+                      >
+                        <div className="relative aspect-[3/4] bg-black/[0.04]">
+                          {p.thumbnail_url ? (
+                            <Image
+                              src={p.thumbnail_url}
+                              alt={p.title}
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#F5F0E8] to-[#E8D5D0]" />
+                          )}
+                        </div>
+                        <div className="p-3 flex flex-col flex-1 gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm leading-snug line-clamp-2">{p.title}</p>
+                            <p className="text-[11px] text-black/45 truncate mt-0.5">{p.handle}</p>
+                            {p.description ? (
+                              <p className="text-xs text-black/55 mt-1 line-clamp-2">{p.description}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col gap-2 mt-auto pt-1">
+                            <div className="flex flex-wrap gap-1.5">
+                              {p.product_handle ? (
+                                <Link
+                                  href={`/shop/${encodeURIComponent(p.product_handle)}`}
+                                  className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg border border-black/15 text-black/80 text-xs font-medium hover:bg-black/[0.03]"
+                                >
+                                  View product
+                                </Link>
+                              ) : null}
+                              <Link
+                                href="/shop/packs"
+                                className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg border border-theme-primary/40 text-theme-primary text-xs font-medium hover:bg-theme-primary/5"
+                              >
+                                Store packs
+                              </Link>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void startPackCampaign(p.id)}
+                              disabled={packCreatingId === p.id}
+                              className="w-full px-3 py-2 rounded-lg bg-theme-primary text-white text-xs font-medium disabled:opacity-60"
+                            >
+                              {packCreatingId === p.id ? "Starting…" : "Start group pack"}
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div
+                id="pack-panel-links"
+                role="tabpanel"
+                aria-labelledby="pack-tab-links"
+                hidden={packWholesaleSubTab !== "links"}
+                className="p-4 sm:p-5 pt-4 border-t border-black/10"
+              >
+              {packsLoading ? (
+                <p className="text-sm text-black/60">Loading…</p>
+              ) : packCampaigns.length === 0 ? (
+                <p className="text-sm text-black/60">
+                  No campaigns yet. Start one in the <strong className="font-medium text-black/70">Start a new campaign</strong>{" "}
+                  tab.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {packCampaigns.map((c) => (
+                    <li key={c.id} className="border border-black/10 rounded-xl overflow-hidden bg-white">
+                      <div className="p-3 sm:p-4 flex flex-col sm:flex-row gap-3">
+                        <div className="relative w-full sm:w-28 aspect-[3/4] sm:aspect-auto sm:h-32 shrink-0 rounded-lg overflow-hidden bg-black/[0.04]">
+                          {c.thumbnail_url ? (
+                            <Image
+                              src={c.thumbnail_url}
+                              alt={c.pack_title || "Pack"}
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 640px) 100vw, 112px"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#F5F0E8] to-[#E8D5D0]" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                          <div>
+                            <p className="font-medium text-sm">{c.pack_title || "Pack"}</p>
+                            <p className="text-xs text-black/50 mt-0.5">
+                              Code: <span className="font-mono">{c.public_code}</span> · Status:{" "}
+                              <span className="capitalize">{String(c.status || "").replace(/_/g, " ")}</span>
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {c.product_handle ? (
+                              <Link
+                                href={`/shop/${encodeURIComponent(c.product_handle)}`}
+                                className="px-2.5 py-1.5 rounded-lg border border-black/15 text-black/80 text-xs text-center"
+                              >
+                                View product
+                              </Link>
+                            ) : null}
+                            <Link
+                              href="/shop/packs"
+                              className="px-2.5 py-1.5 rounded-lg border border-theme-primary/40 text-theme-primary text-xs text-center"
+                            >
+                              Store packs
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => void copyPackCampaignLink(c.public_code)}
+                              className="px-3 py-2 rounded-lg border border-theme-primary text-theme-primary text-sm"
+                            >
+                              {packCopiedCode === c.public_code ? "Copied!" : "Copy share link"}
+                            </button>
+                            <a
+                              href={`/affiliate/shop/${encodeURIComponent(stats?.affiliate?.code || "")}/pack/${encodeURIComponent(c.public_code)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-2 rounded-lg bg-black text-white text-sm text-center"
+                            >
+                              Open pack page
+                            </a>
+                            {shopPackCampaignIds.has(c.id) ? (
+                              <button
+                                type="button"
+                                onClick={() => void toggleShopPack(c.id, false)}
+                                className="px-3 py-2 rounded-lg border border-black/20 text-sm text-black/75"
+                              >
+                                Remove from shop
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void toggleShopPack(c.id, true)}
+                                disabled={
+                                  c.status === "cancelled" || c.status === "rejected" || c.status === "fulfilled"
+                                }
+                                className="px-3 py-2 rounded-lg border border-theme-primary text-theme-primary text-sm disabled:opacity-45"
+                              >
+                                Add to shop
+                              </button>
+                            )}
+                            {c.status !== "cancelled" && c.status !== "rejected" && c.status !== "fulfilled" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={packClosingId === c.id}
+                                  onClick={() => void closeAffiliatePackCampaign(c.id, "cancelled")}
+                                  className="px-3 py-2 rounded-lg border border-amber-600 text-amber-800 text-sm disabled:opacity-50"
+                                >
+                                  {packClosingId === c.id ? "Closing…" : "Cancel pack"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={packClosingId === c.id}
+                                  onClick={() => void closeAffiliatePackCampaign(c.id, "rejected")}
+                                  className="px-3 py-2 rounded-lg border border-red-400 text-red-800 text-sm disabled:opacity-50"
+                                >
+                                  Reject pack
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                      <form
+                        key={`gift-${c.id}-${c.gift_countdown_ends_at ?? "x"}`}
+                        className="px-3 sm:px-4 pb-4 pt-4 border-t border-black/10 w-full space-y-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void savePackGiftCountdown(c.id, e.currentTarget);
+                        }}
+                      >
+                        <p className="text-xs font-medium text-black/80">Early-bird Blits (countdown)</p>
+                        <p className="text-xs text-black/70 bg-theme-primary/5 border border-theme-primary/15 rounded-lg px-3 py-2">
+                          <strong className="text-black/85">To activate this on your shared pack page:</strong> set{" "}
+                          <strong>Pay-by deadline</strong> plus{" "}
+                          <strong>Fixed prize</strong> (fixed allocation), <strong>Pool</strong> (equal / FCFS), or{" "}
+                          <strong>Custom JSON</strong> (custom allocation), then click{" "}
+                          <strong>Save early-bird settings</strong> below. You should see a success toast; refresh the pack
+                          page to confirm the countdown banner.
+                        </p>
+                        <p className="text-xs text-black/55">
+                          <strong>Fixed</strong>: Blits per paid size. <strong>Equal / FCFS pool</strong>: total pool split
+                          after the deadline (FCFS = earlier payers get larger shares). <strong>Custom</strong>: JSON map
+                          of Medusa <code className="text-[11px]">variant_id</code> → Blits. Clear the deadline and prize
+                          / pool fields and save to turn the offer off. Customers can buy multiple sizes; each gets a
+                          collection code email after payment.
+                        </p>
+                        <div className="flex flex-wrap gap-3 items-end">
+                          <label className="text-xs block min-w-[180px]">
+                            Allocation
+                            <select
+                              name="gift_allocation_type"
+                              defaultValue={c.gift_allocation_type || "fixed_per_payment"}
+                              className="mt-1 w-full border border-black/20 rounded px-2 py-1.5 text-sm"
+                            >
+                              <option value="fixed_per_payment">Fixed Blits per payment</option>
+                              <option value="equal_pool">Equal split of pool</option>
+                              <option value="fcfs_pool">First-come pool (larger share earlier)</option>
+                              <option value="custom_per_size">Custom per variant id</option>
+                            </select>
+                          </label>
+                          <label className="text-xs block min-w-[200px]">
+                            Pay-by deadline (local)
+                            <input
+                              name="gift_ends"
+                              type="datetime-local"
+                              defaultValue={isoToDatetimeLocalInput(c.gift_countdown_ends_at ?? null)}
+                              className="mt-1 w-full border border-black/20 rounded px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs block w-28">
+                            Fixed prize
+                            <input
+                              name="gift_prize"
+                              type="number"
+                              min={1}
+                              step={1}
+                              placeholder="—"
+                              defaultValue={
+                                c.gift_blits_prize != null && c.gift_blits_prize > 0
+                                  ? String(c.gift_blits_prize)
+                                  : ""
+                              }
+                              className="mt-1 w-full border border-black/20 rounded px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs block w-28">
+                            Pool (equal/fcfs)
+                            <input
+                              name="gift_pool"
+                              type="number"
+                              min={1}
+                              step={1}
+                              placeholder="—"
+                              defaultValue={
+                                c.gift_blits_pool != null && c.gift_blits_pool > 0
+                                  ? String(c.gift_blits_pool)
+                                  : ""
+                              }
+                              className="mt-1 w-full border border-black/20 rounded px-2 py-1.5 text-sm"
+                            />
+                          </label>
+                        </div>
+                        <label className="text-xs block w-full max-w-xl">
+                          Custom JSON (variant_id → Blits) — required for custom allocation
+                          <textarea
+                            name="gift_custom_json"
+                            rows={3}
+                            placeholder='{"variant_xxx": 500, "variant_yyy": 200}'
+                            defaultValue={
+                              c.gift_custom_per_size && typeof c.gift_custom_per_size === "object"
+                                ? JSON.stringify(c.gift_custom_per_size, null, 0)
+                                : ""
+                            }
+                            className="mt-1 w-full border border-black/20 rounded px-2 py-1.5 text-xs font-mono"
+                          />
+                        </label>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-black/10">
+                          <p className="text-[11px] text-black/45">Changes are not applied until you save.</p>
+                          <button
+                            type="submit"
+                            disabled={packGiftSavingId === c.id}
+                            className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-lg bg-theme-primary text-white text-sm font-semibold shadow-sm disabled:opacity-50"
+                          >
+                            {packGiftSavingId === c.id ? "Saving…" : "Save early-bird settings"}
+                          </button>
+                        </div>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              </div>
+            </div>
           </section>
         ) : null}
 

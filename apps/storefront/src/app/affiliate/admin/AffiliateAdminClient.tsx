@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Tab =
+  | "oversight"
   | "affiliates"
   | "sales"
   | "payouts"
   | "disputes"
   | "messages"
   | "blits"
+  | "pack_loyalty"
   | "social";
+
+type OversightSubTab = "storefront" | "blits" | "pack_campaigns" | "pack_slots";
 
 interface Affiliate {
   id: string;
@@ -100,6 +104,75 @@ interface SocialModerationPost {
   created_at: string;
 }
 
+interface StorefrontTxRow {
+  id: string;
+  customer_id: string;
+  order_number: string;
+  amount: string;
+  currency_code: string;
+  status: string;
+  invoice_url: string | null;
+  created_at: string;
+  customer_email: string;
+  line_items: Array<{
+    id: string;
+    product_title: string;
+    quantity: number;
+    unit_price: string;
+    product_handle: string | null;
+  }>;
+}
+
+interface BlitsLedgerRow {
+  id: string;
+  customer_id: string;
+  delta_blits: string;
+  balance_after: string;
+  kind: string;
+  metadata: unknown;
+  created_at: string;
+  customer_email: string | null;
+}
+
+interface PackCampaignOversightRow {
+  id: string;
+  public_code: string;
+  status: string;
+  pack_definition_id: string;
+  pack_title: string;
+  affiliate_id: string | null;
+  affiliate_code: string | null;
+  affiliate_email: string | null;
+  gift_countdown_ends_at: string | null;
+  gift_blits_prize: string | null;
+  gift_allocation_type: string | null;
+  created_at: string;
+  updated_at: string;
+  slot_count: string;
+  paid_count: string;
+  reserved_count: string;
+}
+
+interface PackSlotOversightRow {
+  id: string;
+  pack_campaign_id: string;
+  variant_id: string;
+  size_label: string;
+  status: string;
+  customer_id: string | null;
+  order_id: string | null;
+  line_item_id: string | null;
+  collection_code: string | null;
+  metadata: unknown;
+  created_at: string;
+  updated_at: string;
+  campaign_public_code: string;
+  campaign_status: string;
+  pack_title: string;
+  affiliate_code: string | null;
+  storefront_email: string | null;
+}
+
 export default function AffiliateAdminClient() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("affiliates");
@@ -117,6 +190,78 @@ export default function AffiliateAdminClient() {
   const [disputeDraft, setDisputeDraft] = useState({ affiliate_id: "", subject: "", body: "" });
   const [error, setError] = useState("");
   const [savingBlits, setSavingBlits] = useState(false);
+  const [packLoyaltySettings, setPackLoyaltySettings] = useState<Record<string, unknown> | null>(null);
+  const [savingPackLoyalty, setSavingPackLoyalty] = useState(false);
+  const [adminPackCampaignId, setAdminPackCampaignId] = useState("");
+  const [adminPackClosing, setAdminPackClosing] = useState(false);
+  const [adminPackGiftSaving, setAdminPackGiftSaving] = useState(false);
+
+  const [oversightTx, setOversightTx] = useState<StorefrontTxRow[]>([]);
+  const [oversightBlits, setOversightBlits] = useState<BlitsLedgerRow[]>([]);
+  const [oversightPacks, setOversightPacks] = useState<PackCampaignOversightRow[]>([]);
+  const [oversightSlots, setOversightSlots] = useState<PackSlotOversightRow[]>([]);
+  const [oversightLoading, setOversightLoading] = useState(false);
+  const [ovTxQ, setOvTxQ] = useState("");
+  const [ovBlitsQ, setOvBlitsQ] = useState("");
+  const [ovPackQ, setOvPackQ] = useState("");
+  const [ovPackStatus, setOvPackStatus] = useState("");
+  const [ovSlotQ, setOvSlotQ] = useState("");
+  const [ovSlotCampaignId, setOvSlotCampaignId] = useState("");
+  const [oversightSubTab, setOversightSubTab] = useState<OversightSubTab>("storefront");
+  const oversightFiltersRef = useRef({
+    ovTxQ,
+    ovBlitsQ,
+    ovPackQ,
+    ovPackStatus,
+    ovSlotQ,
+    ovSlotCampaignId,
+  });
+  oversightFiltersRef.current = {
+    ovTxQ,
+    ovBlitsQ,
+    ovPackQ,
+    ovPackStatus,
+    ovSlotQ,
+    ovSlotCampaignId,
+  };
+
+  const loadOversight = useCallback(async () => {
+    setOversightLoading(true);
+    setError("");
+    const f = oversightFiltersRef.current;
+    const qs = (path: string, params: Record<string, string>) => {
+      const u = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v) u.set(k, v);
+      }
+      const q = u.toString();
+      return q ? `${path}?${q}` : path;
+    };
+    try {
+      const [txRes, blitsRes, packRes, slotRes] = await Promise.all([
+        fetch(qs("/api/admin/oversight/storefront-transactions", { q: f.ovTxQ, limit: "150" }), {
+          cache: "no-store",
+        }),
+        fetch(qs("/api/admin/oversight/blits-ledger", { q: f.ovBlitsQ, limit: "200" }), { cache: "no-store" }),
+        fetch(qs("/api/admin/oversight/pack-campaigns", { q: f.ovPackQ, status: f.ovPackStatus, limit: "150" }), {
+          cache: "no-store",
+        }),
+        fetch(
+          qs("/api/admin/oversight/pack-slots", { q: f.ovSlotQ, campaign_id: f.ovSlotCampaignId, limit: "200" }),
+          { cache: "no-store" }
+        ),
+      ]);
+      if (txRes.ok) setOversightTx((await txRes.json()).transactions || []);
+      if (blitsRes.ok) setOversightBlits((await blitsRes.json()).entries || []);
+      if (packRes.ok) setOversightPacks((await packRes.json()).campaigns || []);
+      if (slotRes.ok) setOversightSlots((await slotRes.json()).slots || []);
+      if (!txRes.ok || !blitsRes.ok || !packRes.ok || !slotRes.ok) {
+        setError("Some oversight data failed to load. Re-authenticate if your session expired.");
+      }
+    } finally {
+      setOversightLoading(false);
+    }
+  }, []);
 
   const loadCore = useCallback(async () => {
     setError("");
@@ -151,6 +296,11 @@ export default function AffiliateAdminClient() {
     if (giftsRes.ok) setGiftEvents((await giftsRes.json()).gifts || []);
   }, []);
 
+  const loadPackLoyaltySettings = useCallback(async () => {
+    const res = await fetch("/api/admin/pack-loyalty/settings", { cache: "no-store" });
+    if (res.ok) setPackLoyaltySettings((await res.json()).settings || null);
+  }, []);
+
   const loadMessages = useCallback(async () => {
     if (!messageAffiliateId) {
       setMessages([]);
@@ -168,9 +318,14 @@ export default function AffiliateAdminClient() {
   }, [loadCore]);
 
   useEffect(() => {
+    if (tab === "oversight") void loadOversight();
+  }, [tab, loadOversight]);
+
+  useEffect(() => {
     if (tab === "disputes") void loadDisputes();
     if (tab === "blits") void loadBlits();
-  }, [tab, loadDisputes, loadBlits]);
+    if (tab === "pack_loyalty") void loadPackLoyaltySettings();
+  }, [tab, loadDisputes, loadBlits, loadPackLoyaltySettings]);
 
   useEffect(() => {
     if (tab === "messages" && messageAffiliateId) void loadMessages();
@@ -243,6 +398,108 @@ export default function AffiliateAdminClient() {
     await loadDisputes();
   };
 
+  const adminClosePackCampaign = async (reason: "cancelled" | "rejected") => {
+    const id = adminPackCampaignId.trim();
+    if (!id) {
+      setError("Enter a pack campaign id (e.g. pcamp_…).");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Close this pack for all participants? They will be emailed; paid slots get Blits credit where line totals exist. No loyalty penalty."
+      )
+    ) {
+      return;
+    }
+    setAdminPackClosing(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/pack-campaigns/${encodeURIComponent(id)}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const j = (await res.json()) as { error?: string; refundedSlots?: number };
+      if (!res.ok) {
+        setError(j.error || "Close failed.");
+        return;
+      }
+      setAdminPackCampaignId("");
+    } finally {
+      setAdminPackClosing(false);
+    }
+  };
+
+  const saveAdminPackGift = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const id = adminPackCampaignId.trim();
+    if (!id) {
+      setError("Enter a pack campaign id above.");
+      return;
+    }
+    setAdminPackGiftSaving(true);
+    setError("");
+    try {
+      const fd = new FormData(e.currentTarget);
+      const endsLocal = String(fd.get("admin_gift_ends") || "").trim();
+      const prizeRaw = String(fd.get("admin_gift_prize") || "").trim();
+      const poolRaw = String(fd.get("admin_gift_pool") || "").trim();
+      const alloc = String(fd.get("admin_gift_allocation") || "fixed_per_payment").trim();
+      const customRaw = String(fd.get("admin_gift_custom_json") || "").trim();
+      let gift_custom_per_size: Record<string, number> | null = null;
+      if (customRaw) {
+        try {
+          const parsed = JSON.parse(customRaw) as unknown;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            gift_custom_per_size = parsed as Record<string, number>;
+          }
+        } catch {
+          setError("Custom JSON must be valid (variant id → Blits).");
+          return;
+        }
+      }
+      const res = await fetch(`/api/admin/pack-campaigns/${encodeURIComponent(id)}/gift`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gift_countdown_ends_at: endsLocal ? new Date(endsLocal).toISOString() : null,
+          gift_blits_prize: prizeRaw ? Number(prizeRaw) : null,
+          gift_allocation_type: alloc,
+          gift_blits_pool: poolRaw ? Number(poolRaw) : null,
+          gift_custom_per_size,
+        }),
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(j.error || "Save failed.");
+      }
+    } finally {
+      setAdminPackGiftSaving(false);
+    }
+  };
+
+  const savePackLoyaltySettings = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSavingPackLoyalty(true);
+    try {
+      const fd = new FormData(e.currentTarget);
+      const res = await fetch("/api/admin/pack-loyalty/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          starting_loyalty_points: Number(fd.get("starting_loyalty_points")),
+          max_loyalty_points: Number(fd.get("max_loyalty_points")),
+          leave_penalty_points: Number(fd.get("leave_penalty_points")),
+          completion_bonus_points: Number(fd.get("completion_bonus_points")),
+          blits_per_loyalty_point: Number(fd.get("blits_per_loyalty_point")),
+        }),
+      });
+      if (res.ok) setPackLoyaltySettings((await res.json()).settings || null);
+    } finally {
+      setSavingPackLoyalty(false);
+    }
+  };
+
   const saveBlitsSettings = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSavingBlits(true);
@@ -274,13 +531,22 @@ export default function AffiliateAdminClient() {
     }
   };
 
+  const oversightSubTabs: { key: OversightSubTab; label: string }[] = [
+    { key: "storefront", label: "Storefront orders" },
+    { key: "blits", label: "Blits ledger" },
+    { key: "pack_campaigns", label: "Pack campaigns" },
+    { key: "pack_slots", label: "Pack slots" },
+  ];
+
   const tabs: { key: Tab; label: string }[] = [
+    { key: "oversight", label: "Platform oversight" },
     { key: "affiliates", label: "Affiliates" },
     { key: "sales", label: "Sales & commission" },
     { key: "payouts", label: "Payouts" },
     { key: "disputes", label: "Disputes" },
     { key: "messages", label: "Messages" },
     { key: "blits", label: "Blits & gifts" },
+    { key: "pack_loyalty", label: "Pack loyalty" },
     { key: "social", label: "Social moderation" },
   ];
 
@@ -291,7 +557,7 @@ export default function AffiliateAdminClient() {
           <div>
             <h1 className="font-display text-3xl">Commerce admin</h1>
             <p className="text-sm text-black/55 mt-1">
-              Affiliates, payouts, disputes, Blits (virtual currency), and social moderation.
+              Storefront orders, packs, Blits, affiliates, payouts, disputes, and social moderation.
             </p>
           </div>
           <button
@@ -318,6 +584,358 @@ export default function AffiliateAdminClient() {
         </div>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {tab === "oversight" ? (
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-lg">Platform oversight</h2>
+                <p className="text-xs text-black/55 max-w-2xl mt-1">
+                  Pick a view below, set filters, then Apply or Refresh all. Campaign IDs can be sent to Pack loyalty →
+                  close / early-bird tools.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={oversightLoading}
+                onClick={() => void loadOversight()}
+                className="px-4 py-2 bg-theme-primary text-white rounded text-sm disabled:opacity-50"
+              >
+                {oversightLoading ? "Loading…" : "Refresh all"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 border-b border-black/10 pb-2">
+              {oversightSubTabs.map((st) => (
+                <button
+                  key={st.key}
+                  type="button"
+                  onClick={() => setOversightSubTab(st.key)}
+                  className={`px-3 py-1.5 rounded-lg text-sm ${
+                    oversightSubTab === st.key
+                      ? "bg-theme-primary text-white"
+                      : "border border-black/15 text-black/75 bg-white"
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-white rounded-lg border border-theme-primary/20 p-5">
+              {oversightSubTab === "storefront" ? (
+                <>
+                  <p className="text-xs text-black/55 mb-3">
+                    Orders recorded in the customer account (invoice pipeline). Search by order number, email, or
+                    customer id.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <input
+                      value={ovTxQ}
+                      onChange={(e) => setOvTxQ(e.target.value)}
+                      placeholder="Search order #, email, customer id…"
+                      className="flex-1 min-w-[200px] border border-black/20 rounded px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadOversight()}
+                      className="px-3 py-2 border border-black/20 rounded text-sm"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="overflow-auto max-h-[min(70vh,560px)]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b border-black/10">
+                          <th className="py-2 pr-2">When</th>
+                          <th className="py-2 pr-2">Order</th>
+                          <th className="py-2 pr-2">Customer</th>
+                          <th className="py-2 pr-2">Amount</th>
+                          <th className="py-2 pr-2">Status</th>
+                          <th className="py-2">Lines</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oversightTx.map((t) => (
+                          <tr key={t.id} className="border-b border-black/5 align-top">
+                            <td className="py-2 pr-2 whitespace-nowrap text-xs">
+                              {new Date(t.created_at).toLocaleString()}
+                            </td>
+                            <td className="py-2 pr-2 font-mono text-xs">{t.order_number}</td>
+                            <td className="py-2 pr-2">
+                              <span className="break-all">{t.customer_email}</span>
+                              <span className="block text-[11px] text-black/45 font-mono">{t.customer_id}</span>
+                            </td>
+                            <td className="py-2 pr-2 whitespace-nowrap">
+                              {t.amount} {t.currency_code?.toUpperCase()}
+                            </td>
+                            <td className="py-2 pr-2">{t.status}</td>
+                            <td className="py-2 text-xs max-w-[280px]">
+                              {(t.line_items || []).length === 0 ? (
+                                "—"
+                              ) : (
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  {(t.line_items || []).map((li) => (
+                                    <li key={li.id}>
+                                      {li.product_title} × {li.quantity}{" "}
+                                      <span className="text-black/45">@ {li.unit_price}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {oversightTx.length === 0 && !oversightLoading ? (
+                      <p className="text-xs text-black/50 mt-2">No transactions match.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              {oversightSubTab === "blits" ? (
+                <>
+                  <p className="text-xs text-black/55 mb-3">
+                    Credits and debits (kind, balance). Search by kind, customer id, email, or metadata text.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <input
+                      value={ovBlitsQ}
+                      onChange={(e) => setOvBlitsQ(e.target.value)}
+                      placeholder="Search kind, email, id…"
+                      className="flex-1 min-w-[200px] border border-black/20 rounded px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadOversight()}
+                      className="px-3 py-2 border border-black/20 rounded text-sm"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="overflow-auto max-h-[min(70vh,560px)]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b border-black/10">
+                          <th className="py-2 pr-2">When</th>
+                          <th className="py-2 pr-2">Kind</th>
+                          <th className="py-2 pr-2">Δ / balance</th>
+                          <th className="py-2 pr-2">Customer</th>
+                          <th className="py-2">Metadata</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oversightBlits.map((r) => (
+                          <tr key={r.id} className="border-b border-black/5 align-top">
+                            <td className="py-2 pr-2 whitespace-nowrap text-xs">
+                              {new Date(r.created_at).toLocaleString()}
+                            </td>
+                            <td className="py-2 pr-2 font-mono text-xs">{r.kind}</td>
+                            <td className="py-2 pr-2 whitespace-nowrap">
+                              {r.delta_blits} / {r.balance_after}
+                            </td>
+                            <td className="py-2 pr-2">
+                              <span className="break-all">{r.customer_email || "—"}</span>
+                              <span className="block text-[11px] text-black/45 font-mono">{r.customer_id}</span>
+                            </td>
+                            <td
+                              className="py-2 text-[11px] font-mono max-w-[220px] truncate"
+                              title={JSON.stringify(r.metadata)}
+                            >
+                              {JSON.stringify(r.metadata)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {oversightBlits.length === 0 && !oversightLoading ? (
+                      <p className="text-xs text-black/50 mt-2">No ledger rows match.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              {oversightSubTab === "pack_campaigns" ? (
+                <>
+                  <p className="text-xs text-black/55 mb-3">
+                    Wholesale group buys: public code, affiliate, slot counts. Optional status filter (e.g. open,
+                    filling, ready_to_process).
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <input
+                      value={ovPackQ}
+                      onChange={(e) => setOvPackQ(e.target.value)}
+                      placeholder="Search code, title, affiliate…"
+                      className="flex-1 min-w-[180px] border border-black/20 rounded px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={ovPackStatus}
+                      onChange={(e) => setOvPackStatus(e.target.value)}
+                      placeholder="Status (optional)"
+                      className="w-40 border border-black/20 rounded px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadOversight()}
+                      className="px-3 py-2 border border-black/20 rounded text-sm"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="overflow-auto max-h-[min(70vh,560px)]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b border-black/10">
+                          <th className="py-2 pr-2">Updated</th>
+                          <th className="py-2 pr-2">Campaign</th>
+                          <th className="py-2 pr-2">Pack</th>
+                          <th className="py-2 pr-2">Affiliate</th>
+                          <th className="py-2 pr-2">Status</th>
+                          <th className="py-2 pr-2">Slots</th>
+                          <th className="py-2">Gift</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oversightPacks.map((c) => (
+                          <tr key={c.id} className="border-b border-black/5 align-top">
+                            <td className="py-2 pr-2 whitespace-nowrap text-xs">
+                              {new Date(c.updated_at).toLocaleString()}
+                            </td>
+                            <td className="py-2 pr-2">
+                              <span className="font-mono text-xs break-all">{c.id}</span>
+                              <span className="block text-[11px] text-black/50">#{c.public_code}</span>
+                              <button
+                                type="button"
+                                className="text-[11px] underline text-theme-primary mt-0.5"
+                                onClick={() => {
+                                  setAdminPackCampaignId(c.id);
+                                  setTab("pack_loyalty");
+                                }}
+                              >
+                                Use in Pack loyalty tools
+                              </button>
+                            </td>
+                            <td className="py-2 pr-2">{c.pack_title}</td>
+                            <td className="py-2 pr-2">
+                              <span className="font-medium">{c.affiliate_code || "—"}</span>
+                              <span className="block text-[11px] text-black/50 break-all">{c.affiliate_email || ""}</span>
+                            </td>
+                            <td className="py-2 pr-2">{c.status}</td>
+                            <td className="py-2 pr-2 whitespace-nowrap text-xs">
+                              total {c.slot_count} · paid {c.paid_count} · res. {c.reserved_count}
+                            </td>
+                            <td className="py-2 text-xs max-w-[180px]">
+                              {c.gift_allocation_type || "—"}
+                              {c.gift_countdown_ends_at ? (
+                                <span className="block text-[11px] text-black/50">
+                                  ends {new Date(c.gift_countdown_ends_at).toLocaleString()}
+                                </span>
+                              ) : null}
+                              {c.gift_blits_prize ? (
+                                <span className="block">prize {c.gift_blits_prize}</span>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {oversightPacks.length === 0 && !oversightLoading ? (
+                      <p className="text-xs text-black/50 mt-2">No campaigns match.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              {oversightSubTab === "pack_slots" ? (
+                <>
+                  <p className="text-xs text-black/55 mb-3">
+                    Per-size rows: collection code, Medusa order id, storefront customer when known. Filter by campaign
+                    id or search codes / order / email.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <input
+                      value={ovSlotCampaignId}
+                      onChange={(e) => setOvSlotCampaignId(e.target.value)}
+                      placeholder="Campaign id (optional)"
+                      className="flex-1 min-w-[200px] border border-black/20 rounded px-3 py-2 text-xs font-mono"
+                    />
+                    <input
+                      value={ovSlotQ}
+                      onChange={(e) => setOvSlotQ(e.target.value)}
+                      placeholder="Search collection code, order id, email…"
+                      className="flex-1 min-w-[200px] border border-black/20 rounded px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadOversight()}
+                      className="px-3 py-2 border border-black/20 rounded text-sm"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="overflow-auto max-h-[min(70vh,560px)]">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left border-b border-black/10">
+                          <th className="py-2 pr-2">Updated</th>
+                          <th className="py-2 pr-2">Slot</th>
+                          <th className="py-2 pr-2">Campaign</th>
+                          <th className="py-2 pr-2">Size</th>
+                          <th className="py-2 pr-2">Status</th>
+                          <th className="py-2 pr-2">Order / code</th>
+                          <th className="py-2 pr-2">Buyer</th>
+                          <th className="py-2">Meta</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oversightSlots.map((s) => (
+                          <tr key={s.id} className="border-b border-black/5 align-top">
+                            <td className="py-2 pr-2 whitespace-nowrap text-xs">
+                              {new Date(s.updated_at).toLocaleString()}
+                            </td>
+                            <td className="py-2 pr-2 font-mono text-[11px] break-all max-w-[100px]">{s.id}</td>
+                            <td className="py-2 pr-2">
+                              <span className="text-[11px] font-mono break-all">{s.pack_campaign_id}</span>
+                              <span className="block text-[11px] text-black/50">
+                                #{s.campaign_public_code} · {s.campaign_status}
+                              </span>
+                              <span className="block">{s.pack_title}</span>
+                              {s.affiliate_code ? (
+                                <span className="text-[11px] text-black/50">aff {s.affiliate_code}</span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 pr-2">{s.size_label}</td>
+                            <td className="py-2 pr-2">{s.status}</td>
+                            <td className="py-2 pr-2 font-mono text-[11px]">
+                              {s.collection_code || "—"}
+                              <span className="block break-all">{s.order_id || "—"}</span>
+                            </td>
+                            <td className="py-2 pr-2">
+                              <span className="break-all">{s.storefront_email || "—"}</span>
+                              <span className="block text-[11px] font-mono text-black/45">{s.customer_id || "—"}</span>
+                            </td>
+                            <td
+                              className="py-2 text-[10px] font-mono max-w-[160px] truncate"
+                              title={JSON.stringify(s.metadata)}
+                            >
+                              {JSON.stringify(s.metadata)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {oversightSlots.length === 0 && !oversightLoading ? (
+                      <p className="text-xs text-black/50 mt-2">No slots match.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         {tab === "affiliates" ? (
           <section className="bg-white rounded-lg border border-theme-primary/20 p-5">
@@ -790,6 +1408,187 @@ export default function AffiliateAdminClient() {
                   <p className="text-xs text-black/50 mt-2">No gifts recorded yet.</p>
                 ) : null}
               </div>
+            </div>
+          </section>
+        ) : null}
+
+        {tab === "pack_loyalty" ? (
+          <section className="bg-white rounded-lg border border-theme-primary/20 p-5 space-y-4">
+            <h2 className="font-semibold mb-1">Wholesale pack loyalty</h2>
+            <p className="text-xs text-black/55 mb-4 max-w-2xl">
+              Customers earn pack loyalty points (default start 100, cap 200). Leaving a pack applies a penalty.
+              When every size in a group pack is paid, participants get a completion bonus. They can redeem points
+              for Blits at the rate below and use Blits at checkout.
+            </p>
+            {packLoyaltySettings ? (
+              <form onSubmit={savePackLoyaltySettings} className="grid gap-3 max-w-xl">
+                <label className="text-sm">
+                  Starting points (new accounts)
+                  <input
+                    name="starting_loyalty_points"
+                    type="number"
+                    step="1"
+                    min="0"
+                    defaultValue={String(packLoyaltySettings.starting_loyalty_points ?? 100)}
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  Maximum points (cap)
+                  <input
+                    name="max_loyalty_points"
+                    type="number"
+                    step="1"
+                    min="1"
+                    defaultValue={String(packLoyaltySettings.max_loyalty_points ?? 200)}
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  Points deducted when leaving a pack
+                  <input
+                    name="leave_penalty_points"
+                    type="number"
+                    step="1"
+                    min="0"
+                    defaultValue={String(packLoyaltySettings.leave_penalty_points ?? 5)}
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  Bonus points when pack completes (all sizes paid)
+                  <input
+                    name="completion_bonus_points"
+                    type="number"
+                    step="1"
+                    min="0"
+                    defaultValue={String(packLoyaltySettings.completion_bonus_points ?? 2)}
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm">
+                  Blits credited per loyalty point redeemed
+                  <input
+                    name="blits_per_loyalty_point"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={String(packLoyaltySettings.blits_per_loyalty_point ?? 1)}
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={savingPackLoyalty}
+                  className="px-4 py-2 bg-theme-primary text-white rounded text-sm w-fit"
+                >
+                  {savingPackLoyalty ? "Saving…" : "Save pack loyalty settings"}
+                </button>
+              </form>
+            ) : (
+              <p className="text-sm text-black/55">Loading…</p>
+            )}
+
+            <div className="border-t border-black/10 pt-6 mt-6 max-w-xl">
+              <h3 className="font-semibold mb-1">Close pack by campaign ID</h3>
+              <p className="text-xs text-black/55 mb-3">
+                Cancels or rejects a pack for all participants (emails from the same transactional sender as the AI
+                agent / info inbox). Credits Blits for paid slots when line totals were stored at checkout.
+              </p>
+              <div className="flex flex-wrap gap-2 items-end">
+                <label className="text-sm flex-1 min-w-[200px]">
+                  Campaign id
+                  <input
+                    value={adminPackCampaignId}
+                    onChange={(e) => setAdminPackCampaignId(e.target.value)}
+                    placeholder="pcamp_…"
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2 font-mono text-xs"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={adminPackClosing}
+                  onClick={() => void adminClosePackCampaign("cancelled")}
+                  className="px-4 py-2 border border-amber-600 text-amber-900 rounded text-sm disabled:opacity-50"
+                >
+                  {adminPackClosing ? "…" : "Cancel pack"}
+                </button>
+                <button
+                  type="button"
+                  disabled={adminPackClosing}
+                  onClick={() => void adminClosePackCampaign("rejected")}
+                  className="px-4 py-2 border border-red-500 text-red-900 rounded text-sm disabled:opacity-50"
+                >
+                  Reject pack
+                </button>
+              </div>
+              <form onSubmit={saveAdminPackGift} className="mt-5 space-y-3 max-w-xl">
+                <h4 className="text-sm font-semibold">Early-bird Blits (same campaign id)</h4>
+                <p className="text-xs text-black/55">
+                  Fixed = Blits per payment; equal/fcfs = total pool after deadline; custom = JSON map of variant id →
+                  Blits. Clear deadline and all amounts to remove. Pool settlement runs after the countdown (webhook or
+                  pack page load).
+                </p>
+                <label className="text-sm block">
+                  Allocation
+                  <select
+                    name="admin_gift_allocation"
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                    defaultValue="fixed_per_payment"
+                  >
+                    <option value="fixed_per_payment">Fixed per payment</option>
+                    <option value="equal_pool">Equal pool</option>
+                    <option value="fcfs_pool">FCFS pool</option>
+                    <option value="custom_per_size">Custom per variant</option>
+                  </select>
+                </label>
+                <label className="text-sm block">
+                  Pay-by deadline (local)
+                  <input
+                    name="admin_gift_ends"
+                    type="datetime-local"
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm block">
+                  Fixed Blits prize
+                  <input
+                    name="admin_gift_prize"
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder="—"
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm block">
+                  Pool (equal / fcfs)
+                  <input
+                    name="admin_gift_pool"
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder="—"
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm block">
+                  Custom JSON
+                  <textarea
+                    name="admin_gift_custom_json"
+                    rows={3}
+                    placeholder='{"variant_xxx": 500}'
+                    className="mt-1 w-full border border-black/20 rounded px-3 py-2 text-xs font-mono"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={adminPackGiftSaving}
+                  className="px-4 py-2 bg-theme-primary text-white rounded text-sm disabled:opacity-50"
+                >
+                  {adminPackGiftSaving ? "Saving…" : "Save early-bird Blits"}
+                </button>
+              </form>
             </div>
           </section>
         ) : null}

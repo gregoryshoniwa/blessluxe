@@ -16,6 +16,7 @@ import { useToast } from '@/providers';
 import {
   finalizeOrderAfterPayment,
   serializeCartItemsForCheckout,
+  syncPackSlotsAfterCheckout,
   type StripePendingCheckout,
 } from '@/lib/checkout-finalize-order-client';
 import { StripeElementsPayment, isStripePublishableConfigured } from '@/components/checkout/StripeElementsPayment';
@@ -698,7 +699,13 @@ export default function CheckoutPaymentPage() {
       } catch (transactionError) {
         console.warn("Transaction persistence failed:", transactionError);
       }
-      
+
+      try {
+        await syncPackSlotsAfterCheckout(orderId, items);
+      } catch (packSyncErr) {
+        console.warn("Pack slot sync failed:", packSyncErr);
+      }
+
       setPaymentMethod(selectedMethod);
       setOrderComplete(orderId, orderNumber);
       clearCart();

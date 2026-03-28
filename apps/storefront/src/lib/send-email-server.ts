@@ -1,15 +1,31 @@
 /**
- * Server-only transactional email for the storefront (AI agent, account flows).
- * Uses the same env convention as Medusa: SendGrid **or** SMTP, not both required here —
- * we pick SendGrid if SENDGRID_API_KEY is set, else SMTP if SMTP_HOST is set.
+ * Server-only transactional email for the storefront (AI agent, account flows, pack notifications).
+ * Same env as Medusa: **SMTP (Nodemailer)** or SendGrid. When both are configured, **SMTP is used by default**
+ * so Nodemailer matches backend mail unless `STOREFRONT_EMAIL_PROVIDER=sendgrid`.
  */
 import nodemailer from 'nodemailer';
+
+/** Matches invoice brand / AI agent: prefer env, else BLESSLUXE &lt;info@blessluxe.com&gt; (read at send time). */
+export function getDefaultTransactionalFrom(): string {
+  return (
+    process.env.SMTP_FROM?.trim() ||
+    process.env.SENDGRID_FROM?.trim() ||
+    "BLESSLUXE <info@blessluxe.com>"
+  );
+}
+
+/** Reply-To for customer replies (same inbox as branded contact). */
+export function getDefaultReplyToEmail(): string {
+  return process.env.REPLY_TO_EMAIL?.trim() || process.env.SMTP_REPLY_TO?.trim() || "info@blessluxe.com";
+}
 
 export interface SendTransactionalEmailInput {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /** Overrides {@link getDefaultReplyToEmail} when set. */
+  replyTo?: string;
 }
 
 export interface SendTransactionalEmailResult {
@@ -20,7 +36,7 @@ export interface SendTransactionalEmailResult {
 }
 
 function getSendGridFrom(): { email: string; name?: string } {
-  const raw = process.env.SENDGRID_FROM || process.env.SMTP_FROM || 'noreply@blessluxe.com';
+  const raw = getDefaultTransactionalFrom();
   const m = raw.match(/^(?:"?([^"<]+)"?\s*)?<([^>]+)>$/);
   if (m) {
     return { name: m[1]?.trim(), email: m[2].trim() };
@@ -33,8 +49,7 @@ function sendGridKey(): string {
   return typeof raw === 'string' ? raw.trim() : '';
 }
 
-export function isEmailConfigured(): boolean {
-  if (sendGridKey()) return true;
+function isSmtpReady(): boolean {
   return Boolean(
     process.env.SMTP_HOST?.trim() &&
       process.env.SMTP_USER?.trim() &&
@@ -42,25 +57,43 @@ export function isEmailConfigured(): boolean {
   );
 }
 
+/**
+ * Which outbound path to use. Default: **SMTP (Nodemailer) first** when host + auth are set, so a stray
+ * `SENDGRID_API_KEY` does not block mail that is actually meant to go through Medusa-style SMTP.
+ * Set `STOREFRONT_EMAIL_PROVIDER=sendgrid` to force SendGrid when both are configured.
+ */
+function resolveTransactionalProvider(): 'smtp' | 'sendgrid' | null {
+  const explicit = process.env.STOREFRONT_EMAIL_PROVIDER?.trim().toLowerCase();
+  if (explicit === 'sendgrid') {
+    return sendGridKey() ? 'sendgrid' : null;
+  }
+  if (explicit === 'smtp') {
+    return isSmtpReady() ? 'smtp' : null;
+  }
+  if (isSmtpReady()) return 'smtp';
+  if (sendGridKey()) return 'sendgrid';
+  return null;
+}
+
+export function isEmailConfigured(): boolean {
+  return resolveTransactionalProvider() !== null;
+}
+
 export async function sendTransactionalEmail(
   input: SendTransactionalEmailInput
 ): Promise<SendTransactionalEmailResult> {
-  const apiKey = sendGridKey();
-  if (apiKey) {
-    return sendViaSendGrid(apiKey, input);
-  }
-
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
-  if (host && user && pass) {
+  const provider = resolveTransactionalProvider();
+  if (provider === 'smtp') {
     return sendViaSmtp(input);
+  }
+  if (provider === 'sendgrid') {
+    return sendViaSendGrid(sendGridKey(), input);
   }
 
   return {
     ok: false,
     error:
-      'Email is not configured. Set SENDGRID_API_KEY and SENDGRID_FROM, or SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM (same as Medusa backend).',
+      'Email is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM (Nodemailer / same as Medusa), or SENDGRID_API_KEY + SENDGRID_FROM. Optional: STOREFRONT_EMAIL_PROVIDER=smtp|sendgrid.',
   };
 }
 
@@ -69,6 +102,7 @@ async function sendViaSendGrid(
   input: SendTransactionalEmailInput
 ): Promise<SendTransactionalEmailResult> {
   const from = getSendGridFrom();
+  const replyEmail = (input.replyTo || getDefaultReplyToEmail()).trim();
 
   const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -79,6 +113,7 @@ async function sendViaSendGrid(
     body: JSON.stringify({
       personalizations: [{ to: [{ email: input.to }] }],
       from: { email: from.email, ...(from.name ? { name: from.name } : {}) },
+      reply_to: { email: replyEmail, name: 'BLESSLUXE' },
       subject: input.subject,
       content: [
         ...(input.text ? [{ type: 'text/plain', value: input.text }] : []),
@@ -103,12 +138,15 @@ async function sendViaSendGrid(
 async function sendViaSmtp(input: SendTransactionalEmailInput): Promise<SendTransactionalEmailResult> {
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = process.env.SMTP_SECURE === 'true';
-  const from = process.env.SMTP_FROM || process.env.SENDGRID_FROM || 'noreply@blessluxe.com';
+  const from = getDefaultTransactionalFrom();
+  const replyTo = (input.replyTo || getDefaultReplyToEmail()).trim();
+  const requireTLS = process.env.SMTP_REQUIRE_TLS === 'true';
 
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST!,
     port,
     secure,
+    requireTLS: requireTLS || undefined,
     auth: {
       user: process.env.SMTP_USER!,
       pass: process.env.SMTP_PASS!,
@@ -122,6 +160,7 @@ async function sendViaSmtp(input: SendTransactionalEmailInput): Promise<SendTran
     const info = await transporter.sendMail({
       from,
       to: input.to,
+      replyTo,
       subject: input.subject,
       html: input.html,
       text: input.text || undefined,

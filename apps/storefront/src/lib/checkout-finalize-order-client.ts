@@ -2,6 +2,8 @@ import type { CartItem } from "@/stores/cart";
 
 export type SerializedCartItem = {
   id: string;
+  /** Added for pack checkout sync; omitted in older Stripe session payloads. */
+  variantId?: string;
   productId: string;
   handle?: string;
   title: string;
@@ -9,6 +11,8 @@ export type SerializedCartItem = {
   unitPrice: number;
   affiliateCode?: string;
   blitsTopupUsd?: number;
+  /** Medusa cart line metadata (pack campaign / slot ids). */
+  lineMetadata?: Record<string, unknown> | null;
 };
 
 export type StripePendingCheckout = {
@@ -28,6 +32,7 @@ export const STRIPE_CHECKOUT_STORAGE_KEY = "blessluxe_stripe_checkout_pending";
 export function serializeCartItemsForCheckout(items: CartItem[]): SerializedCartItem[] {
   return items.map((i) => ({
     id: i.id,
+    variantId: i.variantId,
     productId: i.productId,
     handle: i.handle,
     title: i.title,
@@ -35,7 +40,73 @@ export function serializeCartItemsForCheckout(items: CartItem[]): SerializedCart
     unitPrice: i.unitPrice,
     affiliateCode: i.affiliateCode,
     blitsTopupUsd: i.blitsTopupUsd,
+    lineMetadata: i.lineMetadata ?? undefined,
   }));
+}
+
+/** Mark pack slots paid after storefront checkout (no Medusa order webhook). */
+export async function syncPackSlotsAfterCheckout(
+  orderId: string,
+  items: Array<Pick<CartItem, "source" | "variantId" | "id" | "medusaLineItemId" | "unitPrice" | "quantity" | "lineMetadata">>
+): Promise<void> {
+  const lines = items
+    .filter((i) => i.source === "medusa")
+    .filter((i) => {
+      const m = i.lineMetadata;
+      return m && typeof m.pack_campaign_id === "string" && typeof m.pack_slot_id === "string";
+    })
+    .map((i) => ({
+      variant_id: i.variantId,
+      line_item_id: i.medusaLineItemId || i.id,
+      metadata: i.lineMetadata as Record<string, unknown>,
+      line_paid_usd: i.unitPrice * i.quantity,
+    }));
+  if (lines.length === 0) return;
+  try {
+    const res = await fetch("/api/pack-campaigns/after-checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId, lines }),
+    });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      console.warn("[checkout] pack slot sync:", j.error || res.status);
+    }
+  } catch (e) {
+    console.warn("[checkout] pack slot sync failed:", e);
+  }
+}
+
+export async function syncPackSlotsAfterCheckoutSerialized(
+  orderId: string,
+  items: SerializedCartItem[]
+): Promise<void> {
+  const lines = items
+    .filter((i) => i.variantId)
+    .filter((i) => {
+      const m = i.lineMetadata;
+      return m && typeof m.pack_campaign_id === "string" && typeof m.pack_slot_id === "string";
+    })
+    .map((i) => ({
+      variant_id: i.variantId as string,
+      line_item_id: i.id,
+      metadata: i.lineMetadata as Record<string, unknown>,
+      line_paid_usd: i.unitPrice * i.quantity,
+    }));
+  if (lines.length === 0) return;
+  try {
+    const res = await fetch("/api/pack-campaigns/after-checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId, lines }),
+    });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      console.warn("[checkout] pack slot sync:", j.error || res.status);
+    }
+  } catch (e) {
+    console.warn("[checkout] pack slot sync failed:", e);
+  }
 }
 
 export function saveStripePendingCheckout(p: StripePendingCheckout): void {
@@ -71,6 +142,8 @@ export async function finalizeOrderAfterPayment(input: {
 }): Promise<void> {
   const { pending, setPaymentMethod, setOrderComplete, clearCart } = input;
   const { orderId, orderNumber, chargeUsd, selectedMethod, items } = pending;
+
+  await syncPackSlotsAfterCheckoutSerialized(orderId, items);
 
   const topupLineItems = items.filter(
     (i) =>

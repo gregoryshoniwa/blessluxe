@@ -23,6 +23,8 @@ export interface CartItem {
   source?: "medusa" | "virtual";
   /** Medusa line item id (same as `id` for medusa lines). */
   medusaLineItemId?: string;
+  /** From Medusa cart line `metadata` (pack ids, storefront customer, etc.). */
+  lineMetadata?: Record<string, unknown> | null;
   variant: {
     title: string;
     sku: string | null;
@@ -46,7 +48,13 @@ interface CartState {
 
   addVirtualItem: (item: Omit<CartItem, "id" | "source">) => void;
   /** Add or update a Medusa variant line via Store API (inventory-aware). */
-  addMedusaVariant: (input: { variantId: string; quantity: number; affiliateCode?: string }) => Promise<void>;
+  addMedusaVariant: (input: {
+    variantId: string;
+    quantity: number;
+    affiliateCode?: string;
+    /** Stored on the cart line item (e.g. pack campaign / slot ids for webhooks). */
+    lineItemMetadata?: Record<string, unknown>;
+  }) => Promise<void>;
   ensureMedusaCart: () => Promise<string | null>;
   refreshMedusaCart: () => Promise<void>;
 
@@ -146,6 +154,9 @@ export const useCartStore = create<CartState>()(
             {
               variant_id: input.variantId,
               quantity: input.quantity,
+              ...(input.lineItemMetadata && Object.keys(input.lineItemMetadata).length > 0
+                ? { metadata: input.lineItemMetadata }
+                : {}),
             },
             MEDUSA_STORE_CART_QUERY
           );

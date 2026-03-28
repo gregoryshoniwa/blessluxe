@@ -58,9 +58,11 @@ interface ReviewsData {
 
 interface ProductClientWrapperProps {
   product: Product;
+  /** When set, main shop only allows buying the full wholesale pack (all size variants). */
+  packDefinitionId?: string | null;
 }
 
-export function ProductClientWrapper({ product }: ProductClientWrapperProps) {
+export function ProductClientWrapper({ product, packDefinitionId }: ProductClientWrapperProps) {
   const addMedusaVariant = useCartStore((state) => state.addMedusaVariant);
   const addVirtualItem = useCartStore((state) => state.addVirtualItem);
   const openCart = useCartStore((state) => state.openCart);
@@ -107,9 +109,30 @@ export function ProductClientWrapper({ product }: ProductClientWrapperProps) {
     });
   };
 
+  const handleAddFullPack = async () => {
+    const rows = product.variantRows?.filter((r) => r.inStock) ?? [];
+    if (!rows.length) {
+      throw new Error("This pack is not available right now.");
+    }
+    if (!packDefinitionId) return;
+    for (const row of rows) {
+      await addMedusaVariant({
+        variantId: row.id,
+        quantity: 1,
+        lineItemMetadata: {
+          pack_definition_id: packDefinitionId,
+          pack_purchase: "full",
+        },
+      });
+    }
+    openCart();
+  };
+
   return (
     <ProductInfo
       product={product}
+      packFullOnly={!!packDefinitionId}
+      onAddFullPack={packDefinitionId ? handleAddFullPack : undefined}
       onAddToCart={handleAddToCart}
       onAddToWishlist={handleAddToWishlist}
     />

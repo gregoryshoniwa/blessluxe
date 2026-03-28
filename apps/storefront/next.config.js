@@ -4,7 +4,10 @@ const { loadEnvConfig } = require("@next/env");
 // Next only auto-loads .env* from apps/storefront. Medusa/monorepo SMTP lives in repo root — load both so
 // /api/agent and send_email see SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM (same as backend).
 const repoRoot = path.join(__dirname, "../..");
+const medusaRoot = path.join(repoRoot, "backend/medusa");
 loadEnvConfig(repoRoot);
+// Medusa SMTP often lives only in backend/medusa/.env — load it so storefront pack mail + Nodemailer see the same vars.
+loadEnvConfig(medusaRoot);
 loadEnvConfig(__dirname);
 
 /** @type {import('next').NextConfig} */

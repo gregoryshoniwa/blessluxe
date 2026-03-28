@@ -120,6 +120,20 @@ export function MobileNav() {
               Shop
             </p>
             <ul className="space-y-1">
+              {!isAffiliateShopPage ? (
+                <li>
+                  <Link
+                    href={withAffiliateRef("/shop/packs")}
+                    onClick={closeMobileNav}
+                    className={cn(
+                      "block py-3 px-2 -mx-2 rounded-lg font-body text-sm font-medium tracking-widest uppercase",
+                      pathname === "/shop/packs" ? "text-gold bg-gold/10" : "text-black hover:text-gold"
+                    )}
+                  >
+                    Packs
+                  </Link>
+                </li>
+              ) : null}
               {!isAffiliateShopPage ? navLinks.map((link) => (
                 <li key={link.label}>
                   {link.submenu ? (

@@ -118,7 +118,8 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-affiliate-media}
       GOOGLE_NANO_BANANA_MODEL: ${GOOGLE_NANO_BANANA_MODEL:-gemini-3.1-flash-image-preview}
-      # Agent transactional email (same vars as Medusa notification module)
+      # Agent + pack transactional email (Nodemailer / SendGrid — same as Medusa notification module)
+      STOREFRONT_EMAIL_PROVIDER: ${STOREFRONT_EMAIL_PROVIDER:-}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM: ${SENDGRID_FROM:-}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -127,6 +128,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL:-}
 
 volumes:
   postgres_data:

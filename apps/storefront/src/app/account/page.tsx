@@ -28,6 +28,7 @@ type AccountPayload = {
     bio?: string;
     address?: CustomerAddress;
     email_verified?: boolean;
+    metadata?: Record<string, unknown> | null;
   } | null;
   transactions?: Array<Record<string, unknown>>;
   tickets?: Array<Record<string, unknown>>;
@@ -48,10 +49,25 @@ type CustomerAddress = {
 
 type WallPost = Record<string, unknown> & { comments?: Array<Record<string, unknown>> };
 
+type PackParticipationRow = {
+  id: string;
+  pack_definition_id: string;
+  public_code: string;
+  status: string;
+  slot_id: string;
+  size_label: string;
+  slot_status: string;
+  slot_collection_code?: string | null;
+  pack_title: string | null;
+  affiliate_code: string | null;
+  updated_at?: string;
+};
+
 const tabs = [
   "Profile",
   "Transactions",
   "Blits",
+  "Packs",
   "Tickets",
   "Affiliate",
   "Wall",
@@ -91,6 +107,20 @@ function AccountPageContent() {
   const [customUsd, setCustomUsd] = useState("");
   const [blitsSubTab, setBlitsSubTab] = useState<"add" | "activity" | "payout">("add");
 
+  const [packParticipations, setPackParticipations] = useState<PackParticipationRow[]>([]);
+  const [packsTabLoading, setPacksTabLoading] = useState(false);
+  const [packLoyaltySnapshot, setPackLoyaltySnapshot] = useState<{
+    loyalty_points: number;
+    settings: {
+      max_loyalty_points: number;
+      blits_per_loyalty_point: number;
+    } | null;
+  } | null>(null);
+  const [redeemPoints, setRedeemPoints] = useState("");
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  const [packPrivacyDisplay, setPackPrivacyDisplay] = useState<"name" | "code">("name");
+  const [packPrivacyBusy, setPackPrivacyBusy] = useState(false);
+
   const searchParams = useSearchParams();
 
   const customer = payload?.customer || null;
@@ -99,6 +129,16 @@ function AccountPageContent() {
     if (!customer) return "";
     return customer.full_name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || customer.email;
   }, [customer]);
+
+  const packPublicDisplayFromServer = useMemo(() => {
+    const m = customer?.metadata;
+    if (!m || typeof m !== "object" || Array.isArray(m)) return undefined;
+    return (m as Record<string, unknown>).pack_public_display;
+  }, [customer?.metadata]);
+
+  useEffect(() => {
+    setPackPrivacyDisplay(packPublicDisplayFromServer === "code" ? "code" : "name");
+  }, [customer?.id, packPublicDisplayFromServer]);
 
   const loadAccount = async () => {
     setLoading(true);
@@ -128,6 +168,7 @@ function AccountPageContent() {
       profile: "Profile",
       transactions: "Transactions",
       blits: "Blits",
+      packs: "Packs",
       tickets: "Tickets",
       affiliate: "Affiliate",
       wall: "Wall",
@@ -176,6 +217,44 @@ function AccountPageContent() {
   }, [customer, activeTab]);
 
   useEffect(() => {
+    if (!customer || activeTab !== "Packs") return;
+    let cancelled = false;
+    (async () => {
+      setPacksTabLoading(true);
+      try {
+        const [pRes, lRes] = await Promise.all([
+          fetch("/api/account/packs", { cache: "no-store" }),
+          fetch("/api/account/pack-loyalty", { cache: "no-store" }),
+        ]);
+        if (cancelled) return;
+        if (pRes.ok) {
+          const data = (await pRes.json()) as { participations?: PackParticipationRow[] };
+          setPackParticipations(Array.isArray(data.participations) ? data.participations : []);
+        } else {
+          setPackParticipations([]);
+        }
+        if (lRes.ok) {
+          const lj = (await lRes.json()) as {
+            loyalty_points?: number;
+            settings?: { max_loyalty_points: number; blits_per_loyalty_point: number } | null;
+          };
+          setPackLoyaltySnapshot({
+            loyalty_points: Number(lj.loyalty_points ?? 0),
+            settings: lj.settings ?? null,
+          });
+        } else {
+          setPackLoyaltySnapshot(null);
+        }
+      } finally {
+        if (!cancelled) setPacksTabLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customer, activeTab]);
+
+  useEffect(() => {
     const syncOauthSession = async () => {
       if (!oauthSession?.user?.email || customer || oauthSyncInFlight.current) return;
       oauthSyncInFlight.current = true;
@@ -190,6 +269,66 @@ function AccountPageContent() {
     };
     syncOauthSession();
   }, [customer, oauthSession?.user?.email]);
+
+  const onRedeemPackLoyalty = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const n = Number(redeemPoints);
+    if (!Number.isFinite(n) || n <= 0) {
+      setError("Enter a valid number of points to redeem.");
+      return;
+    }
+    setRedeemBusy(true);
+    setError("");
+    setNote("");
+    try {
+      const res = await fetch("/api/account/pack-loyalty", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ points: Math.floor(n) }),
+      });
+      const j = (await res.json()) as { error?: string; loyalty_points?: number; blits_credited?: string };
+      if (!res.ok) {
+        setError(j.error || "Redeem failed.");
+        return;
+      }
+      setNote(`Redeemed — ${j.blits_credited ?? ""} Blits added to your wallet.`);
+      setRedeemPoints("");
+      if (typeof j.loyalty_points === "number") {
+        setPackLoyaltySnapshot((prev) =>
+          prev ? { ...prev, loyalty_points: j.loyalty_points! } : prev
+        );
+      }
+    } catch {
+      setError("Redeem failed.");
+    } finally {
+      setRedeemBusy(false);
+    }
+  };
+
+  const onSavePackPrivacy = async (next: "name" | "code") => {
+    if (!customer) return;
+    setPackPrivacyBusy(true);
+    try {
+      const res = await fetch("/api/account/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          metadataPatch: { pack_public_display: next === "code" ? "code" : "name" },
+        }),
+      });
+      if (!res.ok) {
+        setError("Could not save pack display preference.");
+        return;
+      }
+      setPackPrivacyDisplay(next);
+      setNote("Pack page privacy updated.");
+      await loadAccount();
+    } catch {
+      setError("Could not save pack display preference.");
+    } finally {
+      setPackPrivacyBusy(false);
+    }
+  };
 
   const onLogout = async () => {
     await signOut({ redirect: false });
@@ -611,6 +750,152 @@ function AccountPageContent() {
                   )}
                 </>
               ) : null}
+            </div>
+          ) : null}
+
+          {activeTab === "Packs" ? (
+            <div className="border border-black/10 p-6 space-y-4">
+              <div>
+                <h3 className="font-display tracking-widest uppercase">Wholesale group packs</h3>
+                <p className="mt-1 text-sm text-black/60">
+                  Sizes you claimed in affiliate group packs. Open the shared page to see the full group status.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-black/10 bg-white/90 px-4 py-4 space-y-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-black/45">How you appear on pack pages</p>
+                <p className="text-sm text-black/65">
+                  Other participants can see who holds each size. Choose whether to show your name or only your
+                  collection code.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={packPrivacyBusy}
+                    onClick={() => void onSavePackPrivacy("name")}
+                    className={`rounded-lg border px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                      packPrivacyDisplay === "name"
+                        ? "border-gold bg-gold/15 text-black/90"
+                        : "border-black/15 text-black/60 hover:bg-black/5"
+                    } disabled:opacity-50`}
+                  >
+                    Show my name
+                  </button>
+                  <button
+                    type="button"
+                    disabled={packPrivacyBusy}
+                    onClick={() => void onSavePackPrivacy("code")}
+                    className={`rounded-lg border px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                      packPrivacyDisplay === "code"
+                        ? "border-gold bg-gold/15 text-black/90"
+                        : "border-black/15 text-black/60 hover:bg-black/5"
+                    } disabled:opacity-50`}
+                  >
+                    Code only
+                  </button>
+                </div>
+              </div>
+
+              {!packsTabLoading && packLoyaltySnapshot ? (
+                <div className="border border-gold/30 bg-cream/50 p-4 space-y-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-black/45">Pack loyalty</p>
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <p className="font-display text-3xl text-gold-dark">{packLoyaltySnapshot.loyalty_points}</p>
+                      <p className="text-xs text-black/50 mt-1">
+                        Max {packLoyaltySnapshot.settings?.max_loyalty_points ?? 200} points · redeem for Blits (
+                        {packLoyaltySnapshot.settings?.blits_per_loyalty_point ?? 1} Blits per point)
+                      </p>
+                    </div>
+                    <form onSubmit={onRedeemPackLoyalty} className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={redeemPoints}
+                        onChange={(e) => setRedeemPoints(e.target.value)}
+                        placeholder="Points"
+                        className="w-24 border border-black/20 px-3 py-2 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={redeemBusy}
+                        className="bg-gold text-white px-4 py-2 text-xs uppercase tracking-[0.15em] disabled:opacity-50"
+                      >
+                        {redeemBusy ? "…" : "Redeem to Blits"}
+                      </button>
+                    </form>
+                  </div>
+                  <p className="text-xs text-black/45">
+                    Use Blits at checkout (e.g. Pay with Blits) for discounts on eligible orders.
+                  </p>
+                </div>
+              ) : null}
+
+              {packsTabLoading ? (
+                <div className="flex items-center gap-2 text-sm text-black/50">
+                  <Loader2 className="h-4 w-4 animate-spin text-gold" aria-hidden />
+                  Loading your packs…
+                </div>
+              ) : packParticipations.length === 0 ? (
+                <p className="text-sm text-black/55 border border-dashed border-black/15 bg-cream/40 px-4 py-8 text-center">
+                  You haven&apos;t joined a group pack yet. When you pick a size on an affiliate&apos;s pack link and
+                  complete checkout, it will show here.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {packParticipations.map((row) => {
+                    const packHref =
+                      row.affiliate_code && row.public_code
+                        ? `/affiliate/shop/${encodeURIComponent(row.affiliate_code)}/pack/${encodeURIComponent(row.public_code)}`
+                        : null;
+                    const title = row.pack_title || "Pack";
+                    return (
+                      <li
+                        key={`${row.id}-${row.slot_id}`}
+                        className="flex flex-wrap items-start justify-between gap-3 border border-black/10 p-4 bg-white"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-black/90">{title}</p>
+                          <p className="text-xs text-black/50 mt-0.5">
+                            Your size: <span className="font-medium text-black/70">{row.size_label}</span> · Slot:{" "}
+                            <span className="uppercase tracking-wide">{row.slot_status}</span>
+                          </p>
+                          <p className="text-xs text-black/45 mt-1">
+                            Campaign: <span className="uppercase tracking-wide">{row.status}</span>
+                            {row.updated_at ? ` · ${new Date(row.updated_at).toLocaleString()}` : null}
+                          </p>
+                          {row.slot_collection_code ? (
+                            <p className="text-xs font-mono text-black/75 mt-2">
+                              Collection code: {row.slot_collection_code}
+                              <span className="block text-[11px] text-black/45 font-sans mt-0.5">
+                                Show this when collecting or to verify your item. Emailed to you after payment.
+                              </span>
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          {packHref ? (
+                            <Link
+                              href={packHref}
+                              className="inline-flex items-center gap-1.5 border border-gold bg-gold/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-black/85 hover:bg-gold/20"
+                            >
+                              Open pack page
+                              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
+                            </Link>
+                          ) : null}
+                          <Link
+                            href="/shop/packs"
+                            className="inline-flex items-center border border-black/15 px-3 py-2 text-xs uppercase tracking-[0.15em] text-black/70 hover:bg-black/5"
+                          >
+                            Browse packs
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           ) : null}
 

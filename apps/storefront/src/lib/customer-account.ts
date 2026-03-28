@@ -177,6 +177,12 @@ export async function createCustomerAccount(input: {
   );
 
   await seedCustomerStarterData(id);
+  try {
+    const { seedInitialLoyaltyForNewCustomer } = await import("@/lib/pack-loyalty");
+    await seedInitialLoyaltyForNewCustomer(id);
+  } catch {
+    /* pack loyalty schema optional at bootstrap */
+  }
   const account = await getCustomerById(id);
   if (!account) throw new Error("Failed to create account.");
   return account;
@@ -386,6 +392,16 @@ export async function updateCustomerProfile(
       customerId,
     ]
   );
+}
+
+/** Merge into existing `customer_account.metadata` (read–merge–write). */
+export async function mergeCustomerMetadata(customerId: string, patch: Record<string, unknown>) {
+  const row = await getCustomerById(customerId);
+  const prev =
+    row?.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  await updateCustomerProfile(customerId, { metadata: { ...prev, ...patch } });
 }
 
 export async function listTransactions(customerId: string) {

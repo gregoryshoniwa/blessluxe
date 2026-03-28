@@ -1,13 +1,20 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useCheckoutStore } from '@/stores/checkout';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/providers';
+
+type MeCustomer = {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  address?: Record<string, unknown> | null;
+};
 
 const informationSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -29,6 +36,7 @@ export default function CheckoutInformationPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const { email, shippingAddress, setEmail, setShippingAddress, setCurrentStep } = useCheckoutStore();
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   const {
     register,
@@ -106,32 +114,90 @@ export default function CheckoutInformationPage() {
   };
 
   useEffect(() => {
-    const hydrateFromAccount = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const res = await fetch('/api/account/me', { cache: 'no-store' });
-        const data = await res.json();
+        const res = await fetch('/api/account/me', { cache: 'no-store', credentials: 'include' });
+        const data = (await res.json()) as { customer: MeCustomer | null };
         const customer = data.customer;
-        if (!customer) return;
-        const address = customer.address || {};
-        reset({
-          email: String(customer.email || email || ''),
-          phone: String(address.phone || shippingAddress?.phone || ''),
-          firstName: String(address.firstName || shippingAddress?.firstName || ''),
-          lastName: String(address.lastName || shippingAddress?.lastName || ''),
-          address1: String(address.address1 || shippingAddress?.address1 || ''),
-          address2: String(address.address2 || shippingAddress?.address2 || ''),
-          city: String(address.city || shippingAddress?.city || ''),
-          province: String(address.province || shippingAddress?.province || ''),
-          postalCode: String(address.postalCode || shippingAddress?.postalCode || ''),
-          country: String(address.country || shippingAddress?.country || 'Zimbabwe'),
+        const {
+          email: persistedEmail,
+          shippingAddress: persistedAddr,
+          setEmail: setStoreEmail,
+          setShippingAddress: setStoreShipping,
+          setCurrentStep: setStoreStep,
+        } = useCheckoutStore.getState();
+
+        if (!customer) {
+          return;
+        }
+
+        const address =
+          customer.address && typeof customer.address === 'object' && !Array.isArray(customer.address)
+            ? customer.address
+            : {};
+
+        const candidate: InformationFormData = {
+          email: String(customer.email || persistedEmail || ''),
+          phone: String(
+            (address.phone as string | undefined) || persistedAddr?.phone || ''
+          ),
+          firstName: String(
+            (address.firstName as string | undefined) ||
+              customer.first_name ||
+              persistedAddr?.firstName ||
+              ''
+          ),
+          lastName: String(
+            (address.lastName as string | undefined) ||
+              customer.last_name ||
+              persistedAddr?.lastName ||
+              ''
+          ),
+          address1: String((address.address1 as string | undefined) || persistedAddr?.address1 || ''),
+          address2: String((address.address2 as string | undefined) || persistedAddr?.address2 || '') || undefined,
+          city: String((address.city as string | undefined) || persistedAddr?.city || ''),
+          province: String((address.province as string | undefined) || persistedAddr?.province || ''),
+          postalCode: String((address.postalCode as string | undefined) || persistedAddr?.postalCode || ''),
+          country: String((address.country as string | undefined) || persistedAddr?.country || 'Zimbabwe'),
           saveInfo: true,
+        };
+
+        const parsed = informationSchema.safeParse(candidate);
+        if (parsed.success) {
+          setStoreEmail(parsed.data.email);
+          setStoreShipping({
+            firstName: parsed.data.firstName,
+            lastName: parsed.data.lastName,
+            address1: parsed.data.address1,
+            address2: parsed.data.address2,
+            city: parsed.data.city,
+            province: parsed.data.province,
+            postalCode: parsed.data.postalCode,
+            country: parsed.data.country,
+            phone: parsed.data.phone,
+          });
+          setStoreStep(2);
+          router.replace('/checkout/shipping');
+          return;
+        }
+
+        reset({
+          ...candidate,
+          address2: candidate.address2 ?? '',
         });
       } catch {
-        // Silent fail: checkout still works with manual entry.
+        // Guest or network error: form still works.
+      } finally {
+        if (!cancelled) {
+          setBootstrapping(false);
+        }
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    hydrateFromAccount();
-  }, [email, reset, shippingAddress]);
+  }, [reset, router]);
 
   const inputClassName = (error?: boolean) =>
     cn(
@@ -140,6 +206,14 @@ export default function CheckoutInformationPage() {
       "transition-colors",
       error ? "border-red-500 bg-red-50" : "border-black/20"
     );
+
+  if (bootstrapping) {
+    return (
+      <div className="flex min-h-[12rem] items-center justify-center text-sm text-black/50">
+        Preparing checkout…
+      </div>
+    );
+  }
 
   return (
     <div>

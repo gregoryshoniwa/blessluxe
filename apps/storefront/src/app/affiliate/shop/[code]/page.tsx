@@ -10,6 +10,7 @@ import {
   AFFILIATE_REF_COOKIE,
   COMMISSION_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/affiliate-attribution";
+import { AffiliateShopPackGridCard } from "@/components/packs/AffiliateShopPackGridCard";
 
 function setAffiliateShopAttributionCookies(affiliateCode: string) {
   const enc = encodeURIComponent(affiliateCode);
@@ -61,6 +62,23 @@ type FeedResponse = {
     price_amount?: number;
     currency_code?: string;
   }>;
+  shop_packs?: Array<{
+    id: string;
+    pack_campaign_id: string;
+    public_code: string;
+    status: string;
+    pack_title?: string | null;
+    pack_handle?: string | null;
+    thumbnail_url?: string | null;
+    product_handle?: string | null;
+    paid_slots?: number;
+    total_slots?: number;
+    gift_countdown_ends_at?: string | null;
+    gift_blits_prize?: string | null;
+    gift_blits_pool?: string | null;
+    gift_allocation_type?: string | null;
+    slots?: Array<{ size_label: string; status: string }>;
+  }>;
   media: Array<{
     id: string;
     generated_url?: string;
@@ -72,7 +90,7 @@ type FeedResponse = {
   canManage: boolean;
 };
 
-type ProductSubTab = "all" | "clothes" | "shoes" | "bags" | "accessories" | "jewelry";
+type ProductSubTab = "all" | "packs" | "clothes" | "shoes" | "bags" | "accessories" | "jewelry";
 type ProductDetail = Record<string, unknown>;
 type ReviewSummary = { averageRating: number; totalReviews: number };
 type ProductReview = {
@@ -424,8 +442,10 @@ export default function AffiliateSocialShopPage() {
 
   const productSubTabs = useMemo(() => {
     if (!feed) return [{ key: "all" as ProductSubTab, label: "All", count: 0 }];
+    const packCount = feed.shop_packs?.length ?? 0;
     const counts: Record<ProductSubTab, number> = {
-      all: feed.products.length,
+      all: feed.products.length + packCount,
+      packs: packCount,
       clothes: 0,
       shoes: 0,
       bags: 0,
@@ -437,17 +457,19 @@ export default function AffiliateSocialShopPage() {
     }
     const ordered: Array<{ key: ProductSubTab; label: string; count: number }> = [
       { key: "all", label: "All", count: counts.all },
+      ...(packCount > 0 ? [{ key: "packs" as const, label: "Packs", count: packCount }] : []),
       { key: "clothes", label: "Clothes", count: counts.clothes },
       { key: "shoes", label: "Shoes", count: counts.shoes },
       { key: "bags", label: "Bags", count: counts.bags },
       { key: "accessories", label: "Accessories", count: counts.accessories },
       { key: "jewelry", label: "Jewelry", count: counts.jewelry },
     ];
-    return ordered.filter((tab) => tab.key === "all" || tab.count > 0);
+    return ordered.filter((tab) => tab.key === "all" || tab.key === "packs" || tab.count > 0);
   }, [feed]);
 
   const filteredProducts = useMemo(() => {
     if (!feed) return [];
+    if (activeProductSubTab === "packs") return [];
     if (activeProductSubTab === "all") return feed.products;
     return feed.products.filter((product) => classifyProductSubTab(product) === activeProductSubTab);
   }, [feed, activeProductSubTab]);
@@ -939,7 +961,25 @@ export default function AffiliateSocialShopPage() {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+
+          {activeProductSubTab === "packs" ? (
+            (feed?.shop_packs || []).length === 0 ? (
+              <p className="text-sm text-black/55">No wholesale packs on this shop yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+                {(feed?.shop_packs || []).map((pack) => (
+                  <AffiliateShopPackGridCard
+                    key={pack.pack_campaign_id}
+                    pack={pack}
+                    affiliateCode={code}
+                    toOptimizedImageUrl={toOptimizedImageUrl}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
             {filteredProducts.map((product) => (
               <article key={product.id} className="bg-white border border-theme-primary/20 rounded-xl overflow-hidden shadow-sm">
                 <button
@@ -1030,12 +1070,31 @@ export default function AffiliateSocialShopPage() {
                 </div>
               </article>
             ))}
+                {activeProductSubTab === "all"
+                  ? (feed?.shop_packs || []).map((pack) => (
+                      <AffiliateShopPackGridCard
+                        key={`pack-${pack.pack_campaign_id}`}
+                        pack={pack}
+                        affiliateCode={code}
+                        toOptimizedImageUrl={toOptimizedImageUrl}
+                      />
+                    ))
+                  : null}
           </div>
-          {filteredProducts.length === 0 ? (
+          {filteredProducts.length === 0 &&
+          !(activeProductSubTab === "all" && (feed?.shop_packs?.length ?? 0) > 0) ? (
             <p className="text-sm text-black/55">
-              No products in the <span className="font-medium">{activeProductSubTab}</span> tab yet.
+              {activeProductSubTab === "all" ? (
+                <>No catalog products or featured packs in this shop yet.</>
+              ) : (
+                <>
+                  No products in the <span className="font-medium">{activeProductSubTab}</span> tab yet.
+                </>
+              )}
             </p>
           ) : null}
+            </>
+          )}
         </section>
       ) : null}
 
@@ -1325,7 +1384,7 @@ export default function AffiliateSocialShopPage() {
                         </div>
                       ) : (
                         <p className="text-xs text-black/55">
-                          Reviews are hidden to keep this modal compact. Click "See all reviews".
+                          Reviews are hidden to keep this modal compact. Use the See all reviews control above.
                         </p>
                       )}
                     </div>

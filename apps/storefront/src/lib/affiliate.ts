@@ -1,6 +1,7 @@
 import { AFFILIATE_OWN_PAGE_COMMISSION_PERCENT } from "@/lib/affiliate-attribution";
 import { ensureBlitsSchema } from "@/lib/blits";
 import { execute, query, queryOne } from "@/lib/db";
+import { fetchStoreProductThumbAndHandle } from "@/lib/medusa";
 import { randomUUID } from "crypto";
 
 export type AffiliateStatus = "active" | "inactive" | "pending";
@@ -188,6 +189,19 @@ async function ensureAffiliateTables() {
           created_at timestamptz NOT NULL DEFAULT NOW(),
           UNIQUE (affiliate_id, product_id)
         )`
+      );
+
+      await execute(
+        `CREATE TABLE IF NOT EXISTS affiliate_store_pack (
+          id text PRIMARY KEY,
+          affiliate_id text NOT NULL REFERENCES affiliate(id) ON DELETE CASCADE,
+          pack_campaign_id text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT NOW(),
+          UNIQUE (affiliate_id, pack_campaign_id)
+        )`
+      );
+      await execute(
+        `CREATE INDEX IF NOT EXISTS idx_affiliate_store_pack_affiliate ON affiliate_store_pack(affiliate_id, created_at DESC)`
       );
 
       await execute(
@@ -621,7 +635,7 @@ export async function getAffiliateSocialFeed(code: string, viewerCustomerId?: st
   const affiliate = await getAffiliateByCode(code);
   if (!affiliate) return null;
 
-  const isOwner = !!viewerCustomerId
+  const isOwner = viewerCustomerId
     ? await queryOne<Record<string, unknown>>(
         `SELECT id FROM customer_account
          WHERE id = $1
@@ -728,6 +742,99 @@ export async function getAffiliateSocialFeed(code: string, viewerCustomerId?: st
     [affiliate.id]
   );
 
+  let shopPacks: Array<Record<string, unknown>> = [];
+  try {
+    const shopPackRows = await query<{
+      listing_id: string;
+      pack_campaign_id: string;
+      public_code: string;
+      status: string;
+      pack_title: string | null;
+      pack_handle: string | null;
+      product_id: string | null;
+      paid_slots: number;
+      total_slots: number;
+      gift_countdown_ends_at: string | null;
+      gift_blits_prize: string | null;
+      gift_blits_pool: string | null;
+      gift_allocation_type: string | null;
+    }>(
+      `SELECT asp.id AS listing_id, c.id AS pack_campaign_id, c.public_code, c.status,
+              d.title AS pack_title, d.handle AS pack_handle, NULLIF(d.product_id::text, '') AS product_id,
+              (SELECT COUNT(*)::int FROM pack_slot s WHERE s.pack_campaign_id = c.id AND s.deleted_at IS NULL) AS total_slots,
+              (SELECT COUNT(*)::int FROM pack_slot s WHERE s.pack_campaign_id = c.id AND s.status = 'paid' AND s.deleted_at IS NULL) AS paid_slots,
+              c.gift_countdown_ends_at::text AS gift_countdown_ends_at,
+              c.gift_blits_prize::text AS gift_blits_prize,
+              c.gift_blits_pool::text AS gift_blits_pool,
+              c.gift_allocation_type
+       FROM affiliate_store_pack asp
+       INNER JOIN pack_campaign c ON c.id = asp.pack_campaign_id AND c.deleted_at IS NULL AND c.affiliate_id = asp.affiliate_id
+       INNER JOIN pack_definition d ON d.id = c.pack_definition_id AND d.deleted_at IS NULL
+       WHERE asp.affiliate_id = $1
+       ORDER BY asp.created_at DESC`,
+      [affiliate.id]
+    );
+
+    const campaignIds = shopPackRows.map((r) => r.pack_campaign_id);
+    let slotsByCampaign = new Map<string, Array<{ size_label: string; status: string }>>();
+    if (campaignIds.length > 0) {
+      const slotRows = await query<{
+        pack_campaign_id: string;
+        size_label: string;
+        status: string;
+      }>(
+        `SELECT pack_campaign_id, size_label, status
+         FROM pack_slot
+         WHERE pack_campaign_id = ANY($1::text[]) AND deleted_at IS NULL
+         ORDER BY pack_campaign_id, size_label`,
+        [campaignIds]
+      );
+      slotsByCampaign = new Map();
+      for (const s of slotRows) {
+        const list = slotsByCampaign.get(s.pack_campaign_id) || [];
+        list.push({ size_label: s.size_label, status: s.status });
+        slotsByCampaign.set(s.pack_campaign_id, list);
+      }
+    }
+
+    shopPacks = await Promise.all(
+      shopPackRows.map(async (row) => {
+        let thumbnail_url: string | null = null;
+        let product_handle: string | null = null;
+        if (row.product_id) {
+          try {
+            const media = await fetchStoreProductThumbAndHandle(row.product_id);
+            thumbnail_url = media.thumb;
+            product_handle = media.handle;
+          } catch {
+            thumbnail_url = null;
+            product_handle = null;
+          }
+        }
+        return {
+          id: row.listing_id,
+          pack_campaign_id: row.pack_campaign_id,
+          public_code: row.public_code,
+          status: row.status,
+          pack_title: row.pack_title,
+          pack_handle: row.pack_handle,
+          thumbnail_url,
+          product_handle,
+          paid_slots: row.paid_slots,
+          total_slots: row.total_slots,
+          gift_countdown_ends_at: row.gift_countdown_ends_at,
+          gift_blits_prize: row.gift_blits_prize,
+          gift_blits_pool: row.gift_blits_pool,
+          gift_allocation_type: row.gift_allocation_type,
+          slots: slotsByCampaign.get(row.pack_campaign_id) || [],
+        };
+      })
+    );
+  } catch (e) {
+    console.warn("[getAffiliateSocialFeed] shop packs skipped:", e);
+    shopPacks = [];
+  }
+
   const mediaAssets = await query<Record<string, unknown>>(
     `SELECT id, source, generated_url, original_url, created_at, published, published_post_id
      FROM affiliate_social_media_asset
@@ -758,6 +865,7 @@ export async function getAffiliateSocialFeed(code: string, viewerCustomerId?: st
       };
     }),
     products: storeProducts,
+    shop_packs: shopPacks,
     media: mediaAssets,
   };
 }
@@ -1023,5 +1131,30 @@ export async function removeAffiliateStoreProduct(affiliateId: string, productId
     `DELETE FROM affiliate_store_product
      WHERE affiliate_id = $1 AND product_id = $2`,
     [affiliateId, productId]
+  );
+}
+
+export async function addAffiliateStorePack(input: { affiliateId: string; packCampaignId: string }) {
+  await ensureAffiliateTables();
+  const camp = await queryOne<{ id: string; affiliate_id: string }>(
+    `SELECT id, affiliate_id FROM pack_campaign WHERE id = $1 AND deleted_at IS NULL`,
+    [input.packCampaignId]
+  );
+  if (!camp || camp.affiliate_id !== input.affiliateId) {
+    throw new Error("Pack campaign not found or does not belong to this affiliate.");
+  }
+  await execute(
+    `INSERT INTO affiliate_store_pack (id, affiliate_id, pack_campaign_id, created_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (affiliate_id, pack_campaign_id) DO NOTHING`,
+    [randomUUID(), input.affiliateId, input.packCampaignId]
+  );
+}
+
+export async function removeAffiliateStorePack(affiliateId: string, packCampaignId: string) {
+  await ensureAffiliateTables();
+  await execute(
+    `DELETE FROM affiliate_store_pack WHERE affiliate_id = $1 AND pack_campaign_id = $2`,
+    [affiliateId, packCampaignId]
   );
 }

@@ -16,6 +16,9 @@ Built with **Next.js 14**, **Medusa.js v2**, and **Google Gemini** — structure
 - [Project Structure](#project-structure)
 - [AI Shopping Assistant (LUXE)](#ai-shopping-assistant-luxe)
 - [Commerce Admin (Affiliates & Blits)](#commerce-admin-affiliates--blits)
+- [Transactional email](#transactional-email-smtp--sendgrid)
+- [Wholesale group packs (Packs)](#wholesale-group-packs-packs)
+  - [Early-bird Blits per campaign](#early-bird-blits-per-campaign)
 - [Backend](#backend)
 - [Commands](#commands)
 - [Tech Stack](#tech-stack)
@@ -252,6 +255,7 @@ Current seed behavior also includes:
 - Tag normalization for merchandising badges (`hot`, `sale`, `trending`, `new`, `bestseller`)
 - Supplemental catalog expansion for broad category coverage (women/men/children branches)
 - Editorial image URL normalization for Unsplash assets (`w=1200`, `auto=format`, `fit=crop`, `q=80`)
+- Optional **sample wholesale pack definition** (handle suffix `-wholesale-pack`) when the pack module tables exist after migrations
 
 ```bash
 # Local
@@ -293,6 +297,22 @@ pnpm dev:refresh-seed
 
 ---
 
+## Transactional email (SMTP / SendGrid)
+
+Pack notifications, the AI **`send_email`** tool, and related flows use **`apps/storefront/src/lib/send-email-server.ts`** (Nodemailer over SMTP or SendGrid’s HTTP API). Medusa order notifications use the same SMTP variables when the SMTP notification provider is enabled.
+
+| Topic | What to do |
+|--------|------------|
+| **Local `pnpm dev`** | Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (and optional `REPLY_TO_EMAIL`) in **`apps/storefront/.env.local`** and/or the **repo root `.env`**. The storefront `next.config.js` also loads **`backend/medusa/.env`** so SMTP can live next to Medusa. |
+| **Docker Compose** | Services only get variables from **`docker-compose.yml`**, filled from the **project root `.env`**. **`apps/storefront/.env.local` is not mounted into the container** — duplicate `SMTP_*` into root `.env`, then run `docker compose up -d --force-recreate medusa storefront`. |
+| **Provider preference** | If both SMTP and SendGrid keys exist, **SMTP is used by default** (matches typical Nodemailer setups). Set **`STOREFRONT_EMAIL_PROVIDER=sendgrid`** to force SendGrid for the storefront mailer. |
+| **Gmail** | Use an **App Password**, not your normal Google password. `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false` is typical. |
+| **Smoke test** | While signed in: **`POST /api/account/test-email`** (empty body) sends a test to your account email. |
+
+**Collection code link (customers):** After payment, emails can point to **`/pack-collection/<CODE>`** — a themed page that shows the code, pack title, size, and status. The JSON API remains at **`GET /api/pack-collection/<CODE>`** for integrations.
+
+---
+
 ## Environment Variables Reference
 
 ### Medusa Backend
@@ -330,6 +350,10 @@ pnpm dev:refresh-seed
 | `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key (server-side upload auth) |
 | `SUPABASE_STORAGE_BUCKET` | `affiliate-media` | Supabase public bucket used for affiliate uploads |
 | `GOOGLE_NANO_BANANA_MODEL` | `gemini-3.1-flash-image-preview` | Optional model override for affiliate AI photoshoot route |
+| `SENDGRID_API_KEY` / `SENDGRID_FROM` | — | Transactional email (AI agent, account, **pack notifications**). Same convention as Medusa. |
+| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | — | Nodemailer / SMTP (preferred when set; see [Transactional email](#transactional-email-smtp--sendgrid)). |
+| `STOREFRONT_EMAIL_PROVIDER` | — | `smtp` or `sendgrid` to force one provider when both are configured. |
+| `REPLY_TO_EMAIL` | `info@blessluxe.com` (default) | Reply-To for pack and other transactional mail when using defaults. |
 
 ### Where to get Google and admin keys
 
@@ -442,6 +466,7 @@ The storefront includes a floating chat widget (**LUXE**) powered by **Google Ge
 | `affiliate` | Affiliate codes, commission tracking, payout processing |
 | `customer-extended` | Loyalty points/tiers, style preferences, size profiles |
 | `product-review` | Customer reviews with ratings and moderation |
+| `pack` | Wholesale pack definitions and campaign/slot models (Medusa module; storefront orchestrates campaigns against shared DB tables) |
 
 ### Payment Providers
 
@@ -485,7 +510,7 @@ The storefront exposes a **Commerce admin** UI for operations that live in the s
 | **URL** | `/affiliate/admin` (e.g. `http://localhost:3000/affiliate/admin`) |
 | **Sign-in** | `/affiliate/admin/auth` — use **`ADMIN_DASHBOARD_KEY`**, or rely on **`ADMIN_EMAILS`** and log in as a matching customer on `/account` first |
 
-**Tabs:** Affiliates, Sales & commission, Payouts, Disputes, Messages, **Blits & gifts** (rates, purchase-tier JSON, gift types, recent photo gifts), Social moderation.
+**Tabs:** Affiliates, Sales & commission, Payouts, Disputes, Messages, **Blits & gifts** (rates, purchase-tier JSON, gift types, recent photo gifts), **Pack loyalty** (pack points + Blits redemption settings; **early-bird Blits** per campaign id; admin close by campaign id), Social moderation.
 
 **Blits (virtual currency)** — settings and tables are managed in the storefront app (`apps/storefront/src/lib/blits.ts`). Customers can:
 
@@ -494,6 +519,55 @@ The storefront exposes a **Commerce admin** UI for operations that live in the s
 - **Top-ups:** from **Account → Blits**, customers add a wallet line to the cart and complete **card / mobile / bank** checkout; Blits credit runs after payment via `POST /api/blits/credit-from-checkout` (replace with your payment-provider webhook in production if you process charges server-side).
 
 Public read-only config for the storefront UI: `GET /api/blits/public`.
+
+---
+
+## Wholesale group packs (Packs)
+
+Group wholesale packs let customers **split a product by size** on an affiliate’s shop: each buyer pays for one variant; when every size is paid, the campaign is **ready to process**. On the **main shop**, published packs are listed at **`/shop/packs`** and link to the Medusa product PDP for **full-pack (all variants) checkout**.
+
+| Area | What’s implemented |
+|------|-------------------|
+| **Medusa** | Custom **`pack`** module (`backend/medusa/src/modules/pack/`) with migrations; seed can create a sample `pack_definition` (see seed script). |
+| **Storefront data** | Pack definitions and campaigns live in the **same Postgres** the storefront uses (`apps/storefront/src/lib/packs.ts` and related APIs). Run **`pnpm --filter @blessluxe/backend db:migrate`** so pack tables exist before relying on pack APIs. |
+| **Affiliate** | Dashboard tab **Packs**: start a campaign, copy share link, open pack page, configure **early-bird Blits** (deadline + prize per campaign), **cancel / reject** a pack (participants emailed; paid slots credited as **Blits** when line totals were stored at checkout). |
+| **Customer** | **`/account` → Packs**: participations; **pack loyalty** balance and **redeem points → Blits**. Pack page: progress, **Buy** / **Reserve**, **leave** (loyalty penalty; paid slots can receive **Blits** credit). **Collection code page** **`/pack-collection/[code]`**: themed verification of code, pack title, size, and link back to the live pack when applicable. |
+| **Commerce admin** | **`/affiliate/admin`**: **Pack loyalty** (starting/max points, leave penalty, completion bonus, Blits per loyalty point); **early-bird Blits** for a campaign id (see below); **close pack by campaign id** (cancel/reject, same Blits refund rules as affiliate). |
+| **Orders** | Line items carry `pack_campaign_id`, `pack_slot_id`, `storefront_customer_id` in metadata. **`POST /api/affiliate/webhook/order-completion`** updates slots, completion loyalty, pack emails, and stores **`line_paid_usd`** for refunds when the webhook includes line totals. |
+| **Email** | Pack notifications use the same **`sendTransactionalEmail`** pipeline as the AI agent (`apps/storefront/src/lib/send-email-server.ts`). Configure **SMTP** (recommended for Nodemailer) or **SendGrid**. See **[Transactional email](#transactional-email-smtp--sendgrid)** — especially **Docker** vs **`.env.local`**. Verification links in emails use **`/pack-collection/<code>`** (human-friendly page); **`GET /api/pack-collection/<code>`** returns JSON for integrations. |
+
+### Early-bird Blits per campaign
+
+Each **pack campaign** (not the pack definition/catalog product) can offer a **time-limited Blits bonus**: customers who **complete payment on or before** the configured deadline earn the configured **Blits** amount; payments **after** the deadline still complete the pack but **do not** receive that gift. Eligibility is enforced **on the server** when the order webhook runs (using order timestamps in UTC), not from the shopper’s browser clock alone.
+
+**Database:** `pack_campaign.gift_countdown_ends_at` (timestamptz) and `gift_blits_prize` (integer). Apply Medusa migrations so these columns exist:
+
+```bash
+pnpm --filter @blessluxe/backend db:migrate
+```
+
+#### Configure in the UI
+
+| Who | Where | What to set |
+|-----|--------|-------------|
+| **Affiliate (pack host)** | Storefront → **Affiliate dashboard** → tab **Packs** → under each live campaign, **Early-bird Blits (countdown)** | **Pay-by deadline (local)** — datetime when the offer ends (stored as UTC in the database). **Blits prize** — whole number of Blits to credit per qualifying payment. Click **Save early-bird**. |
+| **Commerce admin** | **`/affiliate/admin`** → tab **Pack loyalty** → **Early-bird Blits (same campaign id)** | Paste the **campaign id** (e.g. `pcamp_…`) in **Campaign id** above, set **Pay-by deadline (local)** and **Blits prize**, then **Save early-bird Blits**. |
+
+**Clearing the offer:** remove both the deadline and the prize (empty fields) and save, or set both to empty/clear in the affiliate form. You cannot set a prize without a deadline or a deadline without a prize; to disable the promo, clear both.
+
+**Public pack page:** shows a countdown and the prize amount while the deadline is in the future; after it passes, copy explains that the early-bird offer has ended.
+
+#### APIs (automation / integrations)
+
+- **Affiliate owner:** `PATCH /api/affiliate/pack-campaigns/[campaignId]/gift`  
+  Body JSON: `{ "affiliate_code": "<code>", "gift_countdown_ends_at": "<ISO-8601 or null>", "gift_blits_prize": <number or null> }`  
+  Requires a signed-in customer matching that affiliate.
+
+- **Commerce admin:** `PATCH /api/admin/pack-campaigns/[campaignId]/gift`  
+  Body JSON: `{ "gift_countdown_ends_at": "<ISO-8601 or null>", "gift_blits_prize": <number or null> }`  
+  Requires commerce admin auth (same as other `/api/admin/*` routes).
+
+**Note:** Gift Blits require a **storefront** customer id on the order line (logged-in shopper). Guests without that id will not receive wallet credit.
 
 ---
 

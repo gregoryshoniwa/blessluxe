@@ -25,6 +25,9 @@ interface ProductInfoProps {
     sizes: Array<{ name: string; inStock: boolean; stockLeft?: number }>;
     variantRows?: PdpVariantRow[];
   };
+  /** Main shop wholesale pack: one checkout with every size variant. */
+  packFullOnly?: boolean;
+  onAddFullPack?: () => void | Promise<void>;
   onAddToCart?: (data: {
     color: string;
     size: string;
@@ -35,6 +38,8 @@ interface ProductInfoProps {
 
 export function ProductInfo({
   product,
+  packFullOnly,
+  onAddFullPack,
   onAddToCart,
   onAddToWishlist,
 }: ProductInfoProps) {
@@ -91,7 +96,12 @@ export function ProductInfo({
       : selectedSizeMeta?.stockLeft;
   const selectedIsOutOfStock =
     !!selectedSize && (selectedVariant ? !selectedVariant.inStock : !selectedSizeMeta?.inStock);
-  const canAddToCart = !!selectedSize && !selectedIsOutOfStock && !isAddingToCart;
+  const packHasStock =
+    !!packFullOnly &&
+    (product.variantRows?.some((r) => r.inStock) ?? false);
+  const canAddToCart = packFullOnly
+    ? packHasStock && !isAddingToCart
+    : !!selectedSize && !selectedIsOutOfStock && !isAddingToCart;
 
   useEffect(() => {
     if (product.sizes.length === 1) {
@@ -132,6 +142,28 @@ export function ProductInfo({
   }, [product, selectedColor, selectedSize]);
 
   const handleAddToCart = async () => {
+    if (packFullOnly && onAddFullPack) {
+      try {
+        setIsAddingToCart(true);
+        await onAddFullPack();
+        showToast({
+          title: 'Pack added',
+          message: 'All sizes were added to your cart for one checkout.',
+          variant: 'success',
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Please try again in a moment.';
+        showToast({
+          title: 'Unable to add pack',
+          message: msg,
+          variant: 'error',
+        });
+      } finally {
+        setIsAddingToCart(false);
+      }
+      return;
+    }
+
     if (!selectedSize) {
       showToast({
         title: 'Please select a size',
@@ -263,6 +295,16 @@ export function ProductInfo({
       {/* Description */}
       <p className="text-gray-600 leading-relaxed">{product.description}</p>
 
+      {packFullOnly ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">Wholesale pack</p>
+          <p className="mt-1 text-amber-900/90">
+            Purchase includes every listed size in one order. For split purchases with friends, use an affiliate pack
+            link.
+          </p>
+        </div>
+      ) : null}
+
       {/* Color Selector */}
       <ColorSelector
         colors={product.colors}
@@ -291,7 +333,7 @@ export function ProductInfo({
       ) : null}
 
       {/* Quantity Selector */}
-      <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
+      {!packFullOnly ? <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} /> : null}
 
       {/* Action Buttons */}
       <div className="flex gap-3">
@@ -304,11 +346,15 @@ export function ProductInfo({
           <ShoppingCart className="w-5 h-5" />
           {isAddingToCart
             ? 'Adding...'
-            : !selectedSize
-              ? 'Select Size'
-              : selectedIsOutOfStock
-                ? 'Out of Stock'
-                : 'Add to Cart'}
+            : packFullOnly
+              ? !packHasStock
+                ? 'Unavailable'
+                : 'Buy full pack (all sizes)'
+              : !selectedSize
+                ? 'Select Size'
+                : selectedIsOutOfStock
+                  ? 'Out of Stock'
+                  : 'Add to Cart'}
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.98 }}

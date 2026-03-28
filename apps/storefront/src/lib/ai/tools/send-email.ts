@@ -55,7 +55,7 @@ export class SendEmailTool extends BaseTool {
       return {
         success: false,
         error:
-          'Email sending is not configured on the server. Set SENDGRID_API_KEY + SENDGRID_FROM, or SMTP_HOST + SMTP_USER + SMTP_PASS + SMTP_FROM (see Medusa .env.template).',
+          'Email sending is not configured on the server. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM (same as Medusa / Nodemailer), or SENDGRID_API_KEY + SENDGRID_FROM. If both are set, SMTP is used unless STOREFRONT_EMAIL_PROVIDER=sendgrid.',
       };
     }
 

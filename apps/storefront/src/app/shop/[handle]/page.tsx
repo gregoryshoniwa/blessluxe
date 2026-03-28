@@ -9,6 +9,7 @@ import { ProductViewTracker } from '@/components/product/ProductViewTracker';
 import { getProductReviewSummary, listProductReviews } from '@/lib/product-reviews';
 import { buildPdpVariantRows, type PdpVariantRow } from '@/lib/medusa-pdp';
 import { getStoreMedusaFetchHeaders } from '@/lib/medusa';
+import { getPackDefinitionByProductId } from '@/lib/packs';
 
 interface Product {
   id: string;
@@ -331,6 +332,15 @@ export default async function ProductPage({
 
   const relatedProducts = await getRelatedProducts(product.id);
   const reviewsData = await getReviews(product.id);
+
+  let packDefinitionId: string | null = null;
+  try {
+    const packRow = await getPackDefinitionByProductId(product.id);
+    packDefinitionId = packRow?.id ?? null;
+  } catch {
+    packDefinitionId = null;
+  }
+
   const productWithReviews: Product = {
     ...product,
     rating: reviewsData.totalReviews > 0 ? reviewsData.averageRating : product.rating,
@@ -410,7 +420,7 @@ export default async function ProductPage({
             <ImageGallery images={product.images} productName={product.name} />
 
             {/* Right: Product Info */}
-            <ProductClientWrapper product={productWithReviews} />
+            <ProductClientWrapper product={productWithReviews} packDefinitionId={packDefinitionId} />
           </div>
 
           {/* Accordion Sections */}

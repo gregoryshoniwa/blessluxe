@@ -66,6 +66,12 @@ export function medusaLineItemToCartItem(line: LooseLineItem): CartItem | null {
   const inventoryQuantity = Number(variant.inventory_quantity);
   const hasInventoryQuantity = Number.isFinite(inventoryQuantity) && inventoryQuantity >= 0;
 
+  const rawMeta = line.metadata;
+  const lineMetadata =
+    rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)
+      ? (rawMeta as Record<string, unknown>)
+      : null;
+
   return {
     id: lineId,
     medusaLineItemId: lineId,
@@ -82,6 +88,7 @@ export function medusaLineItemToCartItem(line: LooseLineItem): CartItem | null {
       ...(hasInventoryQuantity ? { inventoryQuantity } : {}),
     },
     source: "medusa",
+    ...(lineMetadata && Object.keys(lineMetadata).length > 0 ? { lineMetadata } : {}),
   };
 }
 

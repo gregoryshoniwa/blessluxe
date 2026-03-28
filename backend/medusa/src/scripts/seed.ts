@@ -2278,6 +2278,49 @@ export default async function seed({ container }: ExecArgs) {
     }
   }
 
+  // Sample wholesale pack definitions (main shop: buy all sizes; affiliate: split by size).
+  try {
+    const packService = container.resolve("packModuleService") as {
+      createPackDefinitions: (rows: Record<string, unknown>[]) => Promise<unknown>;
+    };
+    const packProducts = allProducts.slice(0, 4);
+    let packsCreated = 0;
+    for (const sampleProduct of packProducts) {
+      try {
+        const handle = `${String(sampleProduct.handle)}-wholesale-pack`;
+        await packService.createPackDefinitions([
+          {
+            product_id: sampleProduct.id,
+            title: `${sampleProduct.title} — Wholesale pack`,
+            handle,
+            description:
+              "Wholesale pack: on the main shop, checkout includes every size. Affiliates can host a split pack on their page.",
+            status: "published",
+          },
+        ]);
+        packsCreated++;
+      } catch (e) {
+        const msg = String(e || "");
+        if (/duplicate|unique|already exists/i.test(msg)) {
+          // Idempotent re-seed: skip this product's pack row.
+        } else {
+          console.warn(
+            "📦 Pack seed skipped (run `pnpm --filter @blessluxe/backend db:migrate` if pack tables are missing):",
+            e
+          );
+          break;
+        }
+      }
+    }
+    if (packsCreated > 0) {
+      console.log(`📦 Sample pack_definitions created (${packsCreated}, handle suffix: -wholesale-pack).`);
+    } else if (packProducts.length > 0) {
+      console.log("📦 Pack definitions already present for sample products; skipping insert.");
+    }
+  } catch (e) {
+    console.warn("📦 Pack seed skipped (run `pnpm --filter @blessluxe/backend db:migrate` if pack tables are missing):", e);
+  }
+
   console.log(
     "🌱 Seed completed: store, regions, audience categories, and test products for women/men/children."
   );

@@ -152,6 +152,15 @@ export function Header() {
             {/* Desktop Navigation with Mega Menu */}
             {!isAffiliateShopPage ? (
               <nav className="hidden lg:flex items-center gap-8">
+                <Link
+                  href={withAffiliateRef("/shop/packs")}
+                  className={cn(
+                    "font-body text-sm font-medium tracking-widest uppercase py-3 transition-colors text-black hover:text-theme-primary",
+                    pathname === "/shop/packs" && "text-theme-primary"
+                  )}
+                >
+                  Packs
+                </Link>
                 {navLinks.map((link) => (
                   <div
                     key={link.label}
