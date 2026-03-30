@@ -87,6 +87,39 @@ services:
       retries: 5
       start_period: 90s
 
+  # ─── Custom Shop Backend (port 9001) ────────────────────
+  # Lightweight alternative to Medusa. Can run alongside Medusa.
+  # To use: set NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001 in .env
+  #   docker compose --profile shop up --build -d
+  #   docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/seed.ts
+  shop:
+    build:
+      context: .
+      dockerfile: backend/shop/Dockerfile
+    restart: unless-stopped
+    profiles: ["shop"]
+    ports:
+      - "9001:9001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-blessluxe}:${POSTGRES_PASSWORD:-blessluxe}@postgres:5432/${POSTGRES_DB:-blessluxe}?sslmode=disable
+      PORT: 9001
+      STORE_CORS: ${STORE_CORS:-http://localhost:3000},http://storefront:3000
+      ADMIN_CORS: ${ADMIN_CORS:-http://localhost:3001}
+      PUBLISHABLE_API_KEY: ${SHOP_PUBLISHABLE_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-blessluxe-shop-secret-change-me}
+      UPLOAD_DIR: /app/backend/shop/uploads
+    volumes:
+      - shop_uploads:/app/backend/shop/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # ─── Next.js Storefront (port 3000) ─────────────────────
   storefront:
     build:
@@ -95,15 +128,20 @@ services:
       args:
         NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
         NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-}
         NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
     restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
-      medusa:
+      postgres:
         condition: service_healthy
+      # When using Medusa (default), also uncomment:
+      # medusa:
+      #   condition: service_healthy
     environment:
       NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
+      NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-}
       NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-}
       NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
@@ -134,3 +172,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  shop_uploads:

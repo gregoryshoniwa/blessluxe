@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BLESSLUXE is a luxury women's fashion e-commerce project structured as a **Turborepo monorepo** using pnpm workspaces. It has Next.js frontend apps, a Medusa.js v2 backend, and shared packages.
+BLESSLUXE is a luxury women's fashion e-commerce project structured as a **Turborepo monorepo** using pnpm workspaces. It has Next.js frontend apps, a Medusa.js v2 backend (or a lightweight custom Express backend), and shared packages.
 
 ## Commands
 
@@ -35,9 +35,18 @@ pnpm --filter @blessluxe/backend seed          # Seed database
 # Drop & recreate the Postgres DB from backend/medusa/.env DATABASE_URL, then migrate + seed (needs `psql`; destroys all data in that database)
 pnpm db:reset-medusa -- --yes
 
+# Custom Shop Backend (alternative to Medusa)
+pnpm shop:dev              # Start custom backend on :9000
+pnpm shop:migrate          # Create shop_* tables in Postgres
+pnpm shop:seed             # Seed products, categories, regions, pricing
+
 # Infrastructure
 docker compose up -d          # Start PostgreSQL (5432) and Redis (6379)
 docker compose down           # Stop services
+
+# Docker with custom shop backend (instead of Medusa)
+docker compose --profile shop up --build -d
+docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/seed.ts
 ```
 
 ## Monorepo Structure
@@ -48,6 +57,7 @@ apps/
   admin/             Next.js 14 (App Router) — admin dashboard, port 3001
 backend/
   medusa/            Medusa.js v2 — e-commerce backend API, port 9000
+  shop/              Custom Express.js — lightweight alternative, port 9001
 packages/
   ui/                Shared React components (Button, Card) with Tailwind classes
   config/            Shared tailwind.config.ts and tsconfig bases
@@ -132,3 +142,41 @@ To add a new notification provider: create `src/providers/notification-<name>/` 
 ### Required Environment Variables
 
 See `backend/medusa/.env.template` for all variables. Key ones: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `COOKIE_SECRET`, `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`, plus provider-specific keys for Stripe, Paystack, Flutterwave, Cloudinary, SendGrid, and SMTP.
+
+## Custom Shop Backend (backend/shop/)
+
+A lightweight Express.js backend that replaces Medusa for catalog, cart, and inventory. Uses Node 22+ native TypeScript execution (no build step).
+
+### Switching backends
+
+Set `NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001` in the storefront env to route all `/store/*` API calls to the custom backend instead of Medusa. The toggle logic lives in `apps/storefront/src/lib/medusa.ts` (`isCustomBackend` flag). Port 9001 avoids conflict with Medusa (9000) so both can run simultaneously.
+
+### Database
+
+Uses the same PostgreSQL instance as Medusa. All tables are prefixed `shop_` to avoid collisions. Schema in `backend/shop/src/db/schema.sql`. Run `pnpm shop:migrate` to create tables, `pnpm shop:seed` to populate.
+
+### API Routes
+
+All routes mirror Medusa Store API response shapes so the storefront works unchanged:
+
+- `GET /store/regions` — list regions with currencies
+- `GET /store/products` — list/search/filter products (supports `handle`, `id`, `category_id[]`, `q` params)
+- `GET /store/products/:id` — single product with variants, options, prices, images
+- `GET /store/product-categories` — list categories
+- `GET /store/product-variants/:id` — variant with inventory
+- `POST /store/carts` — create cart
+- `GET /store/carts/:id` — get cart with enriched line items
+- `POST /store/carts/:id/line-items` — add item
+- `POST /store/carts/:id/line-items/:lineId` — update quantity
+- `DELETE /store/carts/:id/line-items/:lineId` — remove item
+- `GET /health` — health check
+
+Admin routes under `/admin/*` provide CRUD for products, variants, categories, regions, and file upload.
+
+### Environment Variables
+
+See `backend/shop/.env.template`. Key ones: `DATABASE_URL`, `PORT`, `STORE_CORS`, `ADMIN_CORS`, `PUBLISHABLE_API_KEY`, `UPLOAD_DIR`.
+
+### Docker
+
+The shop backend has its own Dockerfile (`backend/shop/Dockerfile`) using Node 22 Alpine. It's registered in `docker-compose.yml` under the `shop` profile on port 9001. Use `docker compose --profile shop up --build -d` to run it alongside or instead of Medusa.

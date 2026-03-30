@@ -19,6 +19,7 @@ Built with **Next.js 14**, **Medusa.js v2**, and **Google Gemini** — structure
 - [Transactional email](#transactional-email-smtp--sendgrid)
 - [Wholesale group packs (Packs)](#wholesale-group-packs-packs)
   - [Early-bird Blits per campaign](#early-bird-blits-per-campaign)
+- [Custom Shop Backend (Alternative to Medusa)](#custom-shop-backend-alternative-to-medusa)
 - [Backend](#backend)
 - [Commands](#commands)
 - [Tech Stack](#tech-stack)
@@ -425,6 +426,7 @@ apps/
   admin/           Next.js 14 — admin dashboard (:3001)
 backend/
   medusa/          Medusa.js v2 — headless commerce API (:9000)
+  shop/            Custom Express backend — lightweight alternative (:9000)
 packages/
   ui/              Shared React components
   config/          Shared Tailwind & TSConfig
@@ -454,6 +456,111 @@ The storefront includes a floating chat widget (**LUXE**) powered by **Google Ge
 
 - Conversation persistence and **semantic memory** (per customer when logged in) use the storefront database and pgvector where configured.
 - **Interaction tracking** supports personalization and analytics.
+
+---
+
+## Custom Shop Backend (Alternative to Medusa)
+
+A lightweight Express.js backend at `backend/shop/` that replaces Medusa for catalog, cart, and inventory management. It uses the **same PostgreSQL database** and exposes the same `/store/*` API endpoints the storefront expects, so switching between Medusa and the custom backend requires only an environment variable change.
+
+### When to use
+
+- You want a simpler backend without Medusa's module system
+- You need full control over the product/cart/order schema
+- You want faster startup and smaller Docker images
+
+### Local development
+
+```bash
+# 1. Start infrastructure
+docker compose up -d postgres redis
+
+# 2. Set up the shop backend
+cp backend/shop/.env.template backend/shop/.env
+
+# 3. Run migrations + seed
+pnpm shop:migrate
+pnpm shop:seed
+
+# 4. Start the shop backend
+pnpm shop:dev
+```
+
+The shop backend runs on http://localhost:9001 (Medusa uses 9000, so both can run simultaneously).
+
+### Point the storefront to the custom backend
+
+Add this to `apps/storefront/.env.local`:
+
+```env
+NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001
+```
+
+When `NEXT_PUBLIC_COMMERCE_BACKEND` is set, the storefront uses it instead of Medusa. Remove or comment it out to switch back.
+
+### Docker deployment (Custom Shop Backend)
+
+```bash
+# 1. Add to your root .env:
+#    NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001
+#    SHOP_PUBLISHABLE_API_KEY=pk_blessluxe_dev  (optional)
+
+# 2. Build and start with the shop profile (runs on port 9001, no conflict with Medusa)
+docker compose --profile shop up --build -d
+
+# 4. Run migrations + seed (first time only)
+docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/migrate.ts
+docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/seed.ts
+
+# 5. Rebuild storefront so NEXT_PUBLIC_COMMERCE_BACKEND is baked in
+docker compose up --build -d storefront
+```
+
+| Service | Port | Description |
+|---|---|---|
+| `shop` | 9001 | Custom Express API (catalog, cart, inventory) |
+| `storefront` | 3000 | Next.js storefront (auto-connects via env var) |
+
+### Testing the custom backend APIs
+
+```bash
+# Health check
+curl http://localhost:9001/health
+
+# List regions
+curl http://localhost:9001/store/regions
+
+# List products
+curl http://localhost:9001/store/products
+
+# Get a single product
+curl http://localhost:9001/store/products?handle=silk-evening-gown
+
+# List categories
+curl http://localhost:9001/store/product-categories
+
+# Create a cart
+curl -X POST http://localhost:9001/store/carts \
+  -H 'Content-Type: application/json' \
+  -d '{"region_id": "<region_id>"}'
+
+# Add line item to cart
+curl -X POST http://localhost:9001/store/carts/<cart_id>/line-items \
+  -H 'Content-Type: application/json' \
+  -d '{"variant_id": "<variant_id>", "quantity": 1}'
+
+# Get cart with items
+curl http://localhost:9001/store/carts/<cart_id>
+```
+
+### Switching between Medusa and Custom Backend
+
+| Mode | `.env` / `.env.local` setting | Docker command |
+|---|---|---|
+| **Medusa** (default) | Remove or comment out `NEXT_PUBLIC_COMMERCE_BACKEND` | `docker compose up --build -d` |
+| **Custom Shop** | `NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001` | `docker compose --profile shop up --build -d` |
+
+Medusa runs on port 9000, the custom shop on port 9001 — they can run side by side.
 
 ---
 
@@ -595,6 +702,11 @@ pnpm --filter @blessluxe/backend dev
 pnpm --filter @blessluxe/backend db:migrate
 pnpm --filter @blessluxe/backend seed
 
+# ─── Custom Shop Backend ─────────────────────────────────
+pnpm shop:dev              # Start custom backend on :9000
+pnpm shop:migrate          # Create shop tables
+pnpm shop:seed             # Seed products, categories, regions
+
 # ─── Docker ──────────────────────────────────────────────
 docker compose up -d                # Start all services
 docker compose up -d postgres redis # Infrastructure only
@@ -612,7 +724,7 @@ docker compose logs -f medusa       # Follow Medusa logs
 |---|---|
 | Frontend | Next.js 14, React 18, Tailwind CSS, Framer Motion |
 | State | Zustand, React Query |
-| Backend | Medusa.js v2, Express |
+| Backend | Medusa.js v2 or Custom Express API |
 | Database | PostgreSQL 16 (pgvector) |
 | Cache | Redis 7 |
 | AI | Google Gemini 2.5 Flash, Gemini Live API |

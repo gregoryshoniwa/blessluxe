@@ -1,10 +1,27 @@
 import Medusa from "@medusajs/js-sdk";
 
+/**
+ * Commerce backend URL. Set `NEXT_PUBLIC_COMMERCE_BACKEND` to point at the custom
+ * @blessluxe/shop-backend (e.g. `http://localhost:9000`). Falls back to
+ * `NEXT_PUBLIC_MEDUSA_BACKEND_URL` for Medusa. Both backends expose the same
+ * `/store/*` routes so the storefront works with either.
+ */
 const MEDUSA_BACKEND_URL =
-  process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000";
+  process.env.NEXT_PUBLIC_COMMERCE_BACKEND ||
+  process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
+  "http://localhost:9000";
 
 const PUBLISHABLE_API_KEY =
   process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY || "";
+
+/**
+ * True when the storefront is configured to use the custom shop backend
+ * instead of Medusa. Useful for code paths that need to skip Medusa-only
+ * features (SDK-specific query syntax, field selectors, etc.).
+ */
+export const isCustomBackend = Boolean(
+  process.env.NEXT_PUBLIC_COMMERCE_BACKEND
+);
 
 export const medusa = new Medusa({
   baseUrl: MEDUSA_BACKEND_URL,
@@ -75,11 +92,14 @@ function pickStoreProductImageUrl(p: {
   return null;
 }
 
-/** Field sets for Store API; `null` = omit `fields` (full product). */
-const STORE_PRODUCT_FIELDS_ATTEMPTS = ["handle,+thumbnail,*images", "handle,thumbnail,images", null] as const;
+/** Field sets for Medusa Store API; `null` = omit `fields` (full product). Custom backend ignores fields. */
+const STORE_PRODUCT_FIELDS_ATTEMPTS = isCustomBackend
+  ? [null] as const
+  : (["handle,+thumbnail,*images", "handle,thumbnail,images", null] as const);
 
 /**
- * Load thumbnail + store handle for a Medusa product (Store API). Used by /shop/packs and pack APIs.
+ * Load thumbnail + store handle for a product (Store API). Used by /shop/packs and pack APIs.
+ * Works with both Medusa and the custom @blessluxe/shop-backend.
  */
 export async function fetchStoreProductThumbAndHandle(
   productId: string

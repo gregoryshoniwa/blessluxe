@@ -13,7 +13,10 @@
     "type-check": "turbo type-check",
     "clean": "turbo clean && rm -rf node_modules",
     "db:reset-medusa": "bash scripts/reset-medusa-db.sh",
-    "inventory:backfill-medusa": "bash scripts/backfill-medusa-inventory.sh"
+    "inventory:backfill-medusa": "bash scripts/backfill-medusa-inventory.sh",
+    "shop:dev": "pnpm --filter @blessluxe/shop-backend dev",
+    "shop:seed": "pnpm --filter @blessluxe/shop-backend seed",
+    "shop:migrate": "pnpm --filter @blessluxe/shop-backend migrate"
   },
   "devDependencies": {
     "@blessluxe/eslint-config": "workspace:*",

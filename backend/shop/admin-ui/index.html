@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLESSLUXE — Shop Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gold:  { 50:'#fdf9ef', 100:'#fbefd0', 200:'#f6dc9c', 300:'#f0c460', 400:'#eab434', 500:'#d49a1a', 600:'#b77a13', 700:'#935813', 800:'#784716', 900:'#633c16' },
+            cream: { 50:'#fefcf7', 100:'#fdf8ec', 200:'#faf0d4', 300:'#f5e3b0', 400:'#eed08a' },
+          },
+          fontFamily: { display: ['"Playfair Display"','Georgia','serif'], body: ['Inter','system-ui','sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    [x-cloak] { display: none !important; }
+    .fade-in { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+    .img-thumb { width:40px; height:40px; object-fit:cover; border-radius:6px; background:#f3f4f6; }
+    .img-thumb-lg { width:64px; height:64px; object-fit:cover; border-radius:8px; background:#f3f4f6; }
+    .drop-zone { border:2px dashed #d1d5db; transition:border-color .2s, background .2s; }
+    .drop-zone.dragover { border-color:#eab434; background:#fdf9ef; }
+  </style>
+</head>
+<body class="bg-cream-50 font-body text-gray-800 min-h-screen" x-data="app()" x-init="init()" x-cloak>
+
+  <!-- Login Screen -->
+  <template x-if="!token">
+    <div class="min-h-screen flex items-center justify-center px-4">
+      <div class="w-full max-w-md">
+        <div class="text-center mb-8">
+          <h1 class="font-display text-4xl font-bold text-gold-700 tracking-wide">BLESSLUXE</h1>
+          <p class="text-gray-500 mt-2">Shop Admin Dashboard</p>
+        </div>
+        <form @submit.prevent="login()" class="bg-white rounded-2xl shadow-lg p-8 space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Email</label>
+            <input type="email" x-model="loginEmail" required class="w-full border border-gray-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition" placeholder="admin@blessluxe.com" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Password</label>
+            <input type="password" x-model="loginPassword" required class="w-full border border-gray-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition" placeholder="••••••••" />
+          </div>
+          <p x-show="loginError" x-text="loginError" class="text-red-500 text-sm"></p>
+          <button type="submit" :disabled="loginLoading" class="w-full bg-gold-600 hover:bg-gold-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50">
+            <span x-show="!loginLoading">Sign In</span><span x-show="loginLoading">Signing in...</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- Main App -->
+  <template x-if="token">
+    <div class="flex min-h-screen">
+      <!-- Sidebar -->
+      <aside class="w-64 bg-white border-r border-gray-100 flex flex-col flex-shrink-0">
+        <div class="p-6 border-b border-gray-100">
+          <h1 class="font-display text-xl font-bold text-gold-700 tracking-wide">BLESSLUXE</h1>
+          <p class="text-xs text-gray-400 mt-1">Shop Admin</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-1">
+          <template x-for="item in navItems" :key="item.id">
+            <button @click="page = item.id; loadPage()" :class="page === item.id ? 'bg-gold-50 text-gold-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'"
+              class="w-full text-left px-4 py-2.5 rounded-lg text-sm transition flex items-center gap-3">
+              <span x-html="item.icon" class="w-5 h-5 flex-shrink-0"></span>
+              <span x-text="item.label"></span>
+            </button>
+          </template>
+        </nav>
+        <div class="p-4 border-t border-gray-100">
+          <div class="flex items-center gap-3 mb-3 px-2">
+            <div class="w-8 h-8 rounded-full bg-gold-100 flex items-center justify-center text-gold-700 font-bold text-sm" x-text="currentUser?.first_name?.[0] || currentUser?.email?.[0]?.toUpperCase() || 'A'"></div>
+            <div class="min-w-0">
+              <p class="text-sm font-medium truncate" x-text="currentUser?.first_name ? currentUser.first_name + ' ' + (currentUser.last_name || '') : currentUser?.email"></p>
+              <p class="text-xs text-gray-400" x-text="currentUser?.role || 'admin'"></p>
+            </div>
+          </div>
+          <button @click="logout()" class="w-full text-left px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 transition">Sign out</button>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="flex-1 overflow-auto">
+        <div class="max-w-6xl mx-auto p-8 fade-in">
+
+          <!-- ═══ Dashboard ═══ -->
+          <template x-if="page === 'dashboard'">
+            <div>
+              <h2 class="font-display text-2xl font-bold text-gray-800 mb-6">Dashboard</h2>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100"><p class="text-sm text-gray-500">Products</p><p class="text-3xl font-bold text-gray-800 mt-1" x-text="stats.products || '–'"></p></div>
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100"><p class="text-sm text-gray-500">Variants</p><p class="text-3xl font-bold text-gray-800 mt-1" x-text="stats.variants || '–'"></p></div>
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100"><p class="text-sm text-gray-500">Categories</p><p class="text-3xl font-bold text-gray-800 mt-1" x-text="stats.categories || '–'"></p></div>
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100"><p class="text-sm text-gray-500">Regions</p><p class="text-3xl font-bold text-gray-800 mt-1" x-text="stats.regions || '–'"></p></div>
+              </div>
+              <div class="mt-8 bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 class="font-semibold text-gray-700 mb-4">Recent Products</h3>
+                <div class="space-y-3">
+                  <template x-for="p in recentProducts" :key="p.id">
+                    <div class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                      <img :src="p.thumbnail || ''" :alt="p.title" class="img-thumb" x-show="p.thumbnail" />
+                      <div x-show="!p.thumbnail" class="img-thumb flex items-center justify-center text-gray-300">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium truncate" x-text="p.title"></p>
+                        <p class="text-xs text-gray-400" x-text="p.handle"></p>
+                      </div>
+                      <span :class="p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'" class="text-xs px-2.5 py-1 rounded-full font-medium" x-text="p.status"></span>
+                    </div>
+                  </template>
+                  <p x-show="recentProducts.length === 0" class="text-sm text-gray-400">No products yet</p>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ═══ Products ═══ -->
+          <template x-if="page === 'products'">
+            <div>
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="font-display text-2xl font-bold text-gray-800">Products</h2>
+                <button @click="openProductForm()" class="bg-gold-600 hover:bg-gold-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition">+ Add Product</button>
+              </div>
+              <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50 text-gray-500">
+                    <tr><th class="px-5 py-3 text-left font-medium w-16"></th><th class="px-5 py-3 text-left font-medium">Product</th><th class="px-5 py-3 text-left font-medium">Handle</th><th class="px-5 py-3 text-left font-medium">Status</th><th class="px-5 py-3 text-right font-medium">Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="p in products" :key="p.id">
+                      <tr class="border-t border-gray-50 hover:bg-gray-50/50">
+                        <td class="px-5 py-3">
+                          <img :src="p.thumbnail || ''" :alt="p.title" class="img-thumb" x-show="p.thumbnail" />
+                          <div x-show="!p.thumbnail" class="img-thumb flex items-center justify-center text-gray-300">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>
+                          </div>
+                        </td>
+                        <td class="px-5 py-3 font-medium" x-text="p.title"></td>
+                        <td class="px-5 py-3 text-gray-500" x-text="p.handle"></td>
+                        <td class="px-5 py-3">
+                          <span :class="p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'" class="text-xs px-2.5 py-1 rounded-full font-medium" x-text="p.status"></span>
+                        </td>
+                        <td class="px-5 py-3 text-right space-x-2">
+                          <button @click="editProduct(p)" class="text-gold-600 hover:text-gold-800 text-xs font-medium">Edit</button>
+                          <button @click="deleteProduct(p.id)" class="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <p x-show="products.length === 0" class="text-center text-gray-400 py-8">No products found</p>
+              </div>
+
+              <!-- Product Form Modal -->
+              <div x-show="showProductForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showProductForm = false">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-8" @click.stop>
+                  <h3 class="font-display text-xl font-bold mb-6" x-text="editingProduct ? 'Edit Product' : 'New Product'"></h3>
+                  <form @submit.prevent="saveProduct()" class="space-y-5">
+                    <div class="grid grid-cols-2 gap-4">
+                      <div><label class="block text-sm font-medium text-gray-600 mb-1">Title *</label><input x-model="productForm.title" required class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                      <div><label class="block text-sm font-medium text-gray-600 mb-1">Handle</label><input x-model="productForm.handle" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" placeholder="auto-generated" /></div>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Description</label><textarea x-model="productForm.description" rows="3" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none"></textarea></div>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div><label class="block text-sm font-medium text-gray-600 mb-1">Status</label>
+                        <select x-model="productForm.status" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none"><option value="published">Published</option><option value="draft">Draft</option></select>
+                      </div>
+                    </div>
+
+                    <!-- Thumbnail -->
+                    <div>
+                      <label class="block text-sm font-medium text-gray-600 mb-2">Thumbnail</label>
+                      <div class="flex items-start gap-4">
+                        <div x-show="productForm.thumbnail" class="relative group">
+                          <img :src="productForm.thumbnail" class="w-24 h-24 object-cover rounded-lg border border-gray-200" />
+                          <button type="button" @click="productForm.thumbnail = ''" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition">&times;</button>
+                        </div>
+                        <div class="flex-1">
+                          <div class="drop-zone rounded-lg p-4 text-center cursor-pointer"
+                            @click="$refs.thumbInput.click()"
+                            @dragover.prevent="$event.currentTarget.classList.add('dragover')"
+                            @dragleave.prevent="$event.currentTarget.classList.remove('dragover')"
+                            @drop.prevent="$event.currentTarget.classList.remove('dragover'); uploadThumbnail($event.dataTransfer.files[0])">
+                            <svg class="w-8 h-8 mx-auto text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                            <p class="text-xs text-gray-400" x-text="uploading ? 'Uploading...' : 'Click or drop image'"></p>
+                          </div>
+                          <input type="file" accept="image/*" x-ref="thumbInput" class="hidden" @change="uploadThumbnail($event.target.files[0])" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Gallery Images (edit mode only) -->
+                    <div x-show="editingProduct">
+                      <label class="block text-sm font-medium text-gray-600 mb-2">Gallery Images</label>
+                      <div class="flex flex-wrap gap-3 mb-3">
+                        <template x-for="(img, idx) in productImages" :key="img.id">
+                          <div class="relative group">
+                            <img :src="img.url" class="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                            <button type="button" @click="removeProductImage(img)" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition">&times;</button>
+                            <button type="button" x-show="idx === 0 && !productForm.thumbnail" @click="setAsThumbnail(img.url)" class="absolute bottom-1 left-1 bg-gold-600 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">Set thumb</button>
+                          </div>
+                        </template>
+                        <div x-show="productImages.length === 0" class="text-xs text-gray-400 py-6">No gallery images</div>
+                      </div>
+                      <div class="drop-zone rounded-lg p-4 text-center cursor-pointer"
+                        @click="$refs.galleryInput.click()"
+                        @dragover.prevent="$event.currentTarget.classList.add('dragover')"
+                        @dragleave.prevent="$event.currentTarget.classList.remove('dragover')"
+                        @drop.prevent="$event.currentTarget.classList.remove('dragover'); uploadGalleryImage($event.dataTransfer.files)">
+                        <p class="text-xs text-gray-400" x-text="uploading ? 'Uploading...' : 'Click or drop to add gallery images'"></p>
+                      </div>
+                      <input type="file" accept="image/*" multiple x-ref="galleryInput" class="hidden" @change="uploadGalleryImage($event.target.files)" />
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                      <button type="button" @click="showProductForm = false" class="px-5 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+                      <button type="submit" class="bg-gold-600 hover:bg-gold-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition">Save</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ═══ Categories ═══ -->
+          <template x-if="page === 'categories'">
+            <div>
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="font-display text-2xl font-bold text-gray-800">Categories</h2>
+                <button @click="showCategoryForm = true; categoryForm = {name:'', handle:'', description:''}" class="bg-gold-600 hover:bg-gold-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition">+ Add Category</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <template x-for="c in categories" :key="c.id">
+                  <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <p class="font-semibold text-gray-800" x-text="c.name"></p>
+                    <p class="text-xs text-gray-400 mt-1" x-text="c.handle"></p>
+                    <p x-show="c.description" class="text-sm text-gray-500 mt-2" x-text="c.description"></p>
+                  </div>
+                </template>
+              </div>
+              <p x-show="categories.length === 0" class="text-center text-gray-400 py-8">No categories found</p>
+              <div x-show="showCategoryForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showCategoryForm = false">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8" @click.stop>
+                  <h3 class="font-display text-xl font-bold mb-6">New Category</h3>
+                  <form @submit.prevent="saveCategory()" class="space-y-4">
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Name *</label><input x-model="categoryForm.name" required class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Handle *</label><input x-model="categoryForm.handle" required class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Description</label><textarea x-model="categoryForm.description" rows="2" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none"></textarea></div>
+                    <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCategoryForm = false" class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">Cancel</button><button type="submit" class="bg-gold-600 hover:bg-gold-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition">Save</button></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ═══ Regions ═══ -->
+          <template x-if="page === 'regions'">
+            <div>
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="font-display text-2xl font-bold text-gray-800">Regions</h2>
+                <button @click="showRegionForm = true; regionForm = {name:'', currency_code:'usd', countries:''}" class="bg-gold-600 hover:bg-gold-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition">+ Add Region</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <template x-for="r in regions" :key="r.id">
+                  <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between"><p class="font-semibold text-gray-800" x-text="r.name"></p><span class="bg-gold-100 text-gold-700 px-2.5 py-1 rounded-full text-xs font-bold uppercase" x-text="r.currency_code"></span></div>
+                    <p class="text-xs text-gray-400 mt-2" x-text="(r.countries || []).join(', ')"></p>
+                  </div>
+                </template>
+              </div>
+              <p x-show="regions.length === 0" class="text-center text-gray-400 py-8">No regions found</p>
+              <div x-show="showRegionForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showRegionForm = false">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8" @click.stop>
+                  <h3 class="font-display text-xl font-bold mb-6">New Region</h3>
+                  <form @submit.prevent="saveRegion()" class="space-y-4">
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Name *</label><input x-model="regionForm.name" required class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Currency Code</label><input x-model="regionForm.currency_code" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" placeholder="usd" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Countries (comma-separated)</label><input x-model="regionForm.countries" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" placeholder="us, gb, de" /></div>
+                    <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showRegionForm = false" class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">Cancel</button><button type="submit" class="bg-gold-600 hover:bg-gold-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition">Save</button></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- ═══ Inventory ═══ -->
+          <template x-if="page === 'inventory'">
+            <div>
+              <h2 class="font-display text-2xl font-bold text-gray-800 mb-6">Inventory</h2>
+              <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50 text-gray-500">
+                    <tr><th class="px-5 py-3 text-left font-medium w-16"></th><th class="px-5 py-3 text-left font-medium">Product</th><th class="px-5 py-3 text-left font-medium">Variant</th><th class="px-5 py-3 text-left font-medium">SKU</th><th class="px-5 py-3 text-center font-medium">Stock</th><th class="px-5 py-3 text-right font-medium">Update</th></tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="v in inventoryList" :key="v.id">
+                      <tr class="border-t border-gray-50 hover:bg-gray-50/50">
+                        <td class="px-5 py-3">
+                          <img :src="v.thumbnail || ''" class="img-thumb" x-show="v.thumbnail" />
+                          <div x-show="!v.thumbnail" class="img-thumb flex items-center justify-center text-gray-300">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>
+                          </div>
+                        </td>
+                        <td class="px-5 py-3 font-medium" x-text="v.product_title"></td>
+                        <td class="px-5 py-3 text-gray-500" x-text="v.title"></td>
+                        <td class="px-5 py-3 text-gray-400 text-xs font-mono" x-text="v.sku || '–'"></td>
+                        <td class="px-5 py-3 text-center">
+                          <input type="number" min="0" :value="v.inventory_quantity" @change="v.inventory_quantity = +$event.target.value; v._dirty = true"
+                            class="w-20 text-center border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-gold-400 outline-none" />
+                        </td>
+                        <td class="px-5 py-3 text-right">
+                          <button @click="updateInventory(v)" :disabled="!v._dirty" :class="v._dirty ? 'bg-gold-600 hover:bg-gold-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition">Save</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <p x-show="inventoryList.length === 0" class="text-center text-gray-400 py-8">No variants found</p>
+              </div>
+            </div>
+          </template>
+
+          <!-- ═══ Users ═══ -->
+          <template x-if="page === 'users'">
+            <div>
+              <div class="flex items-center justify-between mb-6">
+                <h2 class="font-display text-2xl font-bold text-gray-800">Users</h2>
+                <button @click="showUserForm = true; userForm = {email:'', password:'', first_name:'', last_name:'', role:'admin'}" class="bg-gold-600 hover:bg-gold-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition">+ Add User</button>
+              </div>
+              <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50 text-gray-500"><tr><th class="px-5 py-3 text-left font-medium">Name</th><th class="px-5 py-3 text-left font-medium">Email</th><th class="px-5 py-3 text-left font-medium">Role</th><th class="px-5 py-3 text-center font-medium">Active</th><th class="px-5 py-3 text-right font-medium">Actions</th></tr></thead>
+                  <tbody>
+                    <template x-for="u in users" :key="u.id">
+                      <tr class="border-t border-gray-50 hover:bg-gray-50/50">
+                        <td class="px-5 py-3 font-medium" x-text="[u.first_name, u.last_name].filter(Boolean).join(' ') || '–'"></td>
+                        <td class="px-5 py-3 text-gray-500" x-text="u.email"></td>
+                        <td class="px-5 py-3"><span class="bg-gold-100 text-gold-700 px-2.5 py-1 rounded-full text-xs font-medium" x-text="u.role"></span></td>
+                        <td class="px-5 py-3 text-center"><button @click="toggleUserActive(u)" :class="u.is_active ? 'bg-green-500' : 'bg-gray-300'" class="w-10 h-5 rounded-full relative transition"><span :class="u.is_active ? 'translate-x-5' : 'translate-x-0.5'" class="block w-4 h-4 bg-white rounded-full shadow transform transition"></span></button></td>
+                        <td class="px-5 py-3 text-right"><button @click="deleteUser(u)" :disabled="u.id === currentUser?.id" :class="u.id === currentUser?.id ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:text-red-700'" class="text-xs font-medium">Delete</button></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <p x-show="users.length === 0" class="text-center text-gray-400 py-8">No users found</p>
+              </div>
+              <div x-show="showUserForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showUserForm = false">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8" @click.stop>
+                  <h3 class="font-display text-xl font-bold mb-6">New User</h3>
+                  <form @submit.prevent="saveUser()" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                      <div><label class="block text-sm font-medium text-gray-600 mb-1">First Name</label><input x-model="userForm.first_name" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                      <div><label class="block text-sm font-medium text-gray-600 mb-1">Last Name</label><input x-model="userForm.last_name" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Email *</label><input x-model="userForm.email" type="email" required class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Password *</label><input x-model="userForm.password" type="password" required minlength="6" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none" /></div>
+                    <div><label class="block text-sm font-medium text-gray-600 mb-1">Role</label><select x-model="userForm.role" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-gold-400 outline-none"><option value="admin">Admin</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select></div>
+                    <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showUserForm = false" class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">Cancel</button><button type="submit" class="bg-gold-600 hover:bg-gold-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition">Create User</button></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </template>
+
+        </div>
+      </main>
+    </div>
+  </template>
+
+<script>
+function app() {
+  const BASE = window.location.origin;
+  const stored = localStorage.getItem('shop_admin_token');
+
+  function authHeaders() {
+    const h = {};
+    const t = localStorage.getItem('shop_admin_token');
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h;
+  }
+
+  function jsonHeaders() {
+    return { 'Content-Type': 'application/json', ...authHeaders() };
+  }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(BASE + path, { headers: jsonHeaders(), ...opts });
+    if (res.status === 401) { localStorage.removeItem('shop_admin_token'); location.reload(); return null; }
+    return res.json();
+  }
+
+  async function uploadFile(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(BASE + '/admin/uploads', { method: 'POST', headers: authHeaders(), body: fd });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  }
+
+  return {
+    token: stored || null,
+    currentUser: null,
+    page: 'dashboard',
+    loginEmail: '', loginPassword: '', loginError: '', loginLoading: false,
+    uploading: false,
+
+    navItems: [
+      { id: 'dashboard', label: 'Dashboard', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>' },
+      { id: 'products', label: 'Products', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>' },
+      { id: 'categories', label: 'Categories', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" /></svg>' },
+      { id: 'regions', label: 'Regions', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>' },
+      { id: 'inventory', label: 'Inventory', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg>' },
+      { id: 'users', label: 'Users', icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>' },
+    ],
+
+    stats: {}, recentProducts: [],
+    products: [], categories: [], regions: [], users: [], inventoryList: [],
+    showProductForm: false, editingProduct: null, productImages: [],
+    productForm: { title: '', handle: '', description: '', status: 'published', thumbnail: '' },
+    showCategoryForm: false, categoryForm: { name: '', handle: '', description: '' },
+    showRegionForm: false, regionForm: { name: '', currency_code: 'usd', countries: '' },
+    showUserForm: false, userForm: { email: '', password: '', first_name: '', last_name: '', role: 'admin' },
+
+    async init() {
+      if (!this.token) return;
+      const me = await api('/auth/me');
+      if (me?.user) { this.currentUser = me.user; this.loadPage(); }
+      else { this.token = null; localStorage.removeItem('shop_admin_token'); }
+    },
+
+    async login() {
+      this.loginError = ''; this.loginLoading = true;
+      try {
+        const res = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: this.loginEmail, password: this.loginPassword }) });
+        const data = await res.json();
+        if (!res.ok) { this.loginError = data.error || 'Login failed'; return; }
+        this.token = data.token; localStorage.setItem('shop_admin_token', data.token); this.currentUser = data.user; this.loadPage();
+      } catch { this.loginError = 'Network error'; }
+      finally { this.loginLoading = false; }
+    },
+
+    logout() { fetch(BASE + '/auth/logout', { method: 'POST', headers: jsonHeaders() }); this.token = null; this.currentUser = null; localStorage.removeItem('shop_admin_token'); },
+
+    async loadPage() {
+      if (this.page === 'dashboard') await this.loadDashboard();
+      else if (this.page === 'products') await this.loadProducts();
+      else if (this.page === 'categories') await this.loadCategories();
+      else if (this.page === 'regions') await this.loadRegions();
+      else if (this.page === 'inventory') await this.loadInventory();
+      else if (this.page === 'users') await this.loadUsers();
+    },
+
+    async loadDashboard() {
+      const [p, c, r] = await Promise.all([api('/admin/products?limit=5'), api('/admin/categories'), api('/admin/regions')]);
+      this.stats = { products: p?.count || 0, categories: c?.categories?.length || 0, regions: r?.regions?.length || 0, variants: '–' };
+      this.recentProducts = p?.products || [];
+      const prods = await api('/store/products?limit=999');
+      if (prods?.products) { let v = 0; prods.products.forEach(pr => v += (pr.variants?.length || 0)); this.stats.variants = v; this.stats.products = prods.products.length; }
+    },
+
+    async loadProducts() { const d = await api('/admin/products?limit=200'); this.products = d?.products || []; },
+    async loadCategories() { const d = await api('/admin/categories'); this.categories = d?.categories || []; },
+    async loadRegions() { const d = await api('/admin/regions'); this.regions = d?.regions || []; },
+    async loadUsers() { const d = await api('/auth/users'); this.users = d?.users || []; },
+
+    async loadInventory() {
+      const d = await api('/store/products?limit=999');
+      const list = [];
+      for (const p of (d?.products || [])) {
+        for (const v of (p.variants || [])) {
+          list.push({ id: v.id, product_title: p.title, thumbnail: p.thumbnail, title: v.title, sku: v.sku, inventory_quantity: v.inventory_quantity || 0, _dirty: false });
+        }
+      }
+      this.inventoryList = list;
+    },
+
+    // ─── Product form ─────────────────────────────────────
+    openProductForm() {
+      this.editingProduct = null; this.productImages = [];
+      this.productForm = { title: '', handle: '', description: '', status: 'published', thumbnail: '' };
+      this.showProductForm = true;
+    },
+
+    async editProduct(p) {
+      this.editingProduct = p;
+      this.productForm = { title: p.title, handle: p.handle, description: p.description || '', status: p.status, thumbnail: p.thumbnail || '' };
+      this.productImages = [];
+      this.showProductForm = true;
+      const imgs = await api('/admin/products/' + p.id + '/images');
+      this.productImages = imgs?.images || [];
+    },
+
+    async saveProduct() {
+      if (this.editingProduct) {
+        await api('/admin/products/' + this.editingProduct.id, { method: 'PATCH', body: JSON.stringify(this.productForm) });
+      } else {
+        await api('/admin/products', { method: 'POST', body: JSON.stringify(this.productForm) });
+      }
+      this.showProductForm = false; await this.loadProducts();
+    },
+
+    async deleteProduct(id) { if (!confirm('Delete this product?')) return; await api('/admin/products/' + id, { method: 'DELETE' }); await this.loadProducts(); },
+
+    // ─── Image upload ─────────────────────────────────────
+    async uploadThumbnail(file) {
+      if (!file) return;
+      this.uploading = true;
+      try {
+        const data = await uploadFile(file);
+        this.productForm.thumbnail = data.url;
+        if (this.editingProduct) {
+          await api('/admin/products/' + this.editingProduct.id, { method: 'PATCH', body: JSON.stringify({ thumbnail: data.url }) });
+        }
+      } catch (e) { alert('Upload failed: ' + e.message); }
+      finally { this.uploading = false; }
+    },
+
+    async uploadGalleryImage(files) {
+      if (!files?.length || !this.editingProduct) return;
+      this.uploading = true;
+      try {
+        for (const file of files) {
+          const data = await uploadFile(file);
+          const img = await api('/admin/products/' + this.editingProduct.id + '/images', { method: 'POST', body: JSON.stringify({ url: data.url }) });
+          if (img?.image) this.productImages.push(img.image);
+          if (!this.productForm.thumbnail) {
+            this.productForm.thumbnail = data.url;
+            await api('/admin/products/' + this.editingProduct.id, { method: 'PATCH', body: JSON.stringify({ thumbnail: data.url }) });
+          }
+        }
+      } catch (e) { alert('Upload failed: ' + e.message); }
+      finally { this.uploading = false; }
+    },
+
+    async removeProductImage(img) {
+      if (!this.editingProduct) return;
+      await api('/admin/products/' + this.editingProduct.id + '/images/' + img.id, { method: 'DELETE' });
+      this.productImages = this.productImages.filter(i => i.id !== img.id);
+    },
+
+    async setAsThumbnail(url) {
+      this.productForm.thumbnail = url;
+      if (this.editingProduct) {
+        await api('/admin/products/' + this.editingProduct.id, { method: 'PATCH', body: JSON.stringify({ thumbnail: url }) });
+      }
+    },
+
+    // ─── Other CRUD ───────────────────────────────────────
+    async saveCategory() { await api('/admin/categories', { method: 'POST', body: JSON.stringify(this.categoryForm) }); this.showCategoryForm = false; await this.loadCategories(); },
+
+    async saveRegion() {
+      const data = { ...this.regionForm, countries: this.regionForm.countries.split(',').map(s => s.trim()).filter(Boolean) };
+      await api('/admin/regions', { method: 'POST', body: JSON.stringify(data) }); this.showRegionForm = false; await this.loadRegions();
+    },
+
+    async updateInventory(v) { await api('/admin/inventory/update', { method: 'POST', body: JSON.stringify({ variant_id: v.id, quantity: v.inventory_quantity }) }); v._dirty = false; },
+
+    async saveUser() {
+      const res = await api('/auth/users', { method: 'POST', body: JSON.stringify(this.userForm) });
+      if (res?.user) { this.showUserForm = false; await this.loadUsers(); } else { alert(res?.error || 'Failed to create user'); }
+    },
+
+    async toggleUserActive(u) { await api('/auth/users/' + u.id, { method: 'PATCH', body: JSON.stringify({ is_active: !u.is_active }) }); u.is_active = !u.is_active; },
+
+    async deleteUser(u) {
+      if (u.id === this.currentUser?.id) return;
+      if (!confirm('Delete user ' + u.email + '?')) return;
+      await api('/auth/users/' + u.id, { method: 'DELETE' }); await this.loadUsers();
+    },
+  };
+}
+</script>
+</body>
+</html>
