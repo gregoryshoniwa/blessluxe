@@ -189,6 +189,23 @@ adminPackagesRouter.post("/packages/:id/events", async (req, res) => {
       params
     );
 
+    // For non-pack packages, mirror package status onto each item. Pack items
+    // are tracked individually via sub-code claim flow so we leave them alone.
+    const pkgMeta = await queryOne(
+      `SELECT is_pack FROM shop_package WHERE id = $1`,
+      [req.params.id]
+    );
+    if (pkgMeta && !pkgMeta.is_pack) {
+      await execute(
+        `UPDATE shop_package_item
+            SET status = $1,
+                claimed_at = CASE WHEN $1 = 'delivered' THEN COALESCE(claimed_at, NOW()) ELSE claimed_at END,
+                updated_at = NOW()
+          WHERE package_id = $2`,
+        [status, req.params.id]
+      );
+    }
+
     const row = await queryOne(`SELECT * FROM shop_package WHERE id = $1`, [req.params.id]);
     res.status(201).json({ package: row });
   } catch (err) {
