@@ -22,9 +22,15 @@ export async function GET() {
   const customer = await getCurrentCustomer();
   if (!customer) return NextResponse.json({ packages: [] }, { status: 200 });
   const token = await getShopCustomerToken();
-  if (!token) return NextResponse.json({ packages: [] });
-  const res = await shopFetch<{ packages: PackageRow[] }>("/store/packages", {
-    bearer: token,
+  // Pass email so the shop backend can match packages whose customer_id was
+  // never linked (storefront and shop backend use separate auth tokens, so
+  // historical packages often have customer_id = NULL with only the email).
+  const email = (customer.email || "").trim().toLowerCase();
+  const path = email
+    ? `/store/packages?email=${encodeURIComponent(email)}`
+    : "/store/packages";
+  const res = await shopFetch<{ packages: PackageRow[] }>(path, {
+    bearer: token || undefined,
   });
   if (!res.ok || !res.data) return NextResponse.json({ packages: [] });
   return NextResponse.json({ packages: res.data.packages });

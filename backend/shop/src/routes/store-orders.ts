@@ -118,9 +118,27 @@ async function createPackageForOrder(opts: {
 
 // POST /store/orders — create an order (called by storefront after Stripe success)
 // Body: { email, currency_code, items: [{variant_id, quantity, unit_price}], shipping_total, tax_total, discount_total, payment_method, payment_status, status, campaign_id?, shipping_address?, billing_address? }
+/**
+ * Falls back to matching shop_customer by email when no JWT-resolved id is
+ * available. The storefront and shop backend currently use separate auth
+ * tokens, so most order creations pass through with a null bearer — without
+ * this lookup, customer_id stays NULL on the order and the package, breaking
+ * /store/packages/me which filters by customer_id.
+ */
+async function resolveCustomerIdWithEmailFallback(
+  authHeader: string | undefined,
+  email: string | null | undefined
+): Promise<string | null> {
+  const fromToken = await resolveCustomerId(authHeader);
+  if (fromToken) return fromToken;
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return null;
+  const row = await queryOne(`SELECT id FROM shop_customer WHERE LOWER(email) = $1`, [e]);
+  return row ? String(row.id) : null;
+}
+
 storeOrdersRouter.post("/", async (req, res) => {
   try {
-    const customerId = await resolveCustomerId(req.headers.authorization);
     const b = req.body as {
       email?: string;
       currency_code: string;
@@ -144,6 +162,11 @@ storeOrdersRouter.post("/", async (req, res) => {
     if (!Array.isArray(b.items) || b.items.length === 0) {
       return res.status(400).json({ error: "items required" });
     }
+
+    const customerId = await resolveCustomerIdWithEmailFallback(
+      req.headers.authorization,
+      b.email
+    );
 
     const id = newId("order");
     const orderNumber = b.order_number || `BL-${Date.now().toString(36).toUpperCase()}`;

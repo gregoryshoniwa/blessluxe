@@ -149,15 +149,31 @@ storePackagesRouter.get("/:code", async (req, res) => {
 storePackagesRouter.get("/", async (req, res) => {
   try {
     const customerId = await resolveCustomerId(req.headers.authorization);
-    if (!customerId) return res.status(401).json({ error: "Not authenticated" });
+    // Email fallback: the storefront and shop backend use separate auth, so
+    // a customer browsing /account may not have a shop JWT. The proxy can
+    // pass ?email=... so we match on email as well.
+    const emailParam = String((req.query.email as string) || "").trim().toLowerCase();
+    if (!customerId && !emailParam) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (customerId) {
+      params.push(customerId);
+      conds.push(`p.customer_id = $${params.length}`);
+    }
+    if (emailParam) {
+      params.push(emailParam);
+      conds.push(`LOWER(p.customer_email) = $${params.length}`);
+    }
     const rows = await query(
       `SELECT p.id, p.package_code, p.status, p.carrier, p.is_pack,
               p.shipped_at, p.delivered_at, p.created_at, o.order_number, o.total, o.currency_code
        FROM shop_package p
        JOIN shop_order o ON o.id = p.order_id
-       WHERE p.customer_id = $1
+       WHERE ${conds.join(" OR ")}
        ORDER BY p.created_at DESC LIMIT 200`,
-      [customerId]
+      params
     );
     res.json({ packages: rows });
   } catch (err) {
