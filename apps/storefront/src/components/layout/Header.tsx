@@ -13,6 +13,7 @@ import { useCartStore } from "@/stores/cart";
 import { useWishlistStore } from "@/stores/wishlist";
 import { useNavigation } from "@/hooks/useNavigation";
 import { AnnouncementBar } from "./AnnouncementBar";
+import { CampaignBanner } from "./CampaignBanner";
 import { HeaderWalletMenu } from "./HeaderWalletMenu";
 import { HeaderProfileMenu } from "./HeaderProfileMenu";
 
@@ -107,6 +108,7 @@ export function Header() {
 
   return (
     <>
+      <CampaignBanner />
       <AnnouncementBar />
       <header
         className={cn(

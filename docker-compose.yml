@@ -5,9 +5,8 @@
 ##    cp .env.docker .env          # one-time setup
 ##    docker compose up --build    # build & start everything
 ##
-##  Optional after first start:
-##    docker compose exec medusa npx medusa user -e admin@blessluxe.com -p admin123
-##    docker compose exec medusa npx medusa exec ./src/scripts/seed.ts
+##  Optional after first start (creates default admin + sample data):
+##    docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/seed.ts
 ## ─────────────────────────────────────────────────────────
 
 services:
@@ -29,75 +28,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Redis ───────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # ─── Medusa Backend + Admin Dashboard (port 9000) ───────
-  medusa:
-    build:
-      context: .
-      dockerfile: backend/medusa/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-blessluxe}:${POSTGRES_PASSWORD:-blessluxe}@postgres:5432/${POSTGRES_DB:-blessluxe}?sslmode=disable
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-supersecret-jwt-change-in-prod}
-      COOKIE_SECRET: ${COOKIE_SECRET:-supersecret-cookie-change-in-prod}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      STORE_CORS: ${STORE_CORS:-http://localhost:3000},http://storefront:3000
-      ADMIN_CORS: ${ADMIN_CORS:-http://localhost:9000}
-      AUTH_CORS: ${AUTH_CORS:-http://localhost:3000,http://localhost:9000},http://storefront:3000
-      NODE_ENV: production
-      # Optional providers — only loaded when keys are set
-      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
-      FLUTTERWAVE_SECRET_KEY: ${FLUTTERWAVE_SECRET_KEY:-}
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
-      SENDGRID_FROM: ${SENDGRID_FROM:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_SECURE: ${SMTP_SECURE:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-    command: ["sh", "-c", "npx medusa db:migrate && pnpm start"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 90s
-
-  # ─── Custom Shop Backend (port 9001) ────────────────────
-  # Lightweight alternative to Medusa. Can run alongside Medusa.
-  # To use: set NEXT_PUBLIC_COMMERCE_BACKEND=http://localhost:9001 in .env
-  #   docker compose --profile shop up --build -d
-  #   docker compose exec shop node --experimental-strip-types --experimental-transform-types src/db/seed.ts
+  # ─── BLESSLUXE Shop Backend (port 9001) ─────────────────
   shop:
     build:
       context: .
       dockerfile: backend/shop/Dockerfile
     restart: unless-stopped
-    profiles: ["shop"]
     ports:
       - "9001:9001"
     depends_on:
@@ -126,9 +62,7 @@ services:
       context: .
       dockerfile: apps/storefront/Dockerfile
       args:
-        NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
-        NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-}
-        NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-}
+        NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-http://localhost:9001}
         NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
     restart: unless-stopped
     ports:
@@ -136,13 +70,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      # When using Medusa (default), also uncomment:
-      # medusa:
-      #   condition: service_healthy
+      shop:
+        condition: service_healthy
     environment:
-      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
-      NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-}
-      NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-}
+      NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-http://localhost:9001}
       NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       AI_DATABASE_URL: postgres://${POSTGRES_USER:-blessluxe}:${POSTGRES_PASSWORD:-blessluxe}@postgres:5432/${POSTGRES_DB:-blessluxe}?sslmode=disable
@@ -156,7 +87,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-affiliate-media}
       GOOGLE_NANO_BANANA_MODEL: ${GOOGLE_NANO_BANANA_MODEL:-gemini-3.1-flash-image-preview}
-      # Agent + pack transactional email (Nodemailer / SendGrid — same as Medusa notification module)
+      # Transactional email (Nodemailer / SendGrid)
       STOREFRONT_EMAIL_PROVIDER: ${STOREFRONT_EMAIL_PROVIDER:-}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM: ${SENDGRID_FROM:-}
@@ -169,7 +100,22 @@ services:
       SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-}
       REPLY_TO_EMAIL: ${REPLY_TO_EMAIL:-}
 
+  # ─── Next.js Admin Dashboard (port 3001) ────────────────
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_SHOP_BACKEND: ${NEXT_PUBLIC_SHOP_BACKEND:-http://localhost:9001}
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      shop:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_SHOP_BACKEND: ${NEXT_PUBLIC_SHOP_BACKEND:-http://localhost:9001}
+
 volumes:
   postgres_data:
-  redis_data:
   shop_uploads:

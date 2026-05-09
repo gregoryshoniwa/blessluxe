@@ -35,6 +35,19 @@ export async function POST(req: NextRequest) {
       notes,
     });
 
+    // Mirror to shop backend so admin sees the application.
+    try {
+      const { shopBackendApplyAffiliate } = await import("@/lib/shop-backend-client");
+      await shopBackendApplyAffiliate({
+        email: String(customer.email).trim().toLowerCase(),
+        first_name: inferredFirst,
+        last_name: inferredLast,
+        notes,
+      });
+    } catch {
+      // Non-fatal: storefront kept the application even if shop backend is unreachable.
+    }
+
     return NextResponse.json({
       ok: true,
       affiliate: {

@@ -10,8 +10,17 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
   if (productRows.length === 0) return [];
   const ids = productRows.map((p) => String(p.id));
 
-  const [imageRows, catRows, tagRows, optionRows, optionValueRows, variantRows, priceRows, varOptRows] =
-    await Promise.all([
+  const [
+    imageRows,
+    catRows,
+    catalogueRows,
+    tagRows,
+    optionRows,
+    optionValueRows,
+    variantRows,
+    priceRows,
+    varOptRows,
+  ] = await Promise.all([
       query(
         `SELECT id, product_id, url, rank FROM shop_product_image WHERE product_id = ANY($1) ORDER BY rank`,
         [ids]
@@ -20,6 +29,15 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
         `SELECT m.product_id, c.id, c.name, c.handle, c.parent_category_id
          FROM shop_product_category_map m
          JOIN shop_product_category c ON c.id = m.category_id
+         WHERE m.product_id = ANY($1)`,
+        [ids]
+      ),
+      query(
+        `SELECT m.product_id, c.id, c.name, c.handle, c.heading_id,
+                h.name AS heading_name, h.handle AS heading_handle
+         FROM shop_product_catalogue_map m
+         JOIN shop_catalogue c ON c.id = m.catalogue_id
+         JOIN shop_heading h ON h.id = c.heading_id
          WHERE m.product_id = ANY($1)`,
         [ids]
       ),
@@ -68,6 +86,7 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
 
   const imagesByProduct = groupBy(imageRows, "product_id");
   const catsByProduct = groupBy(catRows, "product_id");
+  const cataloguesByProduct = groupBy(catalogueRows, "product_id");
   const tagsByProduct = groupBy(tagRows, "product_id");
   const optsByProduct = groupBy(optionRows, "product_id");
   const optValsByOption = groupBy(optionValueRows, "option_id");
@@ -86,6 +105,14 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
       name: c.name,
       handle: c.handle,
       parent_category_id: c.parent_category_id || null,
+    }));
+    const catalogues = (cataloguesByProduct[pid] || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      handle: c.handle,
+      heading_id: c.heading_id,
+      heading_name: c.heading_name,
+      heading_handle: c.heading_handle,
     }));
     const tags = (tagsByProduct[pid] || []).map((t) => ({ id: t.id, value: t.value }));
     const options = (optsByProduct[pid] || []).map((o) => ({
@@ -148,6 +175,7 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
       metadata: p.metadata || null,
       images,
       categories,
+      catalogues,
       tags,
       options,
       variants,
@@ -165,18 +193,23 @@ productsRouter.get("/", async (req, res) => {
     const regionId = (req.query.region_id as string) || undefined;
     const handle = (req.query.handle as string) || undefined;
     const q = (req.query.q as string) || undefined;
-    const categoryIds: string[] = Array.isArray(req.query["category_id[]"])
-      ? (req.query["category_id[]"] as string[])
-      : req.query["category_id[]"]
-      ? [req.query["category_id[]"] as string]
-      : [];
-    const idFilter: string[] = Array.isArray(req.query["id[]"])
-      ? (req.query["id[]"] as string[])
-      : req.query["id[]"]
-      ? [req.query["id[]"] as string]
-      : req.query.id
-      ? [req.query.id as string]
-      : [];
+    // Accept all of: ?category_id=a, ?category_id=a&category_id=b, ?category_id[]=a (Express's qs
+     // parser drops the literal [] suffix and gives us either a string or an array of strings).
+    const arrayParam = (key: string): string[] => {
+      const direct = req.query[key];
+      const bracketed = req.query[`${key}[]`];
+      const merged = [direct, bracketed]
+        .flat()
+        .filter((v): v is string => typeof v === "string" && v.length > 0);
+      return merged;
+    };
+
+    const categoryIds = arrayParam("category_id");
+    const catalogueIds = arrayParam("catalogue_id");
+    const catalogueHandle = (req.query.catalogue_handle as string) || undefined;
+    const headingId = (req.query.heading_id as string) || undefined;
+    const headingHandle = (req.query.heading_handle as string) || undefined;
+    const idFilter = [...arrayParam("id")];
 
     const conditions: string[] = ["p.status = 'published'"];
     const params: unknown[] = [];
@@ -191,10 +224,37 @@ productsRouter.get("/", async (req, res) => {
       params.push(idFilter);
     }
     if (categoryIds.length > 0) {
+      // Accept either legacy categories or new catalogues — match by id in either table.
       conditions.push(
-        `EXISTS (SELECT 1 FROM shop_product_category_map m WHERE m.product_id = p.id AND m.category_id = ANY($${paramIdx++}))`
+        `(EXISTS (SELECT 1 FROM shop_product_category_map m WHERE m.product_id = p.id AND m.category_id = ANY($${paramIdx})) OR
+          EXISTS (SELECT 1 FROM shop_product_catalogue_map m WHERE m.product_id = p.id AND m.catalogue_id = ANY($${paramIdx})))`
       );
       params.push(categoryIds);
+      paramIdx++;
+    }
+    if (catalogueIds.length > 0) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m WHERE m.product_id = p.id AND m.catalogue_id = ANY($${paramIdx++}))`
+      );
+      params.push(catalogueIds);
+    }
+    if (catalogueHandle) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m JOIN shop_catalogue c ON c.id = m.catalogue_id WHERE m.product_id = p.id AND c.handle = $${paramIdx++})`
+      );
+      params.push(catalogueHandle);
+    }
+    if (headingId) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m JOIN shop_catalogue c ON c.id = m.catalogue_id WHERE m.product_id = p.id AND c.heading_id = $${paramIdx++})`
+      );
+      params.push(headingId);
+    }
+    if (headingHandle) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m JOIN shop_catalogue c ON c.id = m.catalogue_id JOIN shop_heading h ON h.id = c.heading_id WHERE m.product_id = p.id AND h.handle = $${paramIdx++})`
+      );
+      params.push(headingHandle);
     }
     if (q) {
       conditions.push(

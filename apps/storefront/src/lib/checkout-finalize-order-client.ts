@@ -197,6 +197,7 @@ export async function finalizeOrderAfterPayment(input: {
         invoiceUrl: `/invoices/${orderNumber}.pdf`,
         items: items.map((item) => ({
           productId: item.productId,
+          variantId: item.variantId,
           productHandle: item.handle || "",
           productTitle: item.title,
           quantity: item.quantity,

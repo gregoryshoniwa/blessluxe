@@ -1,3 +1,4 @@
+import "../load-env.ts";
 import { v4 as uuid } from "uuid";
 import bcrypt from "bcryptjs";
 import pool, { execute, queryOne, query } from "./pool.ts";
@@ -44,7 +45,7 @@ async function seed() {
     );
   }
 
-  // ─── Categories ────────────────────────────────────────
+  // ─── Categories (legacy table — kept for back-compat) ──
   const categoryDefs = [
     { name: "Women", handle: "women" },
     { name: "Men", handle: "men" },
@@ -74,6 +75,67 @@ async function seed() {
     }
   }
 
+  // ─── Headings + Catalogues (storefront navigation hierarchy) ───
+  const headingDefs = [
+    { handle: "women", name: "Women", rank: 0, is_sale: false },
+    { handle: "men", name: "Men", rank: 1, is_sale: false },
+    { handle: "children", name: "Children", rank: 2, is_sale: false },
+    { handle: "sale", name: "Sale", rank: 3, is_sale: true },
+  ];
+  const headingIdByHandle: Record<string, string> = {};
+  for (const h of headingDefs) {
+    const existing = await queryOne(`SELECT id FROM shop_heading WHERE handle = $1`, [h.handle]);
+    if (existing) {
+      headingIdByHandle[h.handle] = String(existing.id);
+    } else {
+      const hid = id("head");
+      await execute(
+        `INSERT INTO shop_heading (id, name, handle, rank, is_active, is_sale) VALUES ($1, $2, $3, $4, true, $5)`,
+        [hid, h.name, h.handle, h.rank, h.is_sale]
+      );
+      headingIdByHandle[h.handle] = hid;
+    }
+  }
+
+  // Each catalogue belongs to a heading. Same catalogue handle can't repeat across headings.
+  const catalogueDefs = [
+    // Women
+    { heading: "women", handle: "women-dresses", name: "Dresses", rank: 0 },
+    { heading: "women", handle: "women-tops", name: "Tops & Blouses", rank: 1 },
+    { heading: "women", handle: "women-bottoms", name: "Trousers & Skirts", rank: 2 },
+    { heading: "women", handle: "women-outerwear", name: "Outerwear", rank: 3 },
+    { heading: "women", handle: "women-shoes", name: "Shoes", rank: 4 },
+    { heading: "women", handle: "women-bags", name: "Bags", rank: 5 },
+    { heading: "women", handle: "women-jewelry", name: "Jewelry", rank: 6 },
+    // Men
+    { heading: "men", handle: "men-shirts", name: "Shirts", rank: 0 },
+    { heading: "men", handle: "men-trousers", name: "Trousers", rank: 1 },
+    { heading: "men", handle: "men-outerwear", name: "Outerwear", rank: 2 },
+    { heading: "men", handle: "men-shoes", name: "Shoes", rank: 3 },
+    // Children
+    { heading: "children", handle: "children-girls", name: "Girls", rank: 0 },
+    { heading: "children", handle: "children-boys", name: "Boys", rank: 1 },
+    // Sale
+    { heading: "sale", handle: "sale-all", name: "All Sale", rank: 0 },
+  ];
+
+  const catalogueIdByHandle: Record<string, string> = {};
+  for (const c of catalogueDefs) {
+    const existing = await queryOne(`SELECT id FROM shop_catalogue WHERE handle = $1`, [c.handle]);
+    if (existing) {
+      catalogueIdByHandle[c.handle] = String(existing.id);
+      continue;
+    }
+    const headingId = headingIdByHandle[c.heading];
+    if (!headingId) continue;
+    const cid = id("cat");
+    await execute(
+      `INSERT INTO shop_catalogue (id, heading_id, name, handle, rank, is_active) VALUES ($1, $2, $3, $4, $5, true)`,
+      [cid, headingId, c.name, c.handle, c.rank]
+    );
+    catalogueIdByHandle[c.handle] = cid;
+  }
+
   // ─── Tags ──────────────────────────────────────────────
   const tagValues = ["hot", "sale", "trending", "new", "bestseller"];
   const tagIdByValue: Record<string, string> = {};
@@ -94,9 +156,22 @@ async function seed() {
     handle: string;
     description: string;
     categories: string[];
+    catalogues?: string[];
     tags?: string[];
     options: Array<{ title: string; values: string[] }>;
     variants: Array<{ title: string; sku: string; options: Record<string, string> }>;
+  };
+
+  // Default category-handle → catalogue-handle mapping (women's site by default)
+  const categoryToCatalogue: Record<string, string[]> = {
+    dresses: ["women-dresses"],
+    tops: ["women-tops"],
+    bottoms: ["women-bottoms"],
+    outerwear: ["women-outerwear"],
+    shoes: ["women-shoes"],
+    bags: ["women-bags"],
+    accessories: ["women-bags", "women-jewelry"],
+    jewelry: ["women-jewelry"],
   };
 
   const sizes = ["XS", "S", "M", "L", "XL"];
@@ -315,6 +390,23 @@ async function seed() {
       }
     }
 
+    const targetCatalogueHandles = new Set<string>(p.catalogues || []);
+    for (const catHandle of p.categories) {
+      for (const ch of categoryToCatalogue[catHandle] || []) {
+        targetCatalogueHandles.add(ch);
+      }
+    }
+    if (p.tags?.includes("sale")) targetCatalogueHandles.add("sale-all");
+    for (const ch of targetCatalogueHandles) {
+      const cid = catalogueIdByHandle[ch];
+      if (cid) {
+        await execute(
+          `INSERT INTO shop_product_catalogue_map (product_id, catalogue_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [productId, cid]
+        );
+      }
+    }
+
     for (const tagValue of p.tags || []) {
       const tagId = tagIdByValue[tagValue];
       if (tagId) {
@@ -383,9 +475,13 @@ async function seed() {
   console.log(`Created ${productsCreated} products, ${variantsCreated} variants`);
 
   const regionCount = await queryOne(`SELECT count(*)::int AS c FROM shop_region`);
+  const headingCount = await queryOne(`SELECT count(*)::int AS c FROM shop_heading`);
+  const catalogueCount = await queryOne(`SELECT count(*)::int AS c FROM shop_catalogue`);
   const productCount = await queryOne(`SELECT count(*)::int AS c FROM shop_product`);
   const variantCount = await queryOne(`SELECT count(*)::int AS c FROM shop_product_variant`);
-  console.log(`Totals: ${regionCount?.c} regions, ${productCount?.c} products, ${variantCount?.c} variants`);
+  console.log(
+    `Totals: ${regionCount?.c} regions, ${headingCount?.c} headings, ${catalogueCount?.c} catalogues, ${productCount?.c} products, ${variantCount?.c} variants`
+  );
   console.log("Seed complete.");
 
   await pool.end();

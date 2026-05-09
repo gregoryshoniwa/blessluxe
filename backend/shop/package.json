@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --experimental-strip-types --experimental-transform-types --watch src/index.ts",
-    "start": "node --experimental-strip-types --experimental-transform-types src/index.ts",
+    "dev": "node --no-warnings=ExperimentalWarning --experimental-strip-types --experimental-transform-types --watch src/index.ts",
+    "start": "node --no-warnings=ExperimentalWarning --experimental-strip-types --experimental-transform-types src/index.ts",
     "build": "tsc",
-    "seed": "node --experimental-strip-types --experimental-transform-types src/db/seed.ts",
-    "migrate": "node --experimental-strip-types --experimental-transform-types src/db/migrate.ts",
+    "seed": "node --no-warnings=ExperimentalWarning --experimental-strip-types --experimental-transform-types src/db/seed.ts",
+    "migrate": "node --no-warnings=ExperimentalWarning --experimental-strip-types --experimental-transform-types src/db/migrate.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, Check, Lock } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
 import { CartLineThumbnail } from '@/components/cart/CartLineThumbnail';
+import { BrandLoader } from '@/components/layout/BrandLoader';
 import { cn } from '@/lib/utils';
 
 const steps = [
@@ -56,8 +57,8 @@ export default function CheckoutLayout({
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-gold">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <BrandLoader label="Preparing checkout" />
       </div>
     );
   }

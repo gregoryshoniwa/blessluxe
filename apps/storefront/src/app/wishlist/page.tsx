@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Heart, ShoppingBag } from 'lucide-react';
 import { useWishlistStore } from '@/stores/wishlist';
 import { ProductCard } from '@/components/home/ProductCard';
+import { BrandLoader } from '@/components/layout/BrandLoader';
 
 export default function WishlistPage() {
   const [mounted, setMounted] = useState(false);
@@ -15,11 +16,7 @@ export default function WishlistPage() {
   }, []);
 
   if (!mounted) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-pulse text-gold">Loading...</div>
-      </div>
-    );
+    return <BrandLoader label="Curating your wishlist" />;
   }
 
   if (items.length === 0) {

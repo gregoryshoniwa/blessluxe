@@ -1,10 +1,9 @@
-import { medusa } from "@/lib/medusa";
 import type { CartItem } from "@/stores/cart";
+import { cartApi } from "@/lib/cart-api";
 
 /**
- * Cart `refetch` cannot request `variant.inventory_quantity` — that field is not part of the
- * cart remote-query graph (unlike product routes, which compute it in middleware). Store
- * `GET /store/product-variants/:id?fields=inventory_quantity` does support it.
+ * Cart `refetch` cannot request `variant.inventory_quantity` consistently —
+ * fetch the live count per variant from the store API instead.
  */
 export async function enrichCartItemsWithStoreInventory(lines: CartItem[]): Promise<CartItem[]> {
   const medusaLines = lines.filter((l) => l.source === "medusa");
@@ -16,16 +15,14 @@ export async function enrichCartItemsWithStoreInventory(lines: CartItem[]): Prom
   await Promise.all(
     uniqueIds.map(async (variantId) => {
       try {
-        const res = (await medusa.client.fetch(`/store/product-variants/${encodeURIComponent(variantId)}`, {
-          query: { fields: "id,inventory_quantity" },
-        })) as { variant?: { id?: string; inventory_quantity?: number | null } };
+        const res = await cartApi.variantInventory(variantId);
         const v = res.variant;
         const q = v?.inventory_quantity;
         if (v?.id && typeof q === "number" && Number.isFinite(q) && q >= 0) {
           qtyByVariantId.set(v.id, q);
         }
       } catch {
-        // Per-variant failure should not break the cart.
+        // Per-variant failure shouldn't break the cart.
       }
     })
   );

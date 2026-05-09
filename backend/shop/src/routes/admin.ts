@@ -5,10 +5,30 @@ import fs from "node:fs";
 import { v4 as uuid } from "uuid";
 import { query, queryOne, execute } from "../db/pool.ts";
 import { requireAdmin } from "../middleware/admin-auth.ts";
+import { adminHierarchyRouter } from "./admin-hierarchy.ts";
+import { adminReviewsRouter } from "./admin-reviews.ts";
+import { adminCustomersRouter } from "./admin-customers.ts";
+import { adminAffiliatesRouter } from "./admin-affiliates.ts";
+import { adminTagsRouter } from "./admin-tags.ts";
+import { adminVariantsRouter } from "./admin-variants.ts";
+import { adminCampaignsRouter } from "./admin-campaigns.ts";
+import { adminFinanceRouter } from "./admin-finance.ts";
+import { adminAiRouter } from "./admin-ai.ts";
+import { adminPacksRouter } from "./admin-packs.ts";
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
+adminRouter.use(adminHierarchyRouter);
+adminRouter.use(adminReviewsRouter);
+adminRouter.use(adminCustomersRouter);
+adminRouter.use(adminAffiliatesRouter);
+adminRouter.use(adminTagsRouter);
+adminRouter.use(adminVariantsRouter);
+adminRouter.use(adminCampaignsRouter);
+adminRouter.use(adminFinanceRouter);
+adminRouter.use(adminAiRouter);
+adminRouter.use(adminPacksRouter);
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -43,11 +63,58 @@ adminRouter.get("/products", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const offset = Number(req.query.offset) || 0;
-    const rows = await query(
-      `SELECT * FROM shop_product ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+    const q = (req.query.q as string) || undefined;
+    const status = (req.query.status as string) || undefined;
+    const catalogueId = (req.query.catalogue_id as string) || undefined;
+    const headingId = (req.query.heading_id as string) || undefined;
+    const noCatalogue = req.query.no_catalogue === "true";
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+    if (q) {
+      conditions.push(`(p.title ILIKE $${idx} OR p.handle ILIKE $${idx} OR p.description ILIKE $${idx})`);
+      params.push(`%${q}%`);
+      idx++;
+    }
+    if (status) {
+      conditions.push(`p.status = $${idx++}`);
+      params.push(status);
+    }
+    if (catalogueId) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m WHERE m.product_id = p.id AND m.catalogue_id = $${idx++})`
+      );
+      params.push(catalogueId);
+    } else if (headingId) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM shop_product_catalogue_map m JOIN shop_catalogue c ON c.id = m.catalogue_id
+         WHERE m.product_id = p.id AND c.heading_id = $${idx++})`
+      );
+      params.push(headingId);
+    } else if (noCatalogue) {
+      conditions.push(
+        `NOT EXISTS (SELECT 1 FROM shop_product_catalogue_map m WHERE m.product_id = p.id)`
+      );
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const totalRow = await queryOne(
+      `SELECT count(*)::int AS total FROM shop_product p ${where}`,
+      params
     );
-    res.json({ products: rows, count: rows.length, offset, limit });
+    params.push(limit, offset);
+    const rows = await query(
+      `SELECT p.* FROM shop_product p ${where}
+       ORDER BY p.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      params
+    );
+    res.json({
+      products: rows,
+      count: Number(totalRow?.total ?? rows.length),
+      offset,
+      limit,
+    });
   } catch (err) {
     console.error("[admin products]", err);
     res.status(500).json({ error: "Failed to list products" });
@@ -74,6 +141,7 @@ type CreateProductBody = {
   status?: string;
   metadata?: Record<string, unknown>;
   categories?: Array<{ id: string }>;
+  catalogue_ids?: string[];
   tags?: Array<{ value: string }>;
   options?: Array<{ title: string; values: string[] }>;
   variants?: Array<{
@@ -127,6 +195,15 @@ adminRouter.post("/products", async (req, res) => {
         await execute(
           `INSERT INTO shop_product_category_map (product_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
           [productId, cat.id]
+        );
+      }
+    }
+
+    if (body.catalogue_ids?.length) {
+      for (const catalogueId of body.catalogue_ids) {
+        await execute(
+          `INSERT INTO shop_product_catalogue_map (product_id, catalogue_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [productId, catalogueId]
         );
       }
     }
@@ -297,6 +374,47 @@ adminRouter.delete("/products/:id", async (req, res) => {
   } catch (err) {
     console.error("[admin delete product]", err);
     res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+// ─── Product ↔ Catalogue assignments (per product) ─────────────
+
+adminRouter.get("/products/:id/catalogues", async (req, res) => {
+  try {
+    const rows = await query(
+      `SELECT c.id, c.name, c.handle, c.heading_id, h.name AS heading_name, h.handle AS heading_handle
+       FROM shop_product_catalogue_map m
+       JOIN shop_catalogue c ON c.id = m.catalogue_id
+       JOIN shop_heading h ON h.id = c.heading_id
+       WHERE m.product_id = $1
+       ORDER BY c.rank, c.name`,
+      [req.params.id]
+    );
+    res.json({ catalogues: rows });
+  } catch (err) {
+    console.error("[admin product catalogues list]", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+adminRouter.put("/products/:id/catalogues", async (req, res) => {
+  try {
+    const { catalogue_ids } = req.body as { catalogue_ids: string[] };
+    if (!Array.isArray(catalogue_ids)) {
+      res.status(400).json({ error: "catalogue_ids array required" });
+      return;
+    }
+    await execute(`DELETE FROM shop_product_catalogue_map WHERE product_id = $1`, [req.params.id]);
+    for (const cid of catalogue_ids) {
+      await execute(
+        `INSERT INTO shop_product_catalogue_map (product_id, catalogue_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [req.params.id, cid]
+      );
+    }
+    res.json({ ok: true, catalogue_ids });
+  } catch (err) {
+    console.error("[admin set product catalogues]", err);
+    res.status(500).json({ error: "Failed" });
   }
 });
 

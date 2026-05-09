@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CartLineThumbnail } from '@/components/cart/CartLineThumbnail';
+import { BrandLoader } from '@/components/layout/BrandLoader';
 import { CreditCard, Smartphone, Wallet, Lock, ChevronLeft, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useCheckoutStore } from '@/stores/checkout';
@@ -732,8 +733,8 @@ export default function CheckoutPaymentPage() {
 
   if (!mounted || !shippingMethod) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-gold">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <BrandLoader label="Preparing payment" />
       </div>
     );
   }

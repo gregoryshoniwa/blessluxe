@@ -78,6 +78,22 @@ export async function POST(request: NextRequest) {
       verified: verifiedPurchase,
     });
 
+    // Mirror the review into the shop backend so admin moderation works end-to-end.
+    try {
+      const { shopBackendCreateReview } = await import("@/lib/shop-backend-client");
+      await shopBackendCreateReview({
+        product_id: productId,
+        customer_id: String(customer.id),
+        customer_email: String(customer.email || ""),
+        customer_name: String(customer.full_name || customer.first_name || customer.email || "Customer"),
+        title,
+        content,
+        rating,
+      });
+    } catch {
+      // Non-fatal: storefront review still saved locally even if shop backend is unreachable.
+    }
+
     const summary = await getProductReviewSummary({ productId, productHandle });
     const reviews = await listProductReviews(productId);
     return NextResponse.json({

@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/providers";
 
 type PayoutMethod = "bank_transfer" | "paypal" | "stripe";
@@ -389,9 +389,45 @@ function Chart({ points }: { points: Array<{ day: string; amount: number }> }) {
 
 export default function AffiliateDashboardPage() {
   const { showToast } = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
   const code = searchParams.get("code") || "";
+
+  // ─── Access gate ─────────────────────────────────────────────────────────
+  // The dashboard is only accessible to an authenticated customer whose
+  // affiliate application has been approved. Anyone hitting the URL directly
+  // gets bounced to the account page where the proper apply / pending UI lives.
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [accessAllowed, setAccessAllowed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/affiliate/me", { cache: "no-store" });
+        if (cancelled) return;
+        if (!res.ok) {
+          router.replace("/account?tab=affiliate");
+          return;
+        }
+        const data = (await res.json()) as {
+          affiliate?: { status?: string; email?: string } | null;
+        };
+        const a = data.affiliate;
+        if (!a || a.status !== "active") {
+          router.replace("/account?tab=affiliate");
+          return;
+        }
+        setAccessAllowed(true);
+      } finally {
+        if (!cancelled) setAccessChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [sales, setSales] = useState<SalesResponse["sales"]>([]);
@@ -1464,6 +1500,13 @@ export default function AffiliateDashboardPage() {
     notifySuccess(published ? "Photo published" : "Photo unpublished");
   };
 
+  if (!accessChecked || !accessAllowed) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-8">
+        <p className="font-script text-2xl text-gold-dark">Bless</p>
+      </main>
+    );
+  }
   if (loading) {
     return <main className="min-h-screen p-8">Loading affiliate dashboard...</main>;
   }

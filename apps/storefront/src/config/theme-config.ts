@@ -125,7 +125,15 @@ export const categoryThemeMap: Record<string, ThemeType> = {
 
 export const getThemeForCategory = (category: string | null): ThemeType => {
   if (!category) return 'default';
-  return categoryThemeMap[category.toLowerCase()] || 'default';
+  const handle = category.toLowerCase();
+  // Direct map first.
+  if (categoryThemeMap[handle]) return categoryThemeMap[handle];
+  // Fall back to handle prefixes so any new catalogue routes correctly
+  // (e.g. women-dresses, women-tops, men-shirts, children-girls).
+  if (handle.startsWith('women-') || handle === 'women') return 'women';
+  if (handle.startsWith('men-') || handle === 'men') return 'men';
+  if (handle.startsWith('children-') || handle === 'children') return 'children';
+  return 'default';
 };
 
 export const getThemeConfig = (theme: ThemeType): ThemeConfig => {

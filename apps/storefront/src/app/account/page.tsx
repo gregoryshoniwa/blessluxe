@@ -16,6 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { addBlitsTopupToCart } from "@/lib/blits-topup";
+import { BrandLoader } from "@/components/layout/BrandLoader";
 
 type AccountPayload = {
   customer: {
@@ -121,6 +122,14 @@ function AccountPageContent() {
   const [packPrivacyDisplay, setPackPrivacyDisplay] = useState<"name" | "code">("name");
   const [packPrivacyBusy, setPackPrivacyBusy] = useState(false);
 
+  const [affiliate, setAffiliate] = useState<{
+    id: string;
+    code: string;
+    email: string;
+    status: "active" | "inactive" | "pending";
+  } | null>(null);
+  const [affiliateLoading, setAffiliateLoading] = useState(false);
+
   const searchParams = useSearchParams();
 
   const customer = payload?.customer || null;
@@ -184,6 +193,36 @@ function AccountPageContent() {
       else setBlitsSubTab("add");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!customer || activeTab !== "Affiliate") return;
+    let cancelled = false;
+    (async () => {
+      setAffiliateLoading(true);
+      try {
+        const res = await fetch("/api/affiliate/me", { cache: "no-store" });
+        if (cancelled) return;
+        if (!res.ok) {
+          setAffiliate(null);
+          return;
+        }
+        const data = (await res.json()) as {
+          affiliate?: {
+            id: string;
+            code: string;
+            email: string;
+            status: "active" | "inactive" | "pending";
+          } | null;
+        };
+        setAffiliate(data.affiliate || null);
+      } finally {
+        if (!cancelled) setAffiliateLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customer, activeTab]);
 
   useEffect(() => {
     if (!customer || activeTab !== "Blits") return;
@@ -434,7 +473,7 @@ function AccountPageContent() {
   };
 
   if (loading) {
-    return <div className="px-[5%] py-20 text-center text-black/60">Loading account...</div>;
+    return <BrandLoader label="Loading your space" />;
   }
 
   return (
@@ -921,17 +960,132 @@ function AccountPageContent() {
           ) : null}
 
           {activeTab === "Affiliate" ? (
-            <div className="border border-black/10 p-6 space-y-3">
-              <h3 className="font-display tracking-widest uppercase">Affiliate Options</h3>
-              <p className="text-sm text-black/70">Use your profile email in the affiliate dashboard to track referrals and payouts.</p>
-              <div className="flex gap-3 flex-wrap">
-                <Link href={`/affiliate/dashboard?email=${encodeURIComponent(customer.email)}`} className="bg-gold text-white px-5 py-3 text-xs tracking-[0.2em] uppercase">
-                  Open Affiliate Dashboard
-                </Link>
-                <Link href="/affiliate/apply" className="border border-black/20 px-5 py-3 text-xs tracking-[0.2em] uppercase">
-                  Apply / Update Affiliate
-                </Link>
+            <div className="border border-black/10 p-6 space-y-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="font-display tracking-widest uppercase">Affiliate Programme</h3>
+                  <p className="mt-1 text-sm text-black/70">
+                    Earn commission on every referral. The dashboard unlocks once your application is approved.
+                  </p>
+                </div>
+                {affiliate && (
+                  <span
+                    className="px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-semibold"
+                    style={
+                      affiliate.status === "active"
+                        ? { background: "#DCFCE7", color: "#15803D" }
+                        : affiliate.status === "pending"
+                        ? { background: "#FEF3C7", color: "#92400E" }
+                        : { background: "#F3F4F6", color: "#4B5563" }
+                    }
+                  >
+                    {affiliate.status === "active"
+                      ? "Approved"
+                      : affiliate.status === "pending"
+                      ? "Pending review"
+                      : "Inactive"}
+                  </span>
+                )}
               </div>
+
+              {affiliateLoading ? (
+                <p className="text-sm italic text-black/50">Loading affiliate status…</p>
+              ) : !affiliate ? (
+                // ─── No application yet ───
+                <div className="space-y-3">
+                  <div className="border-l-2 border-gold pl-4 py-2 bg-cream/60">
+                    <p className="text-sm text-black/80">
+                      You haven&apos;t applied yet. Submit a quick application — once approved you&apos;ll get a
+                      personal promo code, a dashboard with your sales and payouts, and access to the affiliate
+                      tools.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <Link
+                      href="/affiliate/apply"
+                      className="bg-gold text-white px-5 py-3 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+                    >
+                      Apply to become an affiliate
+                    </Link>
+                  </div>
+                </div>
+              ) : affiliate.status === "pending" ? (
+                // ─── Pending review ───
+                <div className="space-y-3">
+                  <div className="border-l-2 border-amber-500 pl-4 py-2 bg-amber-50">
+                    <p className="text-sm text-black/80">
+                      Your application is under review. You&apos;ll receive an email at{" "}
+                      <span className="font-medium">{affiliate.email}</span> once it&apos;s approved.
+                      The dashboard will unlock automatically.
+                    </p>
+                    <p className="mt-2 text-xs text-black/60">
+                      Pending applications typically clear within 1–2 business days.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      disabled
+                      className="bg-black/10 text-black/40 px-5 py-3 text-xs tracking-[0.2em] uppercase cursor-not-allowed"
+                      title="Available once approved"
+                    >
+                      Open Dashboard (locked)
+                    </button>
+                    <Link
+                      href="/affiliate/apply"
+                      className="border border-black/20 px-5 py-3 text-xs tracking-[0.2em] uppercase hover:bg-black/5 transition-colors"
+                    >
+                      Update application
+                    </Link>
+                  </div>
+                </div>
+              ) : affiliate.status === "active" ? (
+                // ─── Approved ───
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="border border-black/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-black/50">Your code</p>
+                      <p className="mt-1 font-mono text-base font-semibold text-gold-dark">{affiliate.code}</p>
+                    </div>
+                    <div className="border border-black/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-black/50">Programme email</p>
+                      <p className="mt-1 text-sm">{affiliate.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <Link
+                      href={`/affiliate/dashboard?email=${encodeURIComponent(customer.email)}`}
+                      className="bg-gold text-white px-5 py-3 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+                    >
+                      Open Affiliate Dashboard
+                    </Link>
+                    <Link
+                      href="/affiliate/apply"
+                      className="border border-black/20 px-5 py-3 text-xs tracking-[0.2em] uppercase hover:bg-black/5 transition-colors"
+                    >
+                      Update details
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                // ─── Inactive (was approved, now suspended) ───
+                <div className="space-y-3">
+                  <div className="border-l-2 border-black/30 pl-4 py-2 bg-black/[0.03]">
+                    <p className="text-sm text-black/80">
+                      Your affiliate account has been deactivated. Contact support to reinstate it.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      disabled
+                      className="bg-black/10 text-black/40 px-5 py-3 text-xs tracking-[0.2em] uppercase cursor-not-allowed"
+                    >
+                      Dashboard (locked)
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
 

@@ -55,32 +55,9 @@ export default async function PacksCatalogPage() {
               <code className="text-xs bg-black/[0.06] px-1 py-0.5 rounded">pack_definition</code>, status{" "}
               <code className="text-xs bg-black/[0.06] px-1 py-0.5 rounded">published</code>).
             </p>
-            <p className="text-sm font-medium text-black/85">To show packs here (local dev):</p>
-            <ol className="list-decimal list-inside space-y-2 text-sm">
-              <li>Start Postgres: <code className="text-xs bg-black/[0.06] px-1 rounded">docker compose up -d postgres</code></li>
-              <li>
-                Apply Medusa migrations (creates pack tables):{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">pnpm --filter @blessluxe/backend db:migrate</code>
-              </li>
-              <li>
-                Seed the catalog + sample pack:{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">pnpm --filter @blessluxe/backend seed</code>
-                <span className="text-black/55"> — the seed creates a sample definition (handle ends with </span>
-                <code className="text-xs bg-black/[0.06] px-1 rounded">-wholesale-pack</code>
-                <span className="text-black/55">).</span>
-              </li>
-              <li>
-                Point the storefront at the same DB as Medusa: set{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">DATABASE_URL</code> or{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">AI_DATABASE_URL</code> in{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">apps/storefront/.env.local</code> to match{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">backend/medusa/.env</code>{" "}
-                <code className="text-xs bg-black/[0.06] px-1 rounded">DATABASE_URL</code>, then refresh this page.
-              </li>
-            </ol>
-            <p className="text-xs text-black/50">
-              If migrations ran but seed skipped pack creation, check the seed log for “Pack seed skipped” — run migrate
-              first, then seed again.
+            <p className="text-sm font-medium text-black/85">
+              The packs feature was part of the legacy Medusa backend, which has been removed.
+              Packs need to be re-implemented in the shop backend before this page can show data.
             </p>
           </div>
         ) : (

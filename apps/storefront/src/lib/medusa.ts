@@ -1,35 +1,34 @@
 import Medusa from "@medusajs/js-sdk";
 
 /**
- * Commerce backend URL. Set `NEXT_PUBLIC_COMMERCE_BACKEND` to point at the custom
- * @blessluxe/shop-backend (e.g. `http://localhost:9000`). Falls back to
- * `NEXT_PUBLIC_MEDUSA_BACKEND_URL` for Medusa. Both backends expose the same
- * `/store/*` routes so the storefront works with either.
+ * Commerce backend URL. Points at the BLESSLUXE shop backend (Express, port 9001
+ * by default). The Medusa JS SDK is used purely as an HTTP client because the
+ * shop backend exposes Medusa-shaped `/store/*` endpoints.
+ *
+ * Override with `NEXT_PUBLIC_COMMERCE_BACKEND` (preferred) or the legacy
+ * `NEXT_PUBLIC_MEDUSA_BACKEND_URL` env var.
  */
 const MEDUSA_BACKEND_URL =
   process.env.NEXT_PUBLIC_COMMERCE_BACKEND ||
   process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
-  "http://localhost:9000";
+  "http://localhost:9001";
 
 const PUBLISHABLE_API_KEY =
   process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY || "";
 
 /**
- * True when the storefront is configured to use the custom shop backend
- * instead of Medusa. Useful for code paths that need to skip Medusa-only
- * features (SDK-specific query syntax, field selectors, etc.).
+ * Always true now — kept for backward-compat with code that branched on
+ * "is the storefront talking to Medusa or the custom backend?".
  */
-export const isCustomBackend = Boolean(
-  process.env.NEXT_PUBLIC_COMMERCE_BACKEND
-);
+export const isCustomBackend = true;
 
 export const medusa = new Medusa({
   baseUrl: MEDUSA_BACKEND_URL,
-  debug: process.env.NODE_ENV === "development",
+  debug: false,
   ...(PUBLISHABLE_API_KEY ? { publishableKey: PUBLISHABLE_API_KEY } : {}),
 });
 
-/** Typed headers for direct `fetch` to the Medusa Store API (avoids `HeadersInit` union issues). */
+/** Typed headers for direct `fetch` to the Store API (avoids `HeadersInit` union issues). */
 export function getStoreMedusaFetchHeaders(): Record<string, string> {
   const h: Record<string, string> = { accept: "application/json" };
   const key = (
@@ -44,37 +43,16 @@ export function getStoreMedusaFetchHeaders(): Record<string, string> {
 export { MEDUSA_BACKEND_URL };
 
 /**
- * Resolve Medusa `thumbnail` / image `url` values for the browser (relative paths,
- * `http://medusa:9000`, etc.). Matches PDP and shop grid behavior.
+ * Resolve a backend-served image url for the browser. The shop backend serves
+ * uploads under `/uploads/...` so relative paths get prefixed with the backend
+ * base. Absolute URLs pass through unchanged.
  */
 export function normalizeMedusaImageUrl(value: string | null | undefined): string {
   const input = String(value || "").trim();
   if (!input) return "";
-  const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(
-    /\/+$/,
-    ""
-  );
+  const publicBase = MEDUSA_BACKEND_URL.replace(/\/+$/, "");
   if (input.startsWith("/")) return `${publicBase}${input}`;
-  if (input.startsWith("http://medusa:9000")) {
-    return `${publicBase}${input.slice("http://medusa:9000".length)}`;
-  }
-  if (input.startsWith("https://medusa:9000")) {
-    return `${publicBase}${input.slice("https://medusa:9000".length)}`;
-  }
-  if (input.startsWith("http://host.docker.internal:9000")) {
-    return `${publicBase}${input.slice("http://host.docker.internal:9000".length)}`;
-  }
-  if (input.startsWith("https://host.docker.internal:9000")) {
-    return `${publicBase}${input.slice("https://host.docker.internal:9000".length)}`;
-  }
   return input;
-}
-
-function medusaStoreBases() {
-  const configured = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/+$/, "");
-  return Array.from(
-    new Set([configured, "http://medusa:9000", "http://host.docker.internal:9000", "http://localhost:9000"])
-  );
 }
 
 function pickStoreProductImageUrl(p: {
@@ -92,37 +70,29 @@ function pickStoreProductImageUrl(p: {
   return null;
 }
 
-/** Field sets for Medusa Store API; `null` = omit `fields` (full product). Custom backend ignores fields. */
-const STORE_PRODUCT_FIELDS_ATTEMPTS = isCustomBackend
-  ? [null] as const
-  : (["handle,+thumbnail,*images", "handle,thumbnail,images", null] as const);
-
 /**
  * Load thumbnail + store handle for a product (Store API). Used by /shop/packs and pack APIs.
- * Works with both Medusa and the custom @blessluxe/shop-backend.
  */
 export async function fetchStoreProductThumbAndHandle(
   productId: string
 ): Promise<{ thumb: string | null; handle: string | null }> {
-  for (const base of medusaStoreBases()) {
-    for (const fields of STORE_PRODUCT_FIELDS_ATTEMPTS) {
-      try {
-        const url = new URL(`/store/products/${encodeURIComponent(productId)}`, base);
-        if (fields) url.searchParams.set("fields", fields);
-        const res = await fetch(url.toString(), { cache: "no-store", headers: getStoreMedusaFetchHeaders() });
-        if (!res.ok) continue;
-        const j = (await res.json()) as {
-          product?: { handle?: string; thumbnail?: string; images?: Array<{ url?: string }> };
-        };
-        const p = j.product;
-        if (!p) continue;
-        const thumb = pickStoreProductImageUrl(p);
-        const handle = String(p.handle || "").trim() || null;
-        return { thumb, handle };
-      } catch {
-        // try next fields / base
-      }
-    }
+  try {
+    const url = new URL(`/store/products/${encodeURIComponent(productId)}`, MEDUSA_BACKEND_URL);
+    const res = await fetch(url.toString(), {
+      cache: "no-store",
+      headers: getStoreMedusaFetchHeaders(),
+    });
+    if (!res.ok) return { thumb: null, handle: null };
+    const j = (await res.json()) as {
+      product?: { handle?: string; thumbnail?: string; images?: Array<{ url?: string }> };
+    };
+    const p = j.product;
+    if (!p) return { thumb: null, handle: null };
+    return {
+      thumb: pickStoreProductImageUrl(p),
+      handle: String(p.handle || "").trim() || null,
+    };
+  } catch {
+    return { thumb: null, handle: null };
   }
-  return { thumb: null, handle: null };
 }

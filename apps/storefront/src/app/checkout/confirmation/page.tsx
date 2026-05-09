@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { CheckCircle, Package, Truck, Mail } from 'lucide-react';
 import { useCheckoutStore } from '@/stores/checkout';
+import { BrandLoader } from '@/components/layout/BrandLoader';
 
 function ConfirmationContent() {
   const searchParams = useSearchParams();
@@ -213,8 +214,8 @@ function ConfirmationContent() {
 export default function CheckoutConfirmationPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-gold">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <BrandLoader label="Confirming your order" />
       </div>
     }>
       <ConfirmationContent />

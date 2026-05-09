@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Tag } from 'lucide-react';
 import { useCartStore } from '@/stores/cart';
 import { CartLineThumbnail } from '@/components/cart/CartLineThumbnail';
+import { BrandLoader } from '@/components/layout/BrandLoader';
 import { cn } from '@/lib/utils';
 
 export default function CartPage() {
@@ -25,11 +26,7 @@ export default function CartPage() {
   }, []);
 
   if (!mounted) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-pulse text-gold">Loading...</div>
-      </div>
-    );
+    return <BrandLoader label="Preparing your bag" />;
   }
 
   const subtotal = getSubtotal();

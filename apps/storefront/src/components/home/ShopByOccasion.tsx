@@ -9,7 +9,7 @@ import { useFeaturedProducts } from "@/hooks/useProducts";
 type HotBadge = "HOT" | "SALE" | "TRENDING" | "NEW" | "BESTSELLER";
 
 export function HotPicks() {
-  const { data: products } = useFeaturedProducts(8);
+  const { data: products, isLoading } = useFeaturedProducts(8);
   const normalizeProductImageUrl = (value: string | null | undefined) => {
     const input = String(value || "").trim();
     if (!input) return "";
@@ -171,6 +171,15 @@ export function HotPicks() {
 
       {/* Products Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        {isLoading && hotProducts.length === 0
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <div key={`hp-skel-${i}`} className="animate-pulse">
+                <div className="aspect-[3/4] mb-4 rounded-lg bg-cream-dark" />
+                <div className="h-4 rounded bg-cream-dark w-3/4 mb-2" />
+                <div className="h-4 rounded bg-cream-dark w-1/2" />
+              </div>
+            ))
+          : null}
         {hotProducts.map((product, index) => (
           <motion.div
             key={product.id}

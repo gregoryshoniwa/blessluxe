@@ -1,10 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { medusa } from "@/lib/medusa";
 import { getDefaultStoreRegionId } from "@/lib/medusa-region";
-import { medusaCartFromSdk, medusaCartToCartItems, isVirtualBlitsItem } from "@/lib/medusa-cart-map";
-import { MEDUSA_STORE_CART_QUERY } from "@/lib/medusa-cart-query";
+import { medusaCartFromSdk, isVirtualBlitsItem } from "@/lib/medusa-cart-map";
 import { enrichCartItemsWithStoreInventory } from "@/lib/medusa-variant-inventory";
+import { cartApi, CartApiError } from "@/lib/cart-api";
 
 export interface CartItem {
   id: string;
@@ -95,25 +94,34 @@ export const useCartStore = create<CartState>()(
 
       ensureMedusaCart: async () => {
         const existing = get().medusaCartId;
-        if (existing) return existing;
-        const regionId = await getDefaultStoreRegionId();
-        if (!regionId) {
-          console.warn("[cart] No Medusa region — set up regions in admin.");
-          return null;
+        if (existing) {
+          // Make sure the cart still exists on the backend.
+          try {
+            await cartApi.retrieve(existing);
+            return existing;
+          } catch (e) {
+            if (e instanceof CartApiError && e.status === 404) {
+              set({ medusaCartId: null, medusaLines: [] });
+            } else {
+              return existing; // transient error — keep the id
+            }
+          }
         }
-        const { cart } = await medusa.store.cart.create(
-          { region_id: regionId },
-          MEDUSA_STORE_CART_QUERY
-        );
-        const id = String(cart?.id || "");
-        const raw = cart ? medusaCartFromSdk(cart) : [];
-        const lines = applyAffiliateHints(raw, get().affiliateHints);
-        const enriched = await enrichCartItemsWithStoreInventory(lines);
-        set({
-          medusaCartId: id || null,
-          medusaLines: enriched,
-        });
-        return id || null;
+        const regionId = await getDefaultStoreRegionId();
+        try {
+          const { cart } = await cartApi.create(regionId);
+          const id = String(cart?.id || "");
+          const raw = medusaCartFromSdk(cart);
+          const lines = applyAffiliateHints(raw, get().affiliateHints);
+          const enriched = await enrichCartItemsWithStoreInventory(lines);
+          set({ medusaCartId: id || null, medusaLines: enriched });
+          return id || null;
+        } catch (e) {
+          console.error("[cart] create failed", e);
+          throw new Error(
+            e instanceof CartApiError ? `Could not create cart: ${e.message}` : "Could not create cart"
+          );
+        }
       },
 
       refreshMedusaCart: async () => {
@@ -124,16 +132,17 @@ export const useCartStore = create<CartState>()(
         }
         set({ isLoading: true });
         try {
-          const { cart } = await medusa.store.cart.retrieve(cartId, MEDUSA_STORE_CART_QUERY);
-          if (cart) {
-            const raw = medusaCartFromSdk(cart);
-            const lines = applyAffiliateHints(raw, get().affiliateHints);
-            const enriched = await enrichCartItemsWithStoreInventory(lines);
-            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
-          }
+          const { cart } = await cartApi.retrieve(cartId);
+          const raw = medusaCartFromSdk(cart);
+          const lines = applyAffiliateHints(raw, get().affiliateHints);
+          const enriched = await enrichCartItemsWithStoreInventory(lines);
+          set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
         } catch (e) {
-          console.warn("[cart] Failed to refresh Medusa cart:", e);
-          set({ medusaCartId: null, medusaLines: [] });
+          if (e instanceof CartApiError && e.status === 404) {
+            set({ medusaCartId: null, medusaLines: [] });
+          } else {
+            console.warn("[cart] Failed to refresh cart:", e);
+          }
         } finally {
           set({ isLoading: false });
         }
@@ -141,7 +150,7 @@ export const useCartStore = create<CartState>()(
 
       addMedusaVariant: async (input) => {
         const cartId = await get().ensureMedusaCart();
-        if (!cartId) throw new Error("Could not create cart — check Medusa region and publishable key.");
+        if (!cartId) throw new Error("Could not create cart");
         if (input.affiliateCode) {
           set({
             affiliateHints: { ...get().affiliateHints, [input.variantId]: input.affiliateCode },
@@ -149,32 +158,22 @@ export const useCartStore = create<CartState>()(
         }
         set({ isLoading: true });
         try {
-          const { cart } = await medusa.store.cart.createLineItem(
-            cartId,
-            {
-              variant_id: input.variantId,
-              quantity: input.quantity,
-              ...(input.lineItemMetadata && Object.keys(input.lineItemMetadata).length > 0
-                ? { metadata: input.lineItemMetadata }
-                : {}),
-            },
-            MEDUSA_STORE_CART_QUERY
-          );
-          if (cart) {
-            const raw = medusaCartFromSdk(cart);
-            const lines = applyAffiliateHints(raw, get().affiliateHints);
-            const enriched = await enrichCartItemsWithStoreInventory(lines);
-            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
-          }
+          const { cart } = await cartApi.addLine(cartId, {
+            variant_id: input.variantId,
+            quantity: input.quantity,
+            ...(input.lineItemMetadata && Object.keys(input.lineItemMetadata).length > 0
+              ? { metadata: input.lineItemMetadata }
+              : {}),
+          });
+          const raw = medusaCartFromSdk(cart);
+          const lines = applyAffiliateHints(raw, get().affiliateHints);
+          const enriched = await enrichCartItemsWithStoreInventory(lines);
+          set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
         } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          console.error("[cart] createLineItem failed:", msg);
-          if (/publishable|api key|401|unauthorized|invalid.*key/i.test(msg)) {
-            throw new Error(
-              "Medusa rejected the cart request (often wrong or missing NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY, or backend URL mismatch). This is not your account password."
-            );
-          }
-          throw e instanceof Error ? e : new Error(msg);
+          console.error("[cart] addLine failed", e);
+          throw e instanceof CartApiError
+            ? new Error(e.message || "Could not add to cart")
+            : (e as Error);
         } finally {
           set({ isLoading: false });
         }
@@ -219,16 +218,13 @@ export const useCartStore = create<CartState>()(
         if (!line || !cartId) return;
         set({ isLoading: true });
         try {
-          const res = await medusa.store.cart.deleteLineItem(cartId, id, MEDUSA_STORE_CART_QUERY);
-          const parent = (res as { parent?: Record<string, unknown> }).parent;
-          if (parent) {
-            const raw = medusaCartToCartItems(parent);
-            const lines = applyAffiliateHints(raw, get().affiliateHints);
-            const enriched = await enrichCartItemsWithStoreInventory(lines);
-            set({ medusaLines: enriched, medusaCartId: String(parent.id || cartId) });
-          } else {
-            await get().refreshMedusaCart();
-          }
+          const res = await cartApi.deleteLine(cartId, id);
+          const raw = medusaCartFromSdk(res.parent);
+          const lines = applyAffiliateHints(raw, get().affiliateHints);
+          const enriched = await enrichCartItemsWithStoreInventory(lines);
+          set({ medusaLines: enriched, medusaCartId: String(res.parent.id || cartId) });
+        } catch (e) {
+          console.error("[cart] deleteLine failed", e);
         } finally {
           set({ isLoading: false });
         }
@@ -250,18 +246,13 @@ export const useCartStore = create<CartState>()(
         if (!cartId) return;
         set({ isLoading: true });
         try {
-          const { cart } = await medusa.store.cart.updateLineItem(
-            cartId,
-            id,
-            { quantity },
-            MEDUSA_STORE_CART_QUERY
-          );
-          if (cart) {
-            const raw = medusaCartFromSdk(cart);
-            const lines = applyAffiliateHints(raw, get().affiliateHints);
-            const enriched = await enrichCartItemsWithStoreInventory(lines);
-            set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
-          }
+          const { cart } = await cartApi.updateLine(cartId, id, quantity);
+          const raw = medusaCartFromSdk(cart);
+          const lines = applyAffiliateHints(raw, get().affiliateHints);
+          const enriched = await enrichCartItemsWithStoreInventory(lines);
+          set({ medusaLines: enriched, medusaCartId: String(cart.id || cartId) });
+        } catch (e) {
+          console.error("[cart] updateLine failed", e);
         } finally {
           set({ isLoading: false });
         }

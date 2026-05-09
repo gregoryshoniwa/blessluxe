@@ -1,9 +1,13 @@
 "use client";
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { medusa } from "@/lib/medusa";
+import {
+  MEDUSA_BACKEND_URL,
+  getStoreMedusaFetchHeaders,
+} from "@/lib/medusa";
 
-// Placeholder product type until Medusa types are available
+// ─── Types ──────────────────────────────────────────────────────────────
+
 export interface Product {
   id: string;
   title: string;
@@ -33,32 +37,69 @@ export interface Category {
   parent_category_id: string | null;
 }
 
-/** Minimal region shape for storefront pricing (avoids leaking Medusa internal types from hooks). */
 export interface MedusaRegionRef {
   id: string;
 }
 
-/**
- * Fetch regions to get default region_id for pricing
- */
+// ─── Direct fetch helpers ───────────────────────────────────────────────
+// We bypass @medusajs/js-sdk here to make network failures visible (the SDK
+// swallowed errors silently in dev) and to give us a single, predictable
+// URL-encoding path regardless of query shape.
+
+function buildStoreUrl(path: string, params: Record<string, unknown>): string {
+  const url = new URL(path, MEDUSA_BACKEND_URL);
+  for (const [k, v] of Object.entries(params)) {
+    if (v == null) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item != null) url.searchParams.append(k, String(item));
+      }
+    } else {
+      url.searchParams.set(k, String(v));
+    }
+  }
+  return url.toString();
+}
+
+async function fetchStore<T>(
+  path: string,
+  params: Record<string, unknown>,
+  errorContext: string
+): Promise<T | null> {
+  try {
+    const url = buildStoreUrl(path, params);
+    const res = await fetch(url, {
+      headers: getStoreMedusaFetchHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[${errorContext}] ${res.status}`, await res.text().catch(() => ""));
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    console.error(`[${errorContext}] fetch failed`, err);
+    return null;
+  }
+}
+
+// ─── Hooks ──────────────────────────────────────────────────────────────
+
 export function useRegions(): UseQueryResult<MedusaRegionRef[], Error> {
   return useQuery({
     queryKey: ["regions"],
     queryFn: async (): Promise<MedusaRegionRef[]> => {
-      try {
-        const response = await medusa.store.region.list();
-        return (response.regions ?? []).map((r) => ({ id: String(r.id) }));
-      } catch {
-        return [];
-      }
+      const data = await fetchStore<{ regions: { id: string }[] }>(
+        "/store/regions",
+        {},
+        "regions"
+      );
+      return (data?.regions ?? []).map((r) => ({ id: String(r.id) }));
     },
     staleTime: 1000 * 60 * 30,
   });
 }
 
-/**
- * Fetch all products with optional filters
- */
 export function useProducts(options?: {
   limit?: number;
   offset?: number;
@@ -71,30 +112,23 @@ export function useProducts(options?: {
   return useQuery({
     queryKey: ["products", options, regionId],
     queryFn: async () => {
-      try {
-        const params: Record<string, unknown> = {
-          limit: options?.limit ?? 12,
-          offset: options?.offset ?? 0,
-          collection_id: options?.collection_id,
-          category_id: options?.category_id,
-        };
-        if (regionId) {
-          params.region_id = regionId;
-        }
-        const response = await medusa.store.product.list({
-          ...params,
-        });
-        return response.products as unknown as Product[];
-      } catch {
-        return [];
-      }
+      const params: Record<string, unknown> = {
+        limit: options?.limit ?? 12,
+        offset: options?.offset ?? 0,
+        collection_id: options?.collection_id,
+        category_id: options?.category_id,
+        region_id: regionId,
+      };
+      const data = await fetchStore<{ products: Product[] }>(
+        "/store/products",
+        params,
+        "products"
+      );
+      return data?.products ?? [];
     },
   });
 }
 
-/**
- * Fetch a single product by handle
- */
 export function useProduct(handle: string) {
   const { data: regions } = useRegions();
   const regionId = regions?.[0]?.id;
@@ -102,29 +136,17 @@ export function useProduct(handle: string) {
   return useQuery({
     queryKey: ["product", handle, regionId],
     queryFn: async () => {
-      try {
-        const params: Record<string, unknown> = {
-          handle,
-          limit: 1,
-        };
-        if (regionId) {
-          params.region_id = regionId;
-        }
-        const response = await medusa.store.product.list({
-          ...params,
-        });
-        return response.products[0] as unknown as Product | undefined;
-      } catch {
-        return undefined;
-      }
+      const data = await fetchStore<{ products: Product[] }>(
+        "/store/products",
+        { handle, limit: 1, region_id: regionId },
+        "product"
+      );
+      return data?.products?.[0];
     },
     enabled: !!handle,
   });
 }
 
-/**
- * Fetch featured products
- */
 export function useFeaturedProducts(limit: number = 8) {
   const { data: regions } = useRegions();
   const regionId = regions?.[0]?.id;
@@ -132,25 +154,16 @@ export function useFeaturedProducts(limit: number = 8) {
   return useQuery({
     queryKey: ["featured-products", limit, regionId],
     queryFn: async () => {
-      try {
-        const params: Record<string, unknown> = { limit };
-        if (regionId) {
-          params.region_id = regionId;
-        }
-        const response = await medusa.store.product.list({
-          ...params,
-        });
-        return response.products as unknown as Product[];
-      } catch {
-        return [];
-      }
+      const data = await fetchStore<{ products: Product[] }>(
+        "/store/products",
+        { limit, region_id: regionId },
+        "featured-products"
+      );
+      return data?.products ?? [];
     },
   });
 }
 
-/**
- * Fetch product categories
- */
 export function useCategories() {
   return useQuery({
     queryKey: ["categories"],
@@ -166,5 +179,47 @@ export function useCategories() {
         return [];
       }
     },
+  });
+}
+
+// ─── Hierarchy: headings → catalogues ────────────────────────────────────
+
+export interface Catalogue {
+  id: string;
+  heading_id: string;
+  heading_handle?: string;
+  heading_name?: string;
+  name: string;
+  handle: string;
+  description: string | null;
+  thumbnail: string | null;
+  rank: number;
+  is_active: boolean;
+  product_count?: number;
+}
+
+export interface Heading {
+  id: string;
+  name: string;
+  handle: string;
+  description: string | null;
+  rank: number;
+  is_active: boolean;
+  is_sale: boolean;
+  catalogues: Catalogue[];
+}
+
+export function useHeadings(): UseQueryResult<Heading[], Error> {
+  return useQuery({
+    queryKey: ["headings"],
+    queryFn: async (): Promise<Heading[]> => {
+      const data = await fetchStore<{ headings: Heading[] }>(
+        "/store/headings",
+        {},
+        "headings"
+      );
+      return data?.headings ?? [];
+    },
+    staleTime: 1000 * 60 * 5,
   });
 }

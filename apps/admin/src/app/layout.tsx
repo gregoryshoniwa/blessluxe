@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DialogProvider } from "@/components/Dialog";
 
 export const metadata: Metadata = {
   title: "BLESSLUXE Admin",
@@ -13,8 +14,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-body bg-white text-black antialiased">
-        {children}
+      <body className="font-body bg-cream text-black antialiased">
+        <DialogProvider>{children}</DialogProvider>
       </body>
     </html>
   );

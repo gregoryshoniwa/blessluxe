@@ -1,8 +1,15 @@
 import { cookies } from "next/headers";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "crypto";
 import { execute, query, queryOne } from "@/lib/db";
+import {
+  shopBackendCustomerSignup,
+  shopBackendCustomerLogin,
+  shopBackendCustomerOauth,
+  shopBackendCustomerMe,
+} from "@/lib/shop-backend-client";
 
 const SESSION_COOKIE = "customer_session";
+const SHOP_TOKEN_COOKIE = "bl_shop_customer_token";
 const SESSION_DAYS = 30;
 
 let ensurePromise: Promise<void> | null = null;
@@ -161,20 +168,45 @@ export async function createCustomerAccount(input: {
   );
   if (existing) throw new Error("An account with this email already exists.");
 
-  const id = randomUUID();
-  const passwordHash = input.password ? hashPassword(input.password) : null;
   const firstName = input.firstName || "";
   const lastName = input.lastName || "";
   const fullName = `${firstName} ${lastName}`.trim();
   const provider = input.provider || "credentials";
 
+  // Source of truth lives on the shop backend.
+  let id: string;
+  let shopToken: string | null = null;
+  if (provider === "credentials" && input.password) {
+    const res = await shopBackendCustomerSignup({
+      email,
+      password: input.password,
+      first_name: firstName || undefined,
+      last_name: lastName || undefined,
+    });
+    if (!res.ok || !res.data) {
+      throw new Error(res.error || "Could not create account on shop backend.");
+    }
+    id = res.data.customer.id;
+    shopToken = res.data.token;
+  } else {
+    // Google OAuth path is handled by findOrCreateGoogleCustomer; this branch
+    // exists only for back-compat callers passing provider="google".
+    id = `cust_${randomUUID().replace(/-/g, "")}`;
+  }
+
+  // Maintain a local shadow row so transaction/inbox/etc. tables (which FK
+  // customer_id) keep working. We DO NOT store the password locally — the
+  // shop backend is the password authority.
   await execute(
     `INSERT INTO customer_account
       (id, email, password_hash, provider, email_verified, first_name, last_name, full_name, metadata, created_at, updated_at)
      VALUES
-      ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, NOW(), NOW())`,
-    [id, email, passwordHash, provider, provider === "google", firstName, lastName, fullName || null]
+      ($1, $2, NULL, $3, $4, $5, $6, $7, '{}'::jsonb, NOW(), NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [id, email, provider, provider === "google", firstName, lastName, fullName || null]
   );
+
+  if (shopToken) await setShopCustomerToken(shopToken);
 
   await seedCustomerStarterData(id);
   try {
@@ -186,6 +218,23 @@ export async function createCustomerAccount(input: {
   const account = await getCustomerById(id);
   if (!account) throw new Error("Failed to create account.");
   return account;
+}
+
+async function setShopCustomerToken(token: string) {
+  const cookieStore = await cookies();
+  cookieStore.set({
+    name: SHOP_TOKEN_COOKIE,
+    value: token,
+    maxAge: 60 * 60 * 24 * SESSION_DAYS,
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+  });
+}
+
+export async function getShopCustomerToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(SHOP_TOKEN_COOKIE)?.value || null;
 }
 
 async function seedCustomerStarterData(customerId: string) {
@@ -236,30 +285,144 @@ export async function findOrCreateGoogleCustomer(input: {
   email: string;
   firstName?: string;
   lastName?: string;
+  oauthSubject?: string;
+  avatarUrl?: string;
 }) {
+  await ensureSchema();
   const email = input.email.trim().toLowerCase();
-  const existing = await getCustomerByEmail(email);
-  if (existing) return existing;
-  try {
-    return await createCustomerAccount({
-      email,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      provider: "google",
-    });
-  } catch {
-    // Handles rare race where another request creates the same email concurrently.
-    const retry = await getCustomerByEmail(email);
-    if (!retry) throw new Error("Failed to create Google account.");
-    return retry;
+  const subject = input.oauthSubject || email;
+
+  // 1) Source of truth: shop backend. Idempotent — finds-or-creates a
+  //    shop_customer keyed on (oauth_provider, oauth_subject) → email → new.
+  const res = await shopBackendCustomerOauth({
+    provider: "google",
+    subject,
+    email,
+    first_name: input.firstName,
+    last_name: input.lastName,
+    avatar_url: input.avatarUrl,
+  });
+  if (!res.ok || !res.data) {
+    throw new Error(res.error || "Could not sync Google account to shop backend.");
   }
+  const { customer, token } = res.data;
+  await setShopCustomerToken(token);
+
+  // 2) Local shadow row in customer_account. Two cases:
+  //    (a) A row already exists for this email — re-use its id (it owns
+  //        existing transactions, posts, inbox, etc., which we must not
+  //        orphan). We leave its id untouched even if shop_customer.id
+  //        differs — they're linked by email, which is unique on both sides.
+  //    (b) No row yet — create one with shop_customer.id so future writes
+  //        share the same id space.
+  const existing = await queryOne<Record<string, unknown>>(
+    `SELECT id, first_name, last_name, full_name FROM customer_account WHERE lower(email) = lower($1) LIMIT 1`,
+    [email]
+  );
+  const localId = existing ? String(existing.id) : String(customer.id);
+
+  if (existing) {
+    // Refresh the row's name/provider/email_verified, but keep the id.
+    await execute(
+      `UPDATE customer_account
+         SET provider = 'google',
+             email_verified = true,
+             first_name = COALESCE(NULLIF(first_name, ''), $2),
+             last_name = COALESCE(NULLIF(last_name, ''), $3),
+             full_name = COALESCE(NULLIF(full_name, ''), $4),
+             updated_at = NOW()
+       WHERE id = $1`,
+      [
+        localId,
+        customer.first_name || input.firstName || "",
+        customer.last_name || input.lastName || "",
+        [customer.first_name || input.firstName, customer.last_name || input.lastName]
+          .filter(Boolean)
+          .join(" ") || null,
+      ]
+    );
+  } else {
+    await execute(
+      `INSERT INTO customer_account
+         (id, email, password_hash, provider, email_verified, first_name, last_name, full_name, metadata, created_at, updated_at)
+       VALUES
+         ($1, $2, NULL, 'google', true, $3, $4, $5, '{}'::jsonb, NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        localId,
+        email,
+        customer.first_name || input.firstName || "",
+        customer.last_name || input.lastName || "",
+        [customer.first_name || input.firstName, customer.last_name || input.lastName]
+          .filter(Boolean)
+          .join(" ") || null,
+      ]
+    );
+
+    // Seed starter data only on first creation.
+    await seedCustomerStarterData(localId);
+    try {
+      const { seedInitialLoyaltyForNewCustomer } = await import("@/lib/pack-loyalty");
+      await seedInitialLoyaltyForNewCustomer(localId);
+    } catch {
+      /* optional */
+    }
+  }
+
+  return await getCustomerById(localId);
 }
 
 export async function authenticateCustomer(email: string, password: string) {
-  const account = await getCustomerByEmail(email);
-  if (!account?.password_hash || typeof account.password_hash !== "string") return null;
-  if (!verifyPassword(password, account.password_hash)) return null;
-  return account;
+  // Authoritative login is the shop backend. The local shadow row is reused
+  // if a customer_account already exists for this email (so we don't orphan
+  // their transactions / inbox / posts on the unique email constraint).
+  await ensureSchema();
+  const res = await shopBackendCustomerLogin(email, password);
+  if (!res.ok || !res.data) return null;
+
+  const { customer, token } = res.data;
+  await setShopCustomerToken(token);
+
+  const existing = await queryOne<Record<string, unknown>>(
+    `SELECT id FROM customer_account WHERE lower(email) = lower($1) LIMIT 1`,
+    [String(customer.email)]
+  );
+  const localId = existing ? String(existing.id) : String(customer.id);
+
+  if (existing) {
+    await execute(
+      `UPDATE customer_account
+         SET first_name = COALESCE(NULLIF(first_name, ''), $2),
+             last_name = COALESCE(NULLIF(last_name, ''), $3),
+             email_verified = $4 OR email_verified,
+             updated_at = NOW()
+       WHERE id = $1`,
+      [
+        localId,
+        customer.first_name || "",
+        customer.last_name || "",
+        Boolean(customer.email_verified_at),
+      ]
+    );
+  } else {
+    await execute(
+      `INSERT INTO customer_account
+         (id, email, password_hash, provider, email_verified, first_name, last_name, full_name, metadata, created_at, updated_at)
+       VALUES
+         ($1, $2, NULL, 'credentials', $3, $4, $5, $6, '{}'::jsonb, NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        localId,
+        String(customer.email),
+        Boolean(customer.email_verified_at),
+        customer.first_name || "",
+        customer.last_name || "",
+        [customer.first_name, customer.last_name].filter(Boolean).join(" ") || null,
+      ]
+    );
+  }
+
+  return await getCustomerById(localId);
 }
 
 export async function createSession(customerId: string) {
@@ -290,6 +453,15 @@ export async function clearSession() {
   }
   cookieStore.set({
     name: SESSION_COOKIE,
+    value: "",
+    maxAge: 0,
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+  });
+  // Also clear the shop backend session cookie so future calls hit /auth/customer/login again.
+  cookieStore.set({
+    name: SHOP_TOKEN_COOKIE,
     value: "",
     maxAge: 0,
     path: "/",
