@@ -296,9 +296,8 @@ export default function InventoryPage() {
                   <col style={{ width: "44%" }} />
                   <col style={{ width: "16%" }} />
                   <col style={{ width: "12%" }} />
-                  <col style={{ width: "10%" }} />
-                  <col style={{ width: "8%" }} />
-                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "16%" }} />
                 </colgroup>
                 <thead style={{ background: "var(--cream)" }}>
                   <tr className="text-left text-[10px] font-semibold uppercase tracking-luxe text-[var(--ink-muted)]">
@@ -306,7 +305,6 @@ export default function InventoryPage() {
                     <th className="px-3 py-3">SKU</th>
                     <th className="px-3 py-3">Stock</th>
                     <th className="px-3 py-3">Age</th>
-                    <th className="px-3 py-3 text-right whitespace-nowrap">{windowDays}d sold</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -371,25 +369,22 @@ export default function InventoryPage() {
                       <td className="px-3 py-3 text-xs whitespace-nowrap">
                         <AgeBadge bucket={r.bucket} ageDays={r.age_days} />
                       </td>
-                      <td className="px-3 py-3 text-right font-display text-base">
-                        {r.units_sold || 0}
-                      </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => onReceive(r)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-sm transition-colors hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
+                            className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
                             style={{ border: "1px solid var(--line)", color: "var(--ink-light)" }}
                             title="Receive stock"
                             aria-label="Receive stock"
                           >
-                            <PackagePlus className="h-3.5 w-3.5" />
+                            <PackagePlus className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => onSave(r)}
                             disabled={!r._dirty || busyId === r.id}
-                            className={`${btnPrimary} btn-sm`}
-                            style={{ minWidth: 64 }}
+                            className={`${btnPrimary} btn-sm flex-shrink-0`}
+                            style={{ minWidth: 68 }}
                           >
                             {busyId === r.id ? "…" : "Save"}
                           </button>
@@ -399,7 +394,7 @@ export default function InventoryPage() {
                   ))}
                   {sortedRows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-5 py-16 text-center">
+                      <td colSpan={5} className="px-5 py-16 text-center">
                         <p className="font-display text-2xl text-[var(--ink-muted)]">No matches</p>
                       </td>
                     </tr>

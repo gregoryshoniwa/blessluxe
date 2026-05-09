@@ -8,7 +8,11 @@ import { RecentlyViewed } from '@/components/product/RecentlyViewed';
 import { ProductViewTracker } from '@/components/product/ProductViewTracker';
 import { getProductReviewSummary, listProductReviews } from '@/lib/product-reviews';
 import { buildPdpVariantRows, type PdpVariantRow } from '@/lib/medusa-pdp';
-import { getStoreMedusaFetchHeaders } from '@/lib/medusa';
+import {
+  getStoreMedusaFetchHeaders,
+  getInternalBackendUrl,
+  MEDUSA_BACKEND_URL,
+} from '@/lib/medusa';
 import { getPackDefinitionByProductId } from '@/lib/packs';
 
 interface Product {
@@ -35,10 +39,10 @@ interface Product {
 }
 
 function getMedusaCandidates() {
-  const configured = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
-  return Array.from(
-    new Set([configured, 'http://medusa:9000', 'http://host.docker.internal:9000', 'http://localhost:9000'])
-  );
+  // Single source of truth: the shop backend, reachable over the compose
+  // network (via SHOP_BACKEND_INTERNAL_URL) when in Docker, or via the
+  // localhost rewrite in native dev.
+  return [getInternalBackendUrl()];
 }
 
 async function getDefaultRegionId(base: string) {
@@ -60,10 +64,13 @@ async function getDefaultRegionId(base: string) {
 function toPublicImageUrl(value: string) {
   const input = String(value || '').trim();
   if (!input) return '';
-  const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || 'http://localhost:9000').replace(/\/+$/, '');
+  const publicBase = MEDUSA_BACKEND_URL.replace(/\/+$/, '');
   if (input.startsWith('/')) return `${publicBase}${input}`;
-  if (input.startsWith('http://medusa:9000')) return `${publicBase}${input.slice('http://medusa:9000'.length)}`;
-  if (input.startsWith('https://medusa:9000')) return `${publicBase}${input.slice('https://medusa:9000'.length)}`;
+  // Strip any internal compose-network host so the browser can resolve the URL.
+  const stripPrefixes = ['http://shop:9001', 'https://shop:9001', 'http://medusa:9000', 'https://medusa:9000'];
+  for (const prefix of stripPrefixes) {
+    if (input.startsWith(prefix)) return `${publicBase}${input.slice(prefix.length)}`;
+  }
   return input;
 }
 

@@ -43,6 +43,27 @@ export function getStoreMedusaFetchHeaders(): Record<string, string> {
 export { MEDUSA_BACKEND_URL };
 
 /**
+ * Resolves the URL the **server** should use to reach the shop backend.
+ *
+ * - In Docker, the storefront and shop are separate containers, so server-side
+ *   fetches to "localhost:9001" hit the storefront itself. Set
+ *   `SHOP_BACKEND_INTERNAL_URL=http://shop:9001` in compose to override.
+ * - In native dev, falls back to `MEDUSA_BACKEND_URL` with localhost rewritten
+ *   to 127.0.0.1 (Node 18+ resolves "localhost" to ::1 first which can ECONNRESET
+ *   against Express's dual-stack socket).
+ *
+ * Browser code must keep using `MEDUSA_BACKEND_URL` directly.
+ */
+export function getInternalBackendUrl(): string {
+  const override = (process.env.SHOP_BACKEND_INTERNAL_URL || "").trim();
+  if (override) return override.replace(/\/+$/, "");
+  return MEDUSA_BACKEND_URL.replace(
+    /^http:\/\/localhost(:|$)/i,
+    "http://127.0.0.1$1"
+  ).replace(/\/+$/, "");
+}
+
+/**
  * Resolve a backend-served image url for the browser. The shop backend serves
  * uploads under `/uploads/...` so relative paths get prefixed with the backend
  * base. Absolute URLs pass through unchanged.

@@ -2,9 +2,119 @@ import { Router } from "express";
 import { v4 as uuid } from "uuid";
 import { query, queryOne, execute } from "../db/pool.ts";
 import { resolveCustomerId } from "./customer-auth.ts";
+import { generatePackageCode, generateSubCode } from "../lib/package-codes.ts";
 
 export const storeOrdersRouter = Router();
 const newId = (p: string) => `${p}_${uuid().replace(/-/g, "")}`;
+
+/**
+ * Build a package + items + initial 'created' event for an order. Pack orders
+ * (where line items have an associated pack_slot row) get sub-codes per item
+ * so the customer can only claim their own piece.
+ */
+async function createPackageForOrder(opts: {
+  orderId: string;
+  orderNumber: string;
+  customerId: string | null;
+  customerEmail: string | null;
+  shippingAddress: Record<string, unknown> | null;
+  lineItems: Array<{
+    line_id: string;
+    variant_id: string;
+    product_id: string;
+    title: string;
+    variant_title: string | null;
+    sku: string | null;
+    quantity: number;
+    unit_price: number;
+  }>;
+}) {
+  // Detect pack participation: the storefront writes pack_slot rows keyed by
+  // order_id when a customer pays for a pack seat.
+  const packSlots = await query(
+    `SELECT id, pack_campaign_id, variant_id, customer_id, size_label
+     FROM pack_slot
+     WHERE order_id = $1 AND deleted_at IS NULL`,
+    [opts.orderNumber]
+  );
+  const isPack = packSlots.length > 0;
+  const packCampaignId = isPack ? String(packSlots[0].pack_campaign_id) : null;
+
+  // Generate a unique package code, retrying on the unlikely chance of collision.
+  let packageCode = generatePackageCode();
+  for (let i = 0; i < 5; i++) {
+    const exists = await queryOne(`SELECT id FROM shop_package WHERE package_code = $1`, [
+      packageCode,
+    ]);
+    if (!exists) break;
+    packageCode = generatePackageCode();
+  }
+
+  const packageId = newId("pkg");
+  await execute(
+    `INSERT INTO shop_package
+       (id, package_code, order_id, customer_id, customer_email, status,
+        is_pack, pack_campaign_id, shipping_address)
+     VALUES ($1,$2,$3,$4,$5,'created',$6,$7,$8)`,
+    [
+      packageId,
+      packageCode,
+      opts.orderId,
+      opts.customerId,
+      opts.customerEmail,
+      isPack,
+      packCampaignId,
+      opts.shippingAddress ? JSON.stringify(opts.shippingAddress) : null,
+    ]
+  );
+
+  // Build items. For pack packages, each line item also stamps the pack_slot
+  // it was reserved for and produces a unique sub-code.
+  let subIndex = 1;
+  for (const li of opts.lineItems) {
+    const matchingSlot = isPack
+      ? packSlots.find((s) => String(s.variant_id) === li.variant_id)
+      : null;
+    const subCode = isPack ? generateSubCode(packageCode, subIndex++) : null;
+
+    await execute(
+      `INSERT INTO shop_package_item
+         (id, package_id, order_line_id, variant_id, product_id, product_title,
+          variant_title, sku, quantity, unit_price, pack_slot_id, sub_code, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending')`,
+      [
+        newId("pkgi"),
+        packageId,
+        li.line_id,
+        li.variant_id,
+        li.product_id,
+        li.title,
+        li.variant_title,
+        li.sku,
+        li.quantity,
+        li.unit_price,
+        matchingSlot ? matchingSlot.id : null,
+        subCode,
+      ]
+    );
+  }
+
+  // Initial timeline event.
+  await execute(
+    `INSERT INTO shop_package_event (id, package_id, status, location, notes, created_by)
+     VALUES ($1,$2,'created',$3,$4,'system')`,
+    [
+      newId("pkge"),
+      packageId,
+      "BLESSLUXE Atelier",
+      isPack
+        ? `Wholesale pack package · ${opts.lineItems.length} sub-codes generated`
+        : `Order package created`,
+    ]
+  );
+
+  return packageCode;
+}
 
 // POST /store/orders — create an order (called by storefront after Stripe success)
 // Body: { email, currency_code, items: [{variant_id, quantity, unit_price}], shipping_total, tax_total, discount_total, payment_method, payment_status, status, campaign_id?, shipping_address?, billing_address? }
@@ -72,6 +182,16 @@ storeOrdersRouter.post("/", async (req, res) => {
     );
 
     // Snapshot variant data for each line + decrement inventory + record movement
+    const persistedLines: Array<{
+      line_id: string;
+      variant_id: string;
+      product_id: string;
+      title: string;
+      variant_title: string | null;
+      sku: string | null;
+      quantity: number;
+      unit_price: number;
+    }> = [];
     for (const it of b.items) {
       const variant = await queryOne(
         `SELECT v.id, v.title, v.sku, v.product_id, v.cost_price,
@@ -83,13 +203,14 @@ storeOrdersRouter.post("/", async (req, res) => {
       );
       if (!variant) continue;
 
+      const lineId = newId("line");
       await execute(
         `INSERT INTO shop_order_line_item
           (id, order_id, variant_id, product_id, title, variant_title, sku, thumbnail,
            quantity, unit_price, unit_cost)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
-          newId("line"),
+          lineId,
           id,
           it.variant_id,
           variant.product_id,
@@ -102,6 +223,16 @@ storeOrdersRouter.post("/", async (req, res) => {
           variant.cost_price ?? null,
         ]
       );
+      persistedLines.push({
+        line_id: lineId,
+        variant_id: it.variant_id,
+        product_id: String(variant.product_id),
+        title: String(variant.product_title),
+        variant_title: variant.title ? String(variant.title) : null,
+        sku: variant.sku ? String(variant.sku) : null,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+      });
 
       await execute(
         `UPDATE shop_product_variant
@@ -116,6 +247,23 @@ storeOrdersRouter.post("/", async (req, res) => {
       );
     }
 
+    // Build the trackable package once line items exist.
+    let packageCode: string | null = null;
+    if (persistedLines.length > 0) {
+      try {
+        packageCode = await createPackageForOrder({
+          orderId: id,
+          orderNumber,
+          customerId,
+          customerEmail: b.email || null,
+          shippingAddress: b.shipping_address || null,
+          lineItems: persistedLines,
+        });
+      } catch (e) {
+        console.error("[store order] package creation failed", e);
+      }
+    }
+
     if (customerId && total > 0) {
       // 1 loyalty point per 10 cents of subtotal (configurable later)
       const points = Math.floor(subtotal / 100);
@@ -128,7 +276,7 @@ storeOrdersRouter.post("/", async (req, res) => {
     }
 
     const order = await queryOne(`SELECT * FROM shop_order WHERE id = $1`, [id]);
-    res.status(201).json({ order });
+    res.status(201).json({ order, package_code: packageCode });
   } catch (err) {
     console.error("[store order create]", err);
     res.status(500).json({ error: "Failed" });

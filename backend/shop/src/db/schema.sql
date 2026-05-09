@@ -323,6 +323,79 @@ CREATE TABLE IF NOT EXISTS shop_affiliate_payout (
 );
 CREATE INDEX IF NOT EXISTS idx_shop_affiliate_payout_affiliate ON shop_affiliate_payout(affiliate_id);
 
+-- ─── Package tracking (every order yields one package; packs yield one package
+--      with N items, each with its own sub-code so a customer can only claim
+--      their slot piece — UPS/FedEx-style status timeline + Luhn-checked codes) ───
+CREATE TABLE IF NOT EXISTS shop_package (
+  id                       TEXT PRIMARY KEY,
+  package_code             TEXT NOT NULL UNIQUE,            -- BL-XXXX-XXXX-Y format, Luhn-checked
+  order_id                 TEXT NOT NULL REFERENCES shop_order(id) ON DELETE CASCADE,
+  customer_id              TEXT REFERENCES shop_customer(id) ON DELETE SET NULL,
+  customer_email           TEXT,
+  status                   TEXT NOT NULL DEFAULT 'created',
+  -- carriers: 'manual' (in-house), 'ups', 'fedex', 'dhl', 'usps', 'royal_mail', etc.
+  carrier                  TEXT,
+  carrier_tracking_number  TEXT,
+  -- denormalised for quick rendering
+  current_location         TEXT,
+  estimated_delivery_at    TIMESTAMPTZ,
+  shipped_at               TIMESTAMPTZ,
+  delivered_at             TIMESTAMPTZ,
+  -- pack flag: if true, items have unique sub-codes (one per slot)
+  is_pack                  BOOLEAN NOT NULL DEFAULT false,
+  pack_campaign_id         TEXT,
+  shipping_address         JSONB,
+  notes                    TEXT,
+  metadata                 JSONB,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_package_order ON shop_package(order_id);
+CREATE INDEX IF NOT EXISTS idx_shop_package_customer ON shop_package(customer_id);
+CREATE INDEX IF NOT EXISTS idx_shop_package_status ON shop_package(status);
+CREATE INDEX IF NOT EXISTS idx_shop_package_code ON shop_package(package_code);
+
+CREATE TABLE IF NOT EXISTS shop_package_item (
+  id               TEXT PRIMARY KEY,
+  package_id       TEXT NOT NULL REFERENCES shop_package(id) ON DELETE CASCADE,
+  -- shop_order_line_item this item came from
+  order_line_id    TEXT,
+  variant_id       TEXT,
+  product_id       TEXT,
+  product_title    TEXT NOT NULL,
+  variant_title    TEXT,
+  sku              TEXT,
+  quantity         INT NOT NULL DEFAULT 1,
+  unit_price       INT,
+  -- pack-specific fields
+  pack_slot_id     TEXT,
+  -- sub-code printed on the individual collection ticket; only one customer can
+  -- claim it (validated against pack_slot.customer_id at scan time).
+  sub_code         TEXT UNIQUE,
+  claimed_at       TIMESTAMPTZ,
+  claimed_by       TEXT,                                    -- shop_customer id of person who scanned
+  status           TEXT NOT NULL DEFAULT 'pending',         -- pending, picked, packed, ready_for_collection, claimed, returned
+  metadata         JSONB,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_package_item_package ON shop_package_item(package_id);
+CREATE INDEX IF NOT EXISTS idx_shop_package_item_subcode ON shop_package_item(sub_code);
+CREATE INDEX IF NOT EXISTS idx_shop_package_item_slot ON shop_package_item(pack_slot_id);
+
+CREATE TABLE IF NOT EXISTS shop_package_event (
+  id          TEXT PRIMARY KEY,
+  package_id  TEXT NOT NULL REFERENCES shop_package(id) ON DELETE CASCADE,
+  status      TEXT NOT NULL,
+  location    TEXT,
+  notes       TEXT,
+  created_by  TEXT,                                          -- shop_user id (admin) or 'system'
+  metadata    JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_package_event_package ON shop_package_event(package_id);
+CREATE INDEX IF NOT EXISTS idx_shop_package_event_created ON shop_package_event(created_at);
+
 -- ─── Marketing campaigns (Black Friday, seasonal sales, etc.) ───
 CREATE TABLE IF NOT EXISTS shop_campaign (
   id                 TEXT PRIMARY KEY,

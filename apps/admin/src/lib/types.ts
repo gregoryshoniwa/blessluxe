@@ -263,3 +263,79 @@ export interface PackStats {
   campaigns_by_status: Record<string, number>;
   slots_by_status: Record<string, number>;
 }
+
+// ─── Package tracking ────────────────────────────────────────────────────
+
+export interface PackageRow {
+  id: string;
+  package_code: string;
+  status: string;
+  carrier: string | null;
+  carrier_tracking_number: string | null;
+  current_location: string | null;
+  estimated_delivery_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  is_pack: boolean;
+  created_at: string;
+  customer_email: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  order_number: string;
+  total: number;
+  currency_code: string;
+  item_count: number;
+}
+
+export interface PackageDetailItem {
+  id: string;
+  product_title: string;
+  variant_title: string | null;
+  sku: string | null;
+  quantity: number;
+  sub_code: string | null;
+  pack_slot_id: string | null;
+  status: string;
+  claimed_at: string | null;
+  claimed_by: string | null;
+  slot_customer_id: string | null;
+  slot_customer_email: string | null;
+}
+
+export interface PackageEvent {
+  id: string;
+  status: string;
+  location: string | null;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+  created_by_email: string | null;
+}
+
+export interface PackageDetail {
+  id: string;
+  package_code: string;
+  status: string;
+  carrier: string | null;
+  carrier_tracking_number: string | null;
+  current_location: string | null;
+  estimated_delivery_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  is_pack: boolean;
+  pack_campaign_id: string | null;
+  shipping_address: Record<string, unknown> | null;
+  notes: string | null;
+  customer_id: string | null;
+  customer_email: string | null;
+  cust_first: string | null;
+  cust_last: string | null;
+  cust_phone: string | null;
+  loyalty_tier: string | null;
+  order_number: string;
+  total: number;
+  currency_code: string;
+  created_at: string;
+  items: PackageDetailItem[];
+  events: PackageEvent[];
+}

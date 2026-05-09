@@ -4,8 +4,10 @@
  * needs the shop_customer / shop_product_review / shop_affiliate / shop_order
  * tables to be the source of truth.
  *
- * Always rewrites localhost → 127.0.0.1 to dodge a Node 24 + Express ECONNRESET
- * issue when fetch() resolves "localhost" to ::1 first.
+ * URL resolution: prefers `SHOP_BACKEND_INTERNAL_URL` (set in Docker compose to
+ * the service name e.g. `http://shop:9001`), otherwise rewrites localhost →
+ * 127.0.0.1 to dodge a Node 24 + Express ECONNRESET issue when fetch()
+ * resolves "localhost" to ::1 first.
  */
 
 const PUBLIC_BASE =
@@ -15,10 +17,10 @@ const PUBLIC_BASE =
 
 export const SHOP_BACKEND_URL = PUBLIC_BASE;
 
-const SHOP_BACKEND_INTERNAL_URL = PUBLIC_BASE.replace(
-  /^http:\/\/localhost(:|$)/i,
-  "http://127.0.0.1$1"
-);
+const SHOP_BACKEND_INTERNAL_URL = (
+  process.env.SHOP_BACKEND_INTERNAL_URL?.trim() ||
+  PUBLIC_BASE.replace(/^http:\/\/localhost(:|$)/i, "http://127.0.0.1$1")
+).replace(/\/+$/, "");
 
 interface ShopFetchOptions {
   method?: string;

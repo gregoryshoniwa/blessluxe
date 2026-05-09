@@ -74,6 +74,10 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-http://localhost:9001}
+      # Server-side (RSC, /api routes) talks to the shop service over the
+      # compose network — "localhost" inside this container is the storefront,
+      # not the shop. The browser keeps using NEXT_PUBLIC_COMMERCE_BACKEND.
+      SHOP_BACKEND_INTERNAL_URL: ${SHOP_BACKEND_INTERNAL_URL:-http://shop:9001}
       NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       AI_DATABASE_URL: postgres://${POSTGRES_USER:-blessluxe}:${POSTGRES_PASSWORD:-blessluxe}@postgres:5432/${POSTGRES_DB:-blessluxe}?sslmode=disable

@@ -96,8 +96,23 @@ export default function ProductsPage() {
       confirmLabel: "Delete product",
     });
     if (!ok) return;
-    await api.delete(`/admin/products/${p.id}`);
-    await loadProducts();
+    try {
+      await api.delete(`/admin/products/${p.id}`);
+      await loadProducts();
+      await dialog.alert({
+        title: "Product deleted",
+        message: `"${p.title}" has been removed.`,
+        tone: "success",
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "The product could not be deleted.";
+      await dialog.alert({
+        title: "Delete failed",
+        message,
+        tone: "danger",
+      });
+    }
   };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {

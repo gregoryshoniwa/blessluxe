@@ -7,6 +7,7 @@ import {
   removeAffiliateStoreProduct,
 } from "@/lib/affiliate";
 import { query } from "@/lib/db";
+import { getInternalBackendUrl, MEDUSA_BACKEND_URL } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 type AudienceFilter = "women" | "men" | "children";
@@ -21,22 +22,16 @@ interface ProductCategoryLinkRow {
   product_id: string;
 }
 
-function getBaseUrl() {
-  return process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000";
-}
-
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
 function getServerMedusaBaseCandidates() {
-  const configured = trimTrailingSlash(getBaseUrl());
-  const candidates = [configured, "http://medusa:9000", "http://host.docker.internal:9000", "http://localhost:9000"];
-  return Array.from(new Set(candidates.filter(Boolean)));
+  return [getInternalBackendUrl()];
 }
 
 function getPublicMedusaBaseUrl() {
-  return trimTrailingSlash(process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000");
+  return trimTrailingSlash(MEDUSA_BACKEND_URL);
 }
 
 function getHeaders(withPublishableKey: boolean): Record<string, string> {

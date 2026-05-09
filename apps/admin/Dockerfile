@@ -41,4 +41,5 @@ COPY --from=builder /app/apps/admin ./apps/admin
 
 EXPOSE 3001
 WORKDIR /app/apps/admin
-CMD ["pnpm", "start", "--", "--port", "3001"]
+ENV PORT=3001 HOSTNAME=0.0.0.0
+CMD ["pnpm", "start"]

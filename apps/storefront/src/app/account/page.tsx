@@ -130,6 +130,19 @@ function AccountPageContent() {
   } | null>(null);
   const [affiliateLoading, setAffiliateLoading] = useState(false);
 
+  const [packages, setPackages] = useState<Array<{
+    id: string;
+    package_code: string;
+    status: string;
+    is_pack: boolean;
+    carrier: string | null;
+    shipped_at: string | null;
+    delivered_at: string | null;
+    created_at: string;
+    order_number: string;
+  }>>([]);
+  const [packagesLoading, setPackagesLoading] = useState(false);
+
   const searchParams = useSearchParams();
 
   const customer = payload?.customer || null;
@@ -193,6 +206,29 @@ function AccountPageContent() {
       else setBlitsSubTab("add");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!customer || activeTab !== "Transactions") return;
+    let cancelled = false;
+    (async () => {
+      setPackagesLoading(true);
+      try {
+        const res = await fetch("/api/account/packages", { cache: "no-store" });
+        if (cancelled) return;
+        if (!res.ok) {
+          setPackages([]);
+          return;
+        }
+        const data = (await res.json()) as { packages?: typeof packages };
+        setPackages(data.packages || []);
+      } finally {
+        if (!cancelled) setPackagesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customer, activeTab]);
 
   useEffect(() => {
     if (!customer || activeTab !== "Affiliate") return;
@@ -572,7 +608,72 @@ function AccountPageContent() {
           ) : null}
 
           {activeTab === "Transactions" ? (
-            <div className="border border-black/10 p-6 space-y-3">
+            <div className="space-y-6">
+              {/* Trackable packages */}
+              <div className="border border-black/10 bg-white p-6">
+                <div className="flex items-baseline justify-between mb-4">
+                  <div>
+                    <p className="font-script text-xl text-gold">Tracking</p>
+                    <h3 className="font-display tracking-widest uppercase">Your packages</h3>
+                  </div>
+                  <span className="text-xs text-black/55">
+                    {packagesLoading ? "Loading…" : `${packages.length} package${packages.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+                {!packagesLoading && packages.length === 0 ? (
+                  <p className="text-sm italic text-black/50">
+                    No trackable packages yet — place an order and it appears here with a unique code.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-black/10">
+                    {packages.map((pkg) => {
+                      const status = pkg.delivered_at
+                        ? "Delivered"
+                        : pkg.shipped_at
+                        ? "Shipped"
+                        : pkg.status.replace(/_/g, " ");
+                      const tone = pkg.delivered_at
+                        ? { background: "#DCFCE7", color: "#15803D" }
+                        : pkg.shipped_at
+                        ? { background: "#DBEAFE", color: "#1E40AF" }
+                        : { background: "#FEF3C7", color: "#92400E" };
+                      return (
+                        <li key={pkg.id} className="py-3 flex items-center gap-3 flex-wrap">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold">
+                              <span className="font-mono text-sm">{pkg.package_code}</span>
+                              {pkg.is_pack && (
+                                <span className="ml-2 text-[10px] uppercase tracking-[0.2em] text-gold-dark">
+                                  Pack
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-xs text-black/55">
+                              Order {pkg.order_number} · {new Date(pkg.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span
+                            className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
+                            style={tone}
+                          >
+                            {status}
+                          </span>
+                          <Link
+                            href={`/track/${pkg.package_code}`}
+                            className="bg-gold text-white px-4 py-2 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+                          >
+                            Track
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {/* Transactions */}
+              <div className="border border-black/10 bg-white p-6 space-y-3">
+                <h3 className="font-display tracking-widest uppercase mb-2">Invoices</h3>
               {(payload?.transactions || []).map((tx) => (
                 <div key={String(tx.id)} className="border border-black/10 p-4 flex items-center justify-between gap-3 flex-wrap">
                   <div>
@@ -588,6 +689,7 @@ function AccountPageContent() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           ) : null}
 

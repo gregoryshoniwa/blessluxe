@@ -3,13 +3,12 @@ import { getCurrentCustomer } from "@/lib/customer-account";
 import { getAffiliateByCode } from "@/lib/affiliate";
 import { createPackCampaignWithSlots, getPackDefinitionById } from "@/lib/packs";
 import { buildPdpVariantRows } from "@/lib/medusa-pdp";
-import { getStoreMedusaFetchHeaders } from "@/lib/medusa";
+import { getStoreMedusaFetchHeaders, getInternalBackendUrl } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 
 function medusaBases() {
-  const configured = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/+$/, "");
-  return Array.from(new Set([configured, "http://medusa:9000", "http://host.docker.internal:9000", "http://localhost:9000"]));
+  return [getInternalBackendUrl()];
 }
 
 async function getDefaultRegionId(base: string): Promise<string> {

@@ -15,6 +15,7 @@ import { adminCampaignsRouter } from "./admin-campaigns.ts";
 import { adminFinanceRouter } from "./admin-finance.ts";
 import { adminAiRouter } from "./admin-ai.ts";
 import { adminPacksRouter } from "./admin-packs.ts";
+import { adminPackagesRouter } from "./admin-packages.ts";
 
 export const adminRouter = Router();
 
@@ -29,6 +30,7 @@ adminRouter.use(adminCampaignsRouter);
 adminRouter.use(adminFinanceRouter);
 adminRouter.use(adminAiRouter);
 adminRouter.use(adminPacksRouter);
+adminRouter.use(adminPackagesRouter);
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -369,11 +371,21 @@ adminRouter.delete("/products/:productId/images/:imageId", async (req, res) => {
 
 adminRouter.delete("/products/:id", async (req, res) => {
   try {
+    // Cart lines reference variants without ON DELETE CASCADE, so clear them
+    // first. Carts are ephemeral so this is safe. Order lines snapshot the
+    // variant_id without a FK and are preserved.
+    await execute(
+      `DELETE FROM shop_cart_line_item
+        WHERE variant_id IN (SELECT id FROM shop_product_variant WHERE product_id = $1)`,
+      [req.params.id]
+    );
     await execute(`DELETE FROM shop_product WHERE id = $1`, [req.params.id]);
     res.json({ id: req.params.id, deleted: true });
   } catch (err) {
     console.error("[admin delete product]", err);
-    res.status(500).json({ error: "Failed to delete product" });
+    const message =
+      err instanceof Error ? err.message : "Failed to delete product";
+    res.status(500).json({ error: message });
   }
 });
 

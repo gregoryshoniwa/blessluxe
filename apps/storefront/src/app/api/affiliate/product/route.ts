@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAffiliateByCode } from "@/lib/affiliate";
-import { getStoreMedusaFetchHeaders } from "@/lib/medusa";
+import { getStoreMedusaFetchHeaders, getInternalBackendUrl } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 
 function getMedusaBaseCandidates() {
-  const configured = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000").replace(/\/+$/, "");
-  return Array.from(
-    new Set([configured, "http://medusa:9000", "http://host.docker.internal:9000", "http://localhost:9000"])
-  );
+  return [getInternalBackendUrl()];
 }
 
 async function getDefaultRegionId(base: string) {

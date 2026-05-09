@@ -16,6 +16,7 @@ import {
   Globe,
   LogOut,
   Gift,
+  Truck,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -40,6 +41,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/products", label: "Products", icon: <Package className="h-4 w-4" /> },
       { href: "/inventory", label: "Inventory", icon: <Boxes className="h-4 w-4" /> },
       { href: "/packs", label: "Packs", icon: <Gift className="h-4 w-4" /> },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { href: "/packages", label: "Packages", icon: <Truck className="h-4 w-4" /> },
     ],
   },
   {

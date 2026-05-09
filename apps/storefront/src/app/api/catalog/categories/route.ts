@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MEDUSA_BACKEND_URL, getStoreMedusaFetchHeaders } from "@/lib/medusa";
+import { getInternalBackendUrl, getStoreMedusaFetchHeaders } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 
@@ -38,14 +38,7 @@ interface BackendHeading {
  */
 export async function GET() {
   try {
-    // Server-side fetch: rewrite localhost → 127.0.0.1 to dodge Node 18+ ECONNRESET
-    // when the global fetch resolves "localhost" to ::1 (IPv6) but Express's
-    // dual-stack socket renegotiates connections in a way Node's fetch dislikes.
-    const internalBase = MEDUSA_BACKEND_URL.replace(
-      /^http:\/\/localhost(:|$)/i,
-      "http://127.0.0.1$1"
-    );
-    const url = new URL("/store/headings", internalBase);
+    const url = new URL("/store/headings", getInternalBackendUrl());
     const res = await fetch(url.toString(), {
       headers: { ...getStoreMedusaFetchHeaders(), connection: "close" },
       cache: "no-store",

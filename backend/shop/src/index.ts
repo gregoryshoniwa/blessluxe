@@ -13,6 +13,7 @@ import { cartsRouter } from "./routes/carts.ts";
 import { variantsRouter } from "./routes/variants.ts";
 import { storeOrdersRouter } from "./routes/store-orders.ts";
 import { storeAffiliatesRouter } from "./routes/store-affiliates.ts";
+import { storePackagesRouter } from "./routes/store-packages.ts";
 import { adminRouter } from "./routes/admin.ts";
 import { authRouter } from "./routes/auth.ts";
 import { customerAuthRouter } from "./routes/customer-auth.ts";
@@ -41,6 +42,7 @@ app.use("/store/product-variants", variantsRouter);
 app.use("/store/carts", cartsRouter);
 app.use("/store/orders", storeOrdersRouter);
 app.use("/store/affiliates", storeAffiliatesRouter);
+app.use("/store/packages", storePackagesRouter);
 
 // Auth routes (admin login/logout/me/users)
 app.use("/auth", authRouter);
