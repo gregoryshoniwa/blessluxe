@@ -89,6 +89,7 @@ export function HeaderProfileMenu({ isLoggedIn }: Props) {
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={isLoggedIn ? "Account menu" : "Sign in"}
+        title={isLoggedIn ? "Account" : "Sign in"}
       >
         {isLoggedIn ? (
           <CircleUser className="w-5 h-5" strokeWidth={1.5} />

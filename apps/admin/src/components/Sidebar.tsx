@@ -17,6 +17,9 @@ import {
   LogOut,
   Gift,
   Truck,
+  HelpCircle,
+  Megaphone as MegaphoneIcon,
+  DollarSign,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -65,8 +68,18 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: "Content",
+    items: [
+      { href: "/announcements", label: "Announcements", icon: <MegaphoneIcon className="h-4 w-4" /> },
+      { href: "/faq", label: "FAQ", icon: <HelpCircle className="h-4 w-4" /> },
+    ],
+  },
+  {
     title: "Settings",
-    items: [{ href: "/regions", label: "Regions", icon: <Globe className="h-4 w-4" /> }],
+    items: [
+      { href: "/currencies", label: "Currencies", icon: <DollarSign className="h-4 w-4" /> },
+      { href: "/regions", label: "Countries", icon: <Globe className="h-4 w-4" /> },
+    ],
   },
 ];
 

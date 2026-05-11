@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Heart, ShoppingBag, Menu, ChevronDown } from "lucide-react";
+import { Search, Heart, ShoppingBag, Menu, ChevronDown, HelpCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui";
@@ -202,11 +202,12 @@ export function Header() {
             )}
 
             {/* Header Actions */}
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={openSearch}
                 className="p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Search"
+                title="Search"
               >
                 <Search className="w-5 h-5" strokeWidth={1.5} />
               </button>
@@ -219,6 +220,7 @@ export function Header() {
                 href="/wishlist"
                 className="relative p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Wishlist"
+                title="Wishlist"
               >
                 <Heart className="w-5 h-5" strokeWidth={1.5} />
                 {mounted && wishlistCount > 0 && (
@@ -228,10 +230,20 @@ export function Header() {
                 )}
               </Link>
 
+              <Link
+                href="/faq"
+                className="p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
+                aria-label="Help & FAQ"
+                title="Help & FAQ"
+              >
+                <HelpCircle className="w-5 h-5" strokeWidth={1.5} />
+              </Link>
+
               <button
                 onClick={toggleCart}
                 className="relative p-2 hover:text-theme-primary transition-colors hover:scale-110 theme-transition"
                 aria-label="Cart"
+                title="Cart"
               >
                 <ShoppingBag className="w-5 h-5" strokeWidth={1.5} />
                 {mounted && cartItemCount > 0 && (

@@ -10,6 +10,7 @@ export interface ShopFilters {
   maxPrice: number | null;
   colors: string[];
   sort: string;
+  q: string | null;
 }
 
 const DEFAULT_FILTERS: ShopFilters = {
@@ -19,6 +20,7 @@ const DEFAULT_FILTERS: ShopFilters = {
   maxPrice: null,
   colors: [],
   sort: "newest",
+  q: null,
 };
 
 export function useShopFilters() {
@@ -38,8 +40,9 @@ export function useShopFilters() {
       : null;
     const colors = searchParams.get("color")?.split(",").filter(Boolean) ?? [];
     const sort = searchParams.get("sort") ?? "newest";
+    const q = searchParams.get("q");
 
-    return { category, sizes, minPrice, maxPrice, colors, sort };
+    return { category, sizes, minPrice, maxPrice, colors, sort, q };
   }, [searchParams]);
 
   // Update URL with new filters
@@ -54,6 +57,7 @@ export function useShopFilters() {
       const currentMaxPrice = searchParams.get("maxPrice") ? Number(searchParams.get("maxPrice")) : null;
       const currentColors = searchParams.get("color")?.split(",").filter(Boolean) ?? [];
       const currentSort = searchParams.get("sort") ?? "newest";
+      const currentQ = searchParams.get("q");
 
       const currentFilters = {
         category: currentCategory,
@@ -62,6 +66,7 @@ export function useShopFilters() {
         maxPrice: currentMaxPrice,
         colors: currentColors,
         sort: currentSort,
+        q: currentQ,
       };
 
       const merged = { ...currentFilters, ...newFilters };
@@ -104,6 +109,13 @@ export function useShopFilters() {
         params.set("sort", merged.sort);
       } else {
         params.delete("sort");
+      }
+
+      // Search query
+      if (merged.q && merged.q.trim()) {
+        params.set("q", merged.q.trim());
+      } else {
+        params.delete("q");
       }
 
       const newUrl = params.toString()

@@ -73,6 +73,7 @@ export function HeaderWalletMenu({ isLoggedIn }: Props) {
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="Blits wallet"
+        title="Blits wallet"
       >
         <Wallet className="w-5 h-5" strokeWidth={1.5} />
         <span className="hidden max-w-[4.5rem] truncate text-[11px] font-semibold tracking-wide tabular-nums sm:inline">

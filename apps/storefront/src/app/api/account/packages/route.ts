@@ -25,7 +25,7 @@ export async function GET() {
   // Pass email so the shop backend can match packages whose customer_id was
   // never linked (storefront and shop backend use separate auth tokens, so
   // historical packages often have customer_id = NULL with only the email).
-  const email = (customer.email || "").trim().toLowerCase();
+  const email = String(customer.email ?? "").trim().toLowerCase();
   const path = email
     ? `/store/packages?email=${encodeURIComponent(email)}`
     : "/store/packages";

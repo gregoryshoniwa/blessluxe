@@ -257,8 +257,17 @@ productsRouter.get("/", async (req, res) => {
       params.push(headingHandle);
     }
     if (q) {
+      // Keyword search across title/description/handle AND product tag values.
+      // Tags are stored in shop_product_tag (value) joined via shop_product_tag_map.
       conditions.push(
-        `(p.title ILIKE $${paramIdx} OR p.description ILIKE $${paramIdx} OR p.handle ILIKE $${paramIdx})`
+        `(p.title ILIKE $${paramIdx}
+          OR p.description ILIKE $${paramIdx}
+          OR p.handle ILIKE $${paramIdx}
+          OR EXISTS (
+            SELECT 1 FROM shop_product_tag_map tm
+            JOIN shop_product_tag t ON t.id = tm.tag_id
+            WHERE tm.product_id = p.id AND t.value ILIKE $${paramIdx}
+          ))`
       );
       params.push(`%${q}%`);
       paramIdx++;

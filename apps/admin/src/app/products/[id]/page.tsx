@@ -451,26 +451,41 @@ function OptionsEditor({
       </p>
       <div className="space-y-3">
         {draft.map((d, i) => (
-          <div key={i} className="grid grid-cols-[1fr_2fr_auto] items-end gap-3">
-            <Field label={`Option ${i + 1}`}>
+          <div
+            key={i}
+            className="group relative rounded-sm bg-white px-4 py-3"
+            style={{ border: "1px solid var(--line-soft)" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-luxe text-[var(--gold-dark)]">
+                Option {i + 1}
+              </span>
+              <button
+                onClick={() => remove(i)}
+                type="button"
+                aria-label="Remove option"
+                title="Remove"
+                className="flex h-7 w-7 items-center justify-center rounded-sm text-[var(--ink-muted)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-3">
               <input
                 value={d.title}
                 onChange={(e) => update(i, "title", e.target.value)}
                 placeholder="Size"
                 className={inputCls}
+                aria-label={`Option ${i + 1} name`}
               />
-            </Field>
-            <Field label="Values" hint="Comma-separated">
               <input
                 value={d.values}
                 onChange={(e) => update(i, "values", e.target.value)}
-                placeholder="XS, S, M, L"
+                placeholder="XS, S, M, L (comma-separated)"
                 className={inputCls}
+                aria-label={`Option ${i + 1} values`}
               />
-            </Field>
-            <button onClick={() => remove(i)} className={`${btnDanger}`} type="button">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </div>
           </div>
         ))}
       </div>
@@ -504,9 +519,46 @@ function VariantsTab({
   const [editing, setEditing] = useState<Variant | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Margin calculator state — pure UI, not persisted directly.
+  const [costMajor, setCostMajor] = useState<string>("");
+  const [marginMode, setMarginMode] = useState<"percent" | "fixed">("percent");
+  const [marginAmount, setMarginAmount] = useState<string>("");
+  // Root currency loaded from admin settings; other currencies get auto-filled
+  // by the backend from rate_to_root.
+  const [rootCurrency, setRootCurrency] = useState<{
+    code: string;
+    symbol: string | null;
+    label: string;
+  }>({ code: "usd", symbol: "$", label: "USD" });
 
-  const onCreate = () => { setEditing(null); setError(null); setOpen(true); };
-  const onEdit = (v: Variant) => { setEditing(v); setError(null); setOpen(true); };
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<{
+          currencies: Array<{ code: string; symbol: string | null; is_root: boolean }>;
+        }>("/admin/currencies");
+        const root = res.currencies.find((c) => c.is_root);
+        if (root) {
+          setRootCurrency({
+            code: root.code.toLowerCase(),
+            symbol: root.symbol,
+            label: root.code.toUpperCase(),
+          });
+        }
+      } catch {
+        // keep default
+      }
+    })();
+  }, []);
+
+  const resetMarginCalc = (v: Variant | null) => {
+    setCostMajor(v?.cost_price != null ? (v.cost_price / 100).toFixed(2) : "");
+    setMarginMode("percent");
+    setMarginAmount("");
+  };
+
+  const onCreate = () => { setEditing(null); setError(null); resetMarginCalc(null); setOpen(true); };
+  const onEdit = (v: Variant) => { setEditing(v); setError(null); resetMarginCalc(v); setOpen(true); };
 
   const onDelete = async (v: Variant) => {
     const ok = await dialog.confirm({
@@ -559,19 +611,19 @@ function VariantsTab({
       if (v) optionMap[opt.title] = v;
     }
 
+    // Only the root currency is collected from the form; the backend expands
+    // it into all active currencies using shop_currency.rate_to_root.
     const prices: VariantPrice[] = [];
-    for (const c of COMMON_CURRENCIES) {
-      const amount = Number(fd.get(`price_${c.code}`));
-      if (amount > 0) {
-        const sale = Number(fd.get(`sale_${c.code}`));
-        prices.push({
-          currency_code: c.code,
-          amount: Math.round(amount * 100),
-          sale_amount: sale > 0 ? Math.round(sale * 100) : null,
-          sale_starts_at: String(fd.get(`sale_start_${c.code}`) || "") || null,
-          sale_ends_at: String(fd.get(`sale_end_${c.code}`) || "") || null,
-        });
-      }
+    const amount = Number(fd.get(`price_${rootCurrency.code}`));
+    if (amount > 0) {
+      const sale = Number(fd.get(`sale_${rootCurrency.code}`));
+      prices.push({
+        currency_code: rootCurrency.code,
+        amount: Math.round(amount * 100),
+        sale_amount: sale > 0 ? Math.round(sale * 100) : null,
+        sale_starts_at: String(fd.get(`sale_start_${rootCurrency.code}`) || "") || null,
+        sale_ends_at: String(fd.get(`sale_end_${rootCurrency.code}`) || "") || null,
+      });
     }
 
     const body = {
@@ -809,9 +861,8 @@ function VariantsTab({
                   type="number"
                   step="0.01"
                   name="cost_price"
-                  defaultValue={
-                    editing?.cost_price != null ? (editing.cost_price / 100).toFixed(2) : ""
-                  }
+                  value={costMajor}
+                  onChange={(e) => setCostMajor(e.target.value)}
                   className={inputCls}
                 />
               </Field>
@@ -846,61 +897,78 @@ function VariantsTab({
             </div>
           </div>
 
+          <MarginCalculator
+            costMajor={costMajor}
+            marginMode={marginMode}
+            marginAmount={marginAmount}
+            onModeChange={setMarginMode}
+            onAmountChange={setMarginAmount}
+            rootCode={rootCurrency.code}
+            rootLabel={rootCurrency.label}
+          />
+
           <div className="card p-4">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-luxe text-[var(--gold-dark)]">
               Pricing
             </p>
             <p className="mb-4 text-xs text-[var(--ink-muted)]">
-              Enter prices in major units (e.g. 89.99). Set sale price + window to schedule a markdown.
+              Enter the price in <span className="font-mono uppercase text-[var(--gold-dark)]">{rootCurrency.label}</span> (root currency).
+              Other currencies are converted automatically from the rates in{" "}
+              <a href="/currencies" className="underline">Settings → Currencies</a>.
             </p>
-            <div className="space-y-3">
-              {COMMON_CURRENCIES.map((c) => {
-                const existing = editing?.prices?.find((p) => p.currency_code === c.code);
-                const toMajor = (n: number | null | undefined) => (n ? (n / 100).toFixed(2) : "");
-                const toLocalDt = (s?: string | null) => (s ? new Date(s).toISOString().slice(0, 16) : "");
-                return (
-                  <div key={c.code} className="grid grid-cols-[60px_1fr_1fr_1fr_1fr] items-end gap-3">
-                    <span className="font-mono text-xs uppercase tracking-luxe text-[var(--gold-dark)]">
-                      {c.label}
-                    </span>
-                    <Field label="Price">
+            {(() => {
+              const c = rootCurrency;
+              const existing = editing?.prices?.find((p) => p.currency_code === c.code);
+              const toMajor = (n: number | null | undefined) => (n ? (n / 100).toFixed(2) : "");
+              const toLocalDt = (s?: string | null) => (s ? new Date(s).toISOString().slice(0, 16) : "");
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label={`Price (${c.label})`} required>
+                    <div className="relative">
+                      {c.symbol && (
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-[var(--ink-muted)]">
+                          {c.symbol}
+                        </span>
+                      )}
                       <input
                         type="number"
                         step="0.01"
+                        min={0}
                         name={`price_${c.code}`}
                         defaultValue={toMajor(existing?.amount)}
-                        className={inputCls}
+                        className={`${inputCls} ${c.symbol ? "pl-8" : ""}`}
                       />
-                    </Field>
-                    <Field label="Sale price">
-                      <input
-                        type="number"
-                        step="0.01"
-                        name={`sale_${c.code}`}
-                        defaultValue={toMajor(existing?.sale_amount)}
-                        className={inputCls}
-                      />
-                    </Field>
-                    <Field label="Sale starts">
-                      <input
-                        type="datetime-local"
-                        name={`sale_start_${c.code}`}
-                        defaultValue={toLocalDt(existing?.sale_starts_at)}
-                        className={inputCls}
-                      />
-                    </Field>
-                    <Field label="Sale ends">
-                      <input
-                        type="datetime-local"
-                        name={`sale_end_${c.code}`}
-                        defaultValue={toLocalDt(existing?.sale_ends_at)}
-                        className={inputCls}
-                      />
-                    </Field>
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  </Field>
+                  <Field label={`Sale price (${c.label})`} hint="Optional. Leave blank for no sale.">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      name={`sale_${c.code}`}
+                      defaultValue={toMajor(existing?.sale_amount)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Sale starts">
+                    <input
+                      type="datetime-local"
+                      name={`sale_start_${c.code}`}
+                      defaultValue={toLocalDt(existing?.sale_starts_at)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Sale ends">
+                    <input
+                      type="datetime-local"
+                      name={`sale_end_${c.code}`}
+                      defaultValue={toLocalDt(existing?.sale_ends_at)}
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
+              );
+            })()}
           </div>
 
           {error && (
@@ -972,5 +1040,113 @@ function ThumbnailUpload({
         </div>
       </div>
     </Field>
+  );
+}
+
+function MarginCalculator({
+  costMajor,
+  marginMode,
+  marginAmount,
+  onModeChange,
+  onAmountChange,
+  rootCode,
+  rootLabel,
+}: {
+  costMajor: string;
+  marginMode: "percent" | "fixed";
+  marginAmount: string;
+  onModeChange: (m: "percent" | "fixed") => void;
+  onAmountChange: (v: string) => void;
+  rootCode: string;
+  rootLabel: string;
+}) {
+  const cost = Number(costMajor);
+  const amt = Number(marginAmount);
+  const validCost = Number.isFinite(cost) && cost > 0;
+  const validAmt = Number.isFinite(amt) && amt >= 0;
+
+  let suggested: number | null = null;
+  let profitPerUnit: number | null = null;
+  if (validCost && validAmt) {
+    if (marginMode === "percent") {
+      suggested = cost * (1 + amt / 100);
+      profitPerUnit = suggested - cost;
+    } else {
+      suggested = cost + amt;
+      profitPerUnit = amt;
+    }
+  }
+
+  const applyToRoot = () => {
+    if (suggested == null) return;
+    const el = document.querySelector<HTMLInputElement>(`input[name="price_${rootCode}"]`);
+    if (el) {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      setter?.call(el, suggested.toFixed(2));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  };
+
+  return (
+    <div className="card p-4">
+      <p className="mb-3 text-[10px] font-semibold uppercase tracking-luxe text-[var(--gold-dark)]">
+        Margin calculator
+      </p>
+      <p className="mb-4 text-xs text-[var(--ink-muted)]">
+        Enter cost above, choose a markup % or fixed profit, then apply to the USD price below.
+      </p>
+      <div className="grid grid-cols-[140px_1fr_auto] items-end gap-3">
+        <Field label="Mode">
+          <select
+            value={marginMode}
+            onChange={(e) => onModeChange(e.target.value as "percent" | "fixed")}
+            className="select"
+          >
+            <option value="percent">Markup %</option>
+            <option value="fixed">Fixed profit ($)</option>
+          </select>
+        </Field>
+        <Field label={marginMode === "percent" ? "Percent" : "Profit (major)"}>
+          <input
+            type="number"
+            step="0.01"
+            min={0}
+            value={marginAmount}
+            onChange={(e) => onAmountChange(e.target.value)}
+            className={inputCls}
+            placeholder={marginMode === "percent" ? "e.g. 60" : "e.g. 25.00"}
+          />
+        </Field>
+        <button
+          type="button"
+          onClick={applyToRoot}
+          disabled={suggested == null}
+          className={btnPrimary}
+        >
+          Apply to {rootLabel}
+        </button>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+        <div className="rounded-sm bg-[var(--cream)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-luxe text-[var(--ink-muted)]">
+            Suggested price
+          </p>
+          <p className="mt-0.5 font-display text-lg text-[var(--ink)]">
+            {suggested != null ? `$${suggested.toFixed(2)}` : "—"}
+          </p>
+        </div>
+        <div className="rounded-sm bg-[var(--cream)] px-3 py-2">
+          <p className="text-[10px] uppercase tracking-luxe text-[var(--ink-muted)]">
+            Profit / unit
+          </p>
+          <p className="mt-0.5 font-display text-lg text-[var(--gold-dark)]">
+            {profitPerUnit != null ? `$${profitPerUnit.toFixed(2)}` : "—"}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

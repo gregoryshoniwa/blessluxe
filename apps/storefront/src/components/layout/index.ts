@@ -3,3 +3,4 @@ export { Header } from "./Header";
 export { MobileNav } from "./MobileNav";
 export { Footer } from "./Footer";
 export { LoadingScreen } from "./LoadingScreen";
+export { SearchOverlay } from "./SearchOverlay";

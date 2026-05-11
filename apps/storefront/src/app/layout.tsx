@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import "./globals.css";
 import { QueryProvider, CartProvider, AuthProvider, ThemeProvider, ToastProvider } from "@/providers";
-import { Header, MobileNav, Footer, LoadingScreen } from "@/components/layout";
+import { Header, MobileNav, Footer, LoadingScreen, SearchOverlay } from "@/components/layout";
 import { CartSidebar } from "@/components/cart";
 import AgentWidget from "@/components/chat/AgentWidget";
 
@@ -59,6 +59,7 @@ export default function RootLayout({
                   <ToastProvider>
                     <LoadingScreen />
                     <CartSidebar />
+                    <SearchOverlay />
                     <div className="flex min-h-screen flex-col">
                       <Header />
                       <MobileNav />

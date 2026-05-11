@@ -105,6 +105,7 @@ export function useProducts(options?: {
   offset?: number;
   collection_id?: string[];
   category_id?: string[];
+  q?: string | null;
 }) {
   const { data: regions } = useRegions();
   const regionId = regions?.[0]?.id;
@@ -119,6 +120,7 @@ export function useProducts(options?: {
         category_id: options?.category_id,
         region_id: regionId,
       };
+      if (options?.q && options.q.trim()) params.q = options.q.trim();
       const data = await fetchStore<{ products: Product[] }>(
         "/store/products",
         params,

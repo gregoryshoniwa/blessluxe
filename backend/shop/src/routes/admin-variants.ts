@@ -239,25 +239,62 @@ async function createOrUpdateVariant({
     }
   }
 
-  // Replace prices set
+  // Replace prices set. The admin UI only sends the ROOT currency price; we
+  // expand it into all active currencies using rate_to_root from shop_currency.
   if (body.prices) {
     await execute(`DELETE FROM shop_variant_price WHERE variant_id = $1`, [id]);
-    for (const p of body.prices) {
-      await execute(
-        `INSERT INTO shop_variant_price
-          (id, variant_id, region_id, currency_code, amount, sale_amount, sale_starts_at, sale_ends_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          newId("price"),
-          id,
-          p.region_id || null,
-          p.currency_code.toLowerCase(),
-          p.amount,
-          p.sale_amount ?? null,
-          p.sale_starts_at ?? null,
-          p.sale_ends_at ?? null,
-        ]
+
+    const currencies = await query(
+      `SELECT code, rate_to_root, is_root FROM shop_currency WHERE is_active = true`
+    );
+    const rootCode = String(
+      currencies.find((c) => c.is_root)?.code || "usd"
+    ).toLowerCase();
+
+    // Find the price the admin supplied for the root currency (or fall back
+    // to the first one — keeps legacy multi-currency callers working).
+    const rootPrice =
+      body.prices.find((p) => p.currency_code.toLowerCase() === rootCode) ||
+      body.prices[0];
+
+    if (rootPrice) {
+      // Multiplier (Decimal in pg comes back as string) → number.
+      const rootRate = Number(
+        currencies.find((c) => String(c.code).toLowerCase() === rootCode)?.rate_to_root || 1
       );
+      const rootAmount = rootPrice.amount;
+      const rootSale =
+        rootPrice.sale_amount != null ? Number(rootPrice.sale_amount) : null;
+
+      for (const c of currencies) {
+        const code = String(c.code).toLowerCase();
+        const rate = Number(c.rate_to_root);
+        // ratio relative to root: rate / rootRate.
+        const factor = rootRate ? rate / rootRate : 1;
+        const amount =
+          code === rootCode ? rootAmount : Math.round(rootAmount * factor);
+        const sale =
+          rootSale != null
+            ? code === rootCode
+              ? rootSale
+              : Math.round(rootSale * factor)
+            : null;
+        await execute(
+          `INSERT INTO shop_variant_price
+            (id, variant_id, region_id, currency_code, amount, sale_amount, sale_starts_at, sale_ends_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            newId("price"),
+            id,
+            rootPrice.region_id || null,
+            code,
+            amount,
+            sale,
+            rootPrice.sale_starts_at ?? null,
+            rootPrice.sale_ends_at ?? null,
+          ]
+        );
+      }
     }
   }
 

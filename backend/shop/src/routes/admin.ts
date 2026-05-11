@@ -16,6 +16,11 @@ import { adminFinanceRouter } from "./admin-finance.ts";
 import { adminAiRouter } from "./admin-ai.ts";
 import { adminPacksRouter } from "./admin-packs.ts";
 import { adminPackagesRouter } from "./admin-packages.ts";
+import { adminSettingsRouter } from "./admin-settings.ts";
+import { adminFaqRouter } from "./admin-faq.ts";
+import { adminAnnouncementsRouter } from "./admin-announcements.ts";
+import { adminCurrenciesRouter } from "./admin-currencies.ts";
+import { adminCountriesRouter } from "./admin-countries.ts";
 
 export const adminRouter = Router();
 
@@ -31,6 +36,11 @@ adminRouter.use(adminFinanceRouter);
 adminRouter.use(adminAiRouter);
 adminRouter.use(adminPacksRouter);
 adminRouter.use(adminPackagesRouter);
+adminRouter.use(adminSettingsRouter);
+adminRouter.use(adminFaqRouter);
+adminRouter.use(adminAnnouncementsRouter);
+adminRouter.use(adminCurrenciesRouter);
+adminRouter.use(adminCountriesRouter);
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -42,7 +52,8 @@ const storage = multer.diskStorage({
     cb(null, `${uuid()}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+// 50MB cap so admin can upload short promo videos for the hero carousel.
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 function baseUrl(req: { protocol: string; get: (h: string) => string | undefined }) {
   const host = req.get("host") || "localhost:9000";

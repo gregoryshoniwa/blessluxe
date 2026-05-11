@@ -42,6 +42,7 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
   const { data: rawProducts, isLoading } = useProducts({
     limit: 50,
     category_id: categoryIds,
+    q: filters.q,
   });
 
   const normalizeProductImageUrl = (value: string | null | undefined) => {

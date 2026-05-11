@@ -53,6 +53,13 @@ adminReviewsRouter.patch("/reviews/:id", async (req, res) => {
       content: string;
       rating: number;
     }>;
+
+    const previous = await queryOne(
+      `SELECT id, status, customer_id, reward_credited
+       FROM shop_product_review WHERE id = $1`,
+      [req.params.id]
+    );
+
     const sets: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
@@ -66,6 +73,37 @@ adminReviewsRouter.patch("/reviews/:id", async (req, res) => {
       params.push(req.params.id);
       await execute(`UPDATE shop_product_review SET ${sets.join(", ")} WHERE id = $${idx}`, params);
     }
+
+    // When a review transitions to "approved" for the first time, credit the
+    // customer's loyalty points (Bits) by the configured review reward.
+    const becameApproved =
+      body.status === "approved" &&
+      previous &&
+      previous.status !== "approved" &&
+      !previous.reward_credited &&
+      previous.customer_id;
+    if (becameApproved) {
+      const setting = await queryOne(
+        `SELECT value FROM shop_setting WHERE key = 'review_reward_bits'`
+      );
+      const reward = Math.max(0, Math.floor(Number(setting?.value || 0)));
+      if (reward > 0) {
+        await execute(
+          `UPDATE shop_customer
+              SET loyalty_points = COALESCE(loyalty_points, 0) + $1,
+                  updated_at = NOW()
+            WHERE id = $2`,
+          [reward, previous.customer_id]
+        );
+        await execute(
+          `UPDATE shop_product_review
+              SET reward_credited = true, reward_credited_at = NOW()
+            WHERE id = $1`,
+          [req.params.id]
+        );
+      }
+    }
+
     const review = await queryOne(`SELECT * FROM shop_product_review WHERE id = $1`, [req.params.id]);
     res.json({ review });
   } catch (err) {

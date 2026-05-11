@@ -469,3 +469,81 @@ ALTER TABLE shop_order_line_item ADD COLUMN IF NOT EXISTS unit_cost INT;
 CREATE INDEX IF NOT EXISTS idx_shop_order_customer ON shop_order(customer_id);
 CREATE INDEX IF NOT EXISTS idx_shop_order_created ON shop_order(created_at);
 CREATE INDEX IF NOT EXISTS idx_shop_order_status ON shop_order(status);
+
+-- ─── Review reward tracking ─────────────────────────────────────────────
+ALTER TABLE shop_product_review ADD COLUMN IF NOT EXISTS reward_credited BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE shop_product_review ADD COLUMN IF NOT EXISTS reward_credited_at TIMESTAMPTZ;
+
+-- ─── Currencies (root + exchange rates) ────────────────────────────────
+CREATE TABLE IF NOT EXISTS shop_currency (
+  code         TEXT PRIMARY KEY,                        -- 'usd', 'gbp'
+  name         TEXT NOT NULL,
+  symbol       TEXT,
+  rate_to_root NUMERIC(20, 10) NOT NULL DEFAULT 1,      -- multiply root price by this
+  is_root      BOOLEAN NOT NULL DEFAULT false,
+  is_active    BOOLEAN NOT NULL DEFAULT true,
+  sort_order   INT NOT NULL DEFAULT 0,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Only one row may be the root currency at a time.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_currency_one_root
+  ON shop_currency((is_root)) WHERE is_root;
+
+-- Seed common currencies; root defaults to USD on first install.
+INSERT INTO shop_currency (code, name, symbol, rate_to_root, is_root, is_active, sort_order) VALUES
+  ('usd', 'US Dollar',        '$',   1.0,  true,  true, 1),
+  ('gbp', 'British Pound',    '£',   0.78, false, true, 2),
+  ('eur', 'Euro',             '€',   0.92, false, true, 3),
+  ('zar', 'South African Rand','R',  18.5, false, true, 4)
+ON CONFLICT (code) DO NOTHING;
+
+-- ─── Countries (allow/deny list for storefront access) ─────────────────
+CREATE TABLE IF NOT EXISTS shop_country (
+  code       TEXT PRIMARY KEY,                          -- ISO 3166-1 alpha-2
+  name       TEXT NOT NULL,
+  is_allowed BOOLEAN NOT NULL DEFAULT false,
+  sort_order INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_country_allowed ON shop_country(is_allowed);
+
+-- ─── Generic key-value settings (review reward, etc.) ───────────────────
+CREATE TABLE IF NOT EXISTS shop_setting (
+  key        TEXT PRIMARY KEY,
+  value      TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─── FAQs (customer-facing, admin-managed) ───────────────────────────────
+CREATE TABLE IF NOT EXISTS shop_faq (
+  id         TEXT PRIMARY KEY,
+  question   TEXT NOT NULL,
+  answer     TEXT NOT NULL,
+  category   TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active  BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_faq_active ON shop_faq(is_active, sort_order);
+
+-- ─── Hero / announcement slides (image, video, gif) ──────────────────────
+CREATE TABLE IF NOT EXISTS shop_announcement (
+  id            TEXT PRIMARY KEY,
+  position      TEXT NOT NULL DEFAULT 'hero',            -- hero | top_bar
+  media_type    TEXT NOT NULL DEFAULT 'image',            -- image | video | gif
+  media_url     TEXT NOT NULL,
+  poster_url    TEXT,                                     -- preview frame for video
+  heading       TEXT,
+  subheading    TEXT,
+  cta_label     TEXT,
+  cta_href      TEXT,
+  text_align    TEXT NOT NULL DEFAULT 'left',
+  sort_order    INT NOT NULL DEFAULT 0,
+  is_active     BOOLEAN NOT NULL DEFAULT true,
+  starts_at     TIMESTAMPTZ,
+  ends_at       TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_announcement_pos ON shop_announcement(position, is_active, sort_order);

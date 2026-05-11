@@ -105,6 +105,8 @@ export default function ReviewsPage() {
         subtitle="Approve, reject, or respond to product reviews."
       />
 
+      <ReviewRewardCard />
+
       <div className="mb-6 flex gap-2">
         {FILTERS.map((f) => (
           <button
@@ -253,4 +255,88 @@ function StatusBadge({ status }: { status: Review["status"] }) {
     status === "approved" ? "badge badge-success" :
     status === "rejected" ? "badge badge-danger" : "badge badge-warn";
   return <span className={cls}>{status}</span>;
+}
+
+function ReviewRewardCard() {
+  const dialog = useDialog();
+  const [value, setValue] = useState<string>("");
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<{ settings: Record<string, string | null> }>(
+          "/admin/settings"
+        );
+        setValue(res.settings?.review_reward_bits || "");
+      } catch {
+        // silent — non-critical
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
+  const save = async () => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      await dialog.alert({
+        title: "Invalid amount",
+        message: "Enter a non-negative whole number.",
+        tone: "warning",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.put("/admin/settings/review_reward_bits", { value: String(Math.floor(n)) });
+      await dialog.alert({
+        title: "Saved",
+        message: `Customers now earn ${Math.floor(n)} Bits when a review is approved.`,
+        tone: "success",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed";
+      await dialog.alert({ title: "Save failed", message, tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!loaded) return null;
+  return (
+    <div className="card mb-6 p-5">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex-1 min-w-[260px]">
+          <p className="font-script text-base text-[var(--gold-dark)]">Loyalty reward</p>
+          <h3 className="font-display tracking-luxe text-lg uppercase">
+            Bits gifted on review approval
+          </h3>
+          <p className="mt-1 text-xs text-[var(--ink-muted)]">
+            Each approved review credits the customer&apos;s account once. Set to 0 to disable.
+          </p>
+        </div>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-luxe text-[var(--ink-muted)]">
+              Amount (Bits)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              className={`${inputCls} w-32`}
+              placeholder="0"
+            />
+          </div>
+          <button onClick={save} disabled={busy} className={btnPrimary}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
