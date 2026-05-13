@@ -158,10 +158,12 @@ storePackCampaignsRouter.get("/by-code/:code", async (req, res) => {
     );
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
     const slots = await query(
-      `SELECT id, variant_id, size_label, status, customer_id
-         FROM pack_slot
-        WHERE pack_campaign_id = $1 AND deleted_at IS NULL
-        ORDER BY size_label`,
+      `SELECT s.id, s.variant_id, s.size_label, s.status, s.customer_id,
+              v.product_id, v.title AS variant_title
+         FROM pack_slot s
+         JOIN shop_product_variant v ON v.id = s.variant_id
+        WHERE s.pack_campaign_id = $1 AND s.deleted_at IS NULL
+        ORDER BY v.product_id, s.size_label`,
       [campaign.id]
     );
     res.json({ campaign: { ...campaign, slots } });
