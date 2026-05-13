@@ -16,6 +16,7 @@ import { api, mediaUrl } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { useDialog } from "@/components/Dialog";
 import type { ModelDetail, ModelAsset } from "@/lib/types";
+import { POSE_LIBRARY, POSE_CATEGORIES } from "@/lib/poses";
 import { AdminShell } from "@/components/AdminShell";
 import {
   PageHeader,
@@ -38,6 +39,78 @@ export default function ModelDetailPage() {
   const [busy, setBusy] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [vidOpen, setVidOpen] = useState(false);
+  // Controlled state for the image-generation form so "Auto-fill" can populate it.
+  const [genPose, setGenPose] = useState("");
+  const [genAngle, setGenAngle] = useState("");
+  const [genLighting, setGenLighting] = useState("");
+  const [genBackdrop, setGenBackdrop] = useState("");
+  const [genPrompt, setGenPrompt] = useState("");
+  const [poseCategory, setPoseCategory] =
+    useState<(typeof POSE_CATEGORIES)[number]>("Standing");
+  const [suggesting, setSuggesting] = useState(false);
+
+  const resetGenForm = () => {
+    setGenPose("");
+    setGenAngle("");
+    setGenLighting("");
+    setGenBackdrop("");
+    setGenPrompt("");
+  };
+
+  const openGenModal = () => {
+    resetGenForm();
+    setGenOpen(true);
+  };
+
+  // Ask Gemini to fill in any blank field with editorial-grade direction,
+  // honouring whatever the admin has already typed.
+  const autoFillPrompt = async (poseHint?: string) => {
+    if (!model) return;
+    setSuggesting(true);
+    try {
+      const res = await api.post<{
+        pose: string;
+        angle: string;
+        lighting: string;
+        backdrop: string;
+        prompt: string;
+      }>("/admin/ai/suggest-prompt", {
+        context_kind: "model_image",
+        subject: {
+          name: model.name,
+          gender: model.gender,
+          age_range: model.age_range,
+          ethnicity: model.ethnicity,
+          description: model.description,
+          prompt_template: model.prompt_template,
+        },
+        pose_hint: poseHint || genPose || undefined,
+        partial: {
+          pose: genPose,
+          angle: genAngle,
+          lighting: genLighting,
+          backdrop: genBackdrop,
+          prompt: genPrompt,
+        },
+      });
+      // Only overwrite empties so admin edits are preserved.
+      if (!genPose && res.pose) setGenPose(res.pose);
+      if (!genAngle && res.angle) setGenAngle(res.angle);
+      if (!genLighting && res.lighting) setGenLighting(res.lighting);
+      if (!genBackdrop && res.backdrop) setGenBackdrop(res.backdrop);
+      if (res.prompt && !genPrompt) setGenPrompt(res.prompt);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Auto-fill failed";
+      await dialog.alert({ title: "Auto-fill failed", message, tone: "danger" });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const pickPose = async (hint: string) => {
+    setGenPose(hint);
+    await autoFillPrompt(hint);
+  };
 
   const load = async () => {
     if (!id) return;
@@ -84,18 +157,54 @@ export default function ModelDetailPage() {
   const onGenImage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
-    const fd = new FormData(e.currentTarget);
-    const body = {
-      pose: String(fd.get("pose") || "").trim() || undefined,
-      angle: String(fd.get("angle") || "").trim() || undefined,
-      lighting: String(fd.get("lighting") || "").trim() || undefined,
-      backdrop: String(fd.get("backdrop") || "").trim() || undefined,
-      prompt: String(fd.get("prompt") || "").trim() || undefined,
-      use_existing_as_reference: true,
-    };
+    // If all the structured fields are empty, auto-fill them via Gemini
+    // before we send to Nano Banana — gives Greg a beautifully detailed
+    // editorial prompt even when the admin filled in nothing.
+    let pose = genPose.trim();
+    let angle = genAngle.trim();
+    let lighting = genLighting.trim();
+    let backdrop = genBackdrop.trim();
+    let prompt = genPrompt.trim();
+    const allBlank = !pose && !angle && !lighting && !backdrop && !prompt;
+    if (allBlank && model) {
+      try {
+        const s = await api.post<{
+          pose: string;
+          angle: string;
+          lighting: string;
+          backdrop: string;
+          prompt: string;
+        }>("/admin/ai/suggest-prompt", {
+          context_kind: "model_image",
+          subject: {
+            name: model.name,
+            gender: model.gender,
+            age_range: model.age_range,
+            ethnicity: model.ethnicity,
+            description: model.description,
+            prompt_template: model.prompt_template,
+          },
+        });
+        pose = s.pose;
+        angle = s.angle;
+        lighting = s.lighting;
+        backdrop = s.backdrop;
+        prompt = s.prompt;
+      } catch {
+        // Continue with empties — backend will fall back to identity-only prompt.
+      }
+    }
     try {
-      await api.post(`/admin/models/${id}/assets/generate-image`, body);
+      await api.post(`/admin/models/${id}/assets/generate-image`, {
+        pose: pose || undefined,
+        angle: angle || undefined,
+        lighting: lighting || undefined,
+        backdrop: backdrop || undefined,
+        prompt: prompt || undefined,
+        use_existing_as_reference: true,
+      });
       setGenOpen(false);
+      resetGenForm();
       await load();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Generation failed";
@@ -209,7 +318,7 @@ export default function ModelDetailPage() {
           <Upload className="mr-1.5 h-3.5 w-3.5" />
           Upload
         </button>
-        <button onClick={() => setGenOpen(true)} disabled={busy} className={btnPrimary}>
+        <button onClick={openGenModal} disabled={busy} className={btnPrimary}>
           <Sparkles className="mr-1.5 h-3.5 w-3.5" />
           Generate image
         </button>
@@ -324,32 +433,100 @@ export default function ModelDetailPage() {
         <form id="gen-img-form" onSubmit={onGenImage} className="space-y-4">
           <p className="text-xs text-[var(--ink-muted)]">
             Existing image assets are passed as identity references so facial features stay
-            consistent across angles.
+            consistent across angles. Leave everything blank to let AI write the brief for you,
+            or pick a pose below.
           </p>
+
+          {/* Quick pose picker */}
+          <div className="card p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-luxe text-[var(--gold-dark)]">
+                Quick poses
+              </p>
+              <div className="ml-auto flex gap-1">
+                {POSE_CATEGORIES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setPoseCategory(c)}
+                    className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-luxe transition-colors"
+                    style={
+                      poseCategory === c
+                        ? { background: "var(--ink)", color: "white" }
+                        : { background: "transparent", color: "var(--ink-muted)", border: "1px solid var(--line)" }
+                    }
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {POSE_LIBRARY.filter((p) => p.category === poseCategory).map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => pickPose(p.hint)}
+                  disabled={suggesting || busy}
+                  className="rounded-sm px-2.5 py-1 text-[11px] transition-colors hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
+                  style={{ border: "1px solid var(--line)" }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => autoFillPrompt()}
+              disabled={suggesting || busy}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs text-[var(--gold-dark)] underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {suggesting ? "Asking Gemini…" : "Auto-fill all fields"}
+            </button>
+          </div>
+
           <Field label="Pose">
-            <input name="pose" className={inputCls} placeholder="confident full-body stance, hand on hip" />
+            <input
+              value={genPose}
+              onChange={(e) => setGenPose(e.target.value)}
+              className={inputCls}
+              placeholder="confident full-body stance, hand on hip"
+            />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Camera angle">
-              <input name="angle" className={inputCls} placeholder="three-quarter, eye level" />
+              <input
+                value={genAngle}
+                onChange={(e) => setGenAngle(e.target.value)}
+                className={inputCls}
+                placeholder="three-quarter, eye level"
+              />
             </Field>
             <Field label="Lighting">
-              <input name="lighting" className={inputCls} placeholder="warm golden hour, soft side light" />
+              <input
+                value={genLighting}
+                onChange={(e) => setGenLighting(e.target.value)}
+                className={inputCls}
+                placeholder="warm golden hour, soft side light"
+              />
             </Field>
           </div>
           <Field label="Backdrop / scene">
             <input
-              name="backdrop"
+              value={genBackdrop}
+              onChange={(e) => setGenBackdrop(e.target.value)}
               className={inputCls}
               placeholder="sunlit Cape Town terrace overlooking the Atlantic"
             />
           </Field>
           <Field label="Extra direction (optional)">
             <textarea
-              name="prompt"
-              rows={3}
+              value={genPrompt}
+              onChange={(e) => setGenPrompt(e.target.value)}
+              rows={4}
               className={inputCls}
-              placeholder="Add anything else specific to this shot…"
+              placeholder="Click Auto-fill above or add your own creative direction here…"
             />
           </Field>
         </form>

@@ -1232,12 +1232,49 @@ function MediaTab({ productId, productTitle }: { productId: string; productTitle
     e.preventDefault();
     setBusy(true);
     const fd = new FormData(e.currentTarget);
-    const body = {
+    let body: Record<string, string | undefined> = {
       model_id: String(fd.get("model_id") || "") || undefined,
       angle: String(fd.get("angle") || "").trim() || undefined,
       scene: String(fd.get("scene") || "").trim() || undefined,
       prompt: String(fd.get("prompt") || "").trim() || undefined,
     };
+    // If the admin gave us nothing creative, ask Gemini for an editorial-grade
+    // brief grounded in the chosen model + product.
+    if (!body.angle && !body.scene && !body.prompt) {
+      try {
+        const modelInfo = body.model_id
+          ? models.find((m) => m.id === body.model_id)
+          : undefined;
+        const s = await api.post<{
+          pose: string;
+          angle: string;
+          backdrop: string;
+          lighting: string;
+          prompt: string;
+        }>("/admin/ai/suggest-prompt", {
+          context_kind: "product_image",
+          subject: modelInfo
+            ? {
+                name: modelInfo.name,
+                gender: modelInfo.gender,
+                age_range: modelInfo.age_range,
+                ethnicity: modelInfo.ethnicity,
+                description: modelInfo.description,
+                prompt_template: modelInfo.prompt_template,
+              }
+            : undefined,
+          product: { title: productTitle },
+        });
+        body = {
+          ...body,
+          angle: s.angle || undefined,
+          scene: s.backdrop || undefined,
+          prompt: s.prompt || undefined,
+        };
+      } catch {
+        // Fall through and let the backend handle it with what we have.
+      }
+    }
     try {
       await api.post(`/admin/products/${productId}/media/generate-image`, body);
       setGenOpen(false);
