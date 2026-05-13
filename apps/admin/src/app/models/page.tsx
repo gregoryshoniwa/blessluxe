@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, ImageIcon, Sparkles, Upload, X } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, mediaUrl } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { AdminShell } from "@/components/AdminShell";
 import { useDialog } from "@/components/Dialog";
@@ -143,8 +143,8 @@ export default function ModelsPage() {
                   m.primary_media_type === "video" ? (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
                     <video
-                      src={m.primary_media_url}
-                      poster={m.primary_thumbnail_url || undefined}
+                      src={mediaUrl(m.primary_media_url)}
+                      poster={mediaUrl(m.primary_thumbnail_url) || undefined}
                       muted
                       loop
                       className="w-full h-full object-cover"
@@ -152,7 +152,7 @@ export default function ModelsPage() {
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={m.primary_thumbnail_url || m.primary_media_url}
+                      src={mediaUrl(m.primary_thumbnail_url || m.primary_media_url)}
                       alt={m.name}
                       className="w-full h-full object-cover"
                     />

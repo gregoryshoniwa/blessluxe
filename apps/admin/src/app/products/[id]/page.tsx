@@ -12,7 +12,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, mediaUrl } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import type {
   Product,
@@ -1343,16 +1343,16 @@ function MediaTab({ productId, productTitle }: { productId: string; productTitle
                   m.media_type === "video" ? (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
                     <video
-                      src={m.media_url}
+                      src={mediaUrl(m.media_url)}
                       controls
                       muted
-                      poster={m.thumbnail_url || undefined}
+                      poster={mediaUrl(m.thumbnail_url) || undefined}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={m.thumbnail_url || m.media_url}
+                      src={mediaUrl(m.thumbnail_url || m.media_url)}
                       alt={m.alt_text || ""}
                       className="w-full h-full object-cover"
                     />

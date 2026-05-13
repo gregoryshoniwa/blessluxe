@@ -12,7 +12,7 @@ import {
   Trash2,
   RefreshCcw,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, mediaUrl } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { useDialog } from "@/components/Dialog";
 import type { ModelDetail, ModelAsset } from "@/lib/types";
@@ -240,15 +240,15 @@ export default function ModelDetailPage() {
                   a.media_type === "video" ? (
                     // eslint-disable-next-line jsx-a11y/media-has-caption
                     <video
-                      src={a.media_url}
+                      src={mediaUrl(a.media_url)}
                       controls
-                      poster={a.thumbnail_url || undefined}
+                      poster={mediaUrl(a.thumbnail_url) || undefined}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={a.thumbnail_url || a.media_url}
+                      src={mediaUrl(a.thumbnail_url || a.media_url)}
                       alt={a.caption || ""}
                       className="w-full h-full object-cover"
                     />

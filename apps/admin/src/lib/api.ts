@@ -4,6 +4,20 @@ export const SHOP_BACKEND_URL =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_SHOP_BACKEND) ||
   "http://localhost:9001";
 
+/**
+ * Resolve a backend-relative media URL (e.g. "/uploads/foo.png") into an
+ * absolute URL the browser can load. Absolute URLs and data URIs pass
+ * through unchanged.
+ */
+export function mediaUrl(url: string | null | undefined): string {
+  const input = String(url || "").trim();
+  if (!input) return "";
+  if (input.startsWith("/")) {
+    return `${SHOP_BACKEND_URL.replace(/\/+$/, "")}${input}`;
+  }
+  return input;
+}
+
 const TOKEN_KEY = "blessluxe_admin_token";
 
 export function getToken(): string | null {
