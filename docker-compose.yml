@@ -67,6 +67,10 @@ services:
       dockerfile: apps/storefront/Dockerfile
       args:
         NEXT_PUBLIC_COMMERCE_BACKEND: ${NEXT_PUBLIC_COMMERCE_BACKEND:-http://localhost:9001}
+        # Legacy alias still read by ImageGallery, ProductCard, ProductGrid, etc.
+        # Fall back to NEXT_PUBLIC_COMMERCE_BACKEND so the URL normalizers
+        # can prefix /uploads/... paths correctly.
+        NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-${NEXT_PUBLIC_COMMERCE_BACKEND:-http://localhost:9001}}
         NEXT_PUBLIC_GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
     restart: unless-stopped
     ports:

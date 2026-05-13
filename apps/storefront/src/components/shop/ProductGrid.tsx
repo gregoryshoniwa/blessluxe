@@ -49,15 +49,27 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
     const input = String(value || "").trim();
     if (!input) return null;
 
-    const publicBase = (process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "").replace(/\/+$/, "");
+    // Read both env vars — Docker builds pass NEXT_PUBLIC_COMMERCE_BACKEND
+    // but the legacy NEXT_PUBLIC_MEDUSA_BACKEND_URL alias may be unset.
+    const publicBase = (
+      process.env.NEXT_PUBLIC_COMMERCE_BACKEND ||
+      process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ||
+      ""
+    ).replace(/\/+$/, "");
     if (input.startsWith("/")) {
       return publicBase ? `${publicBase}${input}` : input;
     }
-    if (publicBase && input.startsWith("http://medusa:9000")) {
-      return `${publicBase}${input.slice("http://medusa:9000".length)}`;
-    }
-    if (publicBase && input.startsWith("https://medusa:9000")) {
-      return `${publicBase}${input.slice("https://medusa:9000".length)}`;
+    // Strip any internal compose-network host so the browser can resolve.
+    const stripPrefixes = [
+      "http://shop:9001",
+      "https://shop:9001",
+      "http://medusa:9000",
+      "https://medusa:9000",
+    ];
+    for (const prefix of stripPrefixes) {
+      if (publicBase && input.startsWith(prefix)) {
+        return `${publicBase}${input.slice(prefix.length)}`;
+      }
     }
     return input;
   };
