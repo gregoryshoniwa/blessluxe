@@ -10,7 +10,7 @@
 # ─────────────────────────────────────────────────────────────────────
 
 name: blessluxe
-region: nyc
+region: blr
 
 # ─── Managed PostgreSQL ──────────────────────────────────────────────
 # pgvector is available on DO Managed Postgres 16. The shop migration
