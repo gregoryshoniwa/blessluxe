@@ -190,8 +190,15 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
       description: p.description || null,
       subtitle: p.subtitle || null,
       thumbnail:
-        media.find((m) => m.is_primary)?.thumbnail_url ||
+        // 1. Primary IMAGE: use its URL directly
         media.find((m) => m.is_primary && m.media_type === "image")?.url ||
+        // 2. Primary VIDEO with a poster frame
+        media.find((m) => m.is_primary && m.thumbnail_url)?.thumbnail_url ||
+        // 3. Any image media as the card thumbnail
+        media.find((m) => m.media_type === "image")?.url ||
+        // 4. Any media's explicit thumbnail_url
+        media.find((m) => m.thumbnail_url)?.thumbnail_url ||
+        // 5. Legacy fallbacks
         (p.thumbnail as string) ||
         images[0]?.url ||
         null,
