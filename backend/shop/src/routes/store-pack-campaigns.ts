@@ -60,7 +60,7 @@ storePackCampaignsRouter.post("/host", async (req, res) => {
         WHERE v.product_id IN (
           SELECT product_id FROM pack_definition_product WHERE pack_definition_id = $1
           UNION
-          SELECT $2 WHERE $2 IS NOT NULL
+          SELECT $2::text WHERE $2::text IS NOT NULL
         )
         GROUP BY v.id`,
       [def.id, def.product_id]
