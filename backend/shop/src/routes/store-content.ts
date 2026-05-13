@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from "../db/pool.ts";
+import { query, queryOne } from "../db/pool.ts";
 
 export const storeContentRouter = Router();
 
@@ -100,6 +100,87 @@ storeContentRouter.get("/access", async (req, res) => {
   } catch (err) {
     console.error("[store access]", err);
     res.json({ allowed: true, country: null, reason: "error" });
+  }
+});
+
+// Published pack catalogue (storefront /shop/packs).
+storeContentRouter.get("/packs", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const params: unknown[] = [];
+    const where: string[] = [`d.deleted_at IS NULL`, `d.status = 'published'`];
+    if (q) {
+      params.push(`%${q}%`);
+      where.push(`(d.title ILIKE $${params.length} OR d.description ILIKE $${params.length})`);
+    }
+    const rows = await query(
+      `SELECT d.id, d.title, d.handle, d.description, d.pack_kind,
+              d.created_at,
+              (SELECT json_agg(json_build_object(
+                  'id', p.id,
+                  'title', p.title,
+                  'handle', p.handle,
+                  'thumbnail', p.thumbnail
+                ) ORDER BY dp.position, dp.created_at)
+                 FROM pack_definition_product dp
+                 JOIN shop_product p ON p.id = dp.product_id
+                WHERE dp.pack_definition_id = d.id
+              ) AS products
+         FROM pack_definition d
+        WHERE ${where.join(" AND ")}
+        ORDER BY d.created_at DESC
+        LIMIT 100`,
+      params
+    );
+    res.json({ packs: rows });
+  } catch (err) {
+    console.error("[store packs list]", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// Pack detail by handle (used by /shop/packs/[handle]).
+storeContentRouter.get("/packs/:handle", async (req, res) => {
+  try {
+    const handle = String(req.params.handle || "").trim().toLowerCase();
+    const def = await queryOne(
+      `SELECT id, title, handle, description, pack_kind, status, created_at
+         FROM pack_definition
+        WHERE handle = $1 AND deleted_at IS NULL AND status = 'published'`,
+      [handle]
+    );
+    if (!def) return res.status(404).json({ error: "Pack not found" });
+
+    // Pull every product in the pack plus their variants + prices so the
+    // storefront can render slot picks without an extra round-trip per item.
+    const products = await query(
+      `SELECT p.id, p.title, p.handle, p.thumbnail, p.description, dp.position,
+              (SELECT json_agg(json_build_object(
+                  'id', v.id,
+                  'title', v.title,
+                  'sku', v.sku,
+                  'inventory_quantity', v.inventory_quantity,
+                  'prices', (
+                    SELECT json_agg(json_build_object(
+                      'currency_code', vp.currency_code,
+                      'amount', vp.amount
+                    ))
+                    FROM shop_variant_price vp WHERE vp.variant_id = v.id
+                  )
+                ) ORDER BY v.title)
+                 FROM shop_product_variant v
+                WHERE v.product_id = p.id
+              ) AS variants
+         FROM pack_definition_product dp
+         JOIN shop_product p ON p.id = dp.product_id
+        WHERE dp.pack_definition_id = $1
+        ORDER BY dp.position, dp.created_at`,
+      [def.id]
+    );
+    res.json({ pack: { ...def, products } });
+  } catch (err) {
+    console.error("[store pack detail]", err);
+    res.status(500).json({ error: "Failed" });
   }
 });
 

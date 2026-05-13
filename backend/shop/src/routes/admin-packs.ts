@@ -68,11 +68,23 @@ adminPacksRouter.get("/packs/definitions", async (req, res) => {
     params.push(limit, offset);
 
     const rows = await query(
-      `SELECT d.id, d.title, d.handle, d.description, d.status, d.product_id, d.metadata,
-              d.created_at, d.updated_at,
+      `SELECT d.id, d.title, d.handle, d.description, d.status, d.product_id,
+              d.pack_kind, d.metadata, d.created_at, d.updated_at,
               p.title AS product_title, p.thumbnail AS product_thumbnail,
               (SELECT count(*)::int FROM pack_campaign c
-               WHERE c.pack_definition_id = d.id AND c.deleted_at IS NULL) AS campaign_count
+               WHERE c.pack_definition_id = d.id AND c.deleted_at IS NULL) AS campaign_count,
+              (SELECT count(*)::int FROM pack_definition_product dp
+               WHERE dp.pack_definition_id = d.id) AS product_count,
+              (SELECT json_agg(json_build_object(
+                  'id', p2.id,
+                  'title', p2.title,
+                  'handle', p2.handle,
+                  'thumbnail', p2.thumbnail
+                ) ORDER BY dp.position, dp.created_at)
+                 FROM pack_definition_product dp
+                 JOIN shop_product p2 ON p2.id = dp.product_id
+                WHERE dp.pack_definition_id = d.id
+              ) AS products
        FROM pack_definition d
        LEFT JOIN shop_product p ON p.id = d.product_id
        ${where}
@@ -137,51 +149,92 @@ adminPacksRouter.patch("/packs/definitions/:id", async (req, res) => {
 adminPacksRouter.post("/packs/definitions", async (req, res) => {
   try {
     const b = req.body as {
-      product_id: string;
+      // Legacy single-product field, still honoured.
+      product_id?: string;
+      // New multi-product field — wins when present.
+      product_ids?: string[];
+      pack_kind?: "single" | "merge";
       title: string;
       handle?: string;
       description?: string;
       status?: "draft" | "published";
     };
-    if (!b.product_id?.trim()) {
-      return res.status(400).json({ error: "product_id required" });
-    }
-    if (!b.title?.trim()) {
-      return res.status(400).json({ error: "title required" });
-    }
-    // Confirm the product exists and has variants — packs are useless without them.
-    const product = await queryOne(
-      `SELECT id, handle, title FROM shop_product WHERE id = $1`,
-      [b.product_id]
+    if (!b.title?.trim()) return res.status(400).json({ error: "title required" });
+
+    const kind = b.pack_kind === "merge" ? "merge" : "single";
+    const ids = Array.from(
+      new Set(
+        (b.product_ids && b.product_ids.length > 0
+          ? b.product_ids
+          : b.product_id
+            ? [b.product_id]
+            : []
+        )
+          .map((s) => String(s || "").trim())
+          .filter(Boolean)
+      )
     );
-    if (!product) return res.status(400).json({ error: "Product not found" });
-    const variantCount = await queryOne(
-      `SELECT count(*)::int AS c FROM shop_product_variant WHERE product_id = $1`,
-      [b.product_id]
+    if (ids.length === 0) {
+      return res.status(400).json({ error: "Select at least one product" });
+    }
+    if (kind === "single" && ids.length > 1) {
+      return res
+        .status(400)
+        .json({ error: "Single packs must use exactly one product" });
+    }
+
+    // Confirm every product exists AND has at least one variant.
+    const products = await query(
+      `SELECT p.id, p.handle, p.title,
+              (SELECT count(*)::int FROM shop_product_variant v WHERE v.product_id = p.id) AS variant_count
+         FROM shop_product p
+        WHERE p.id = ANY($1)`,
+      [ids]
     );
-    if (Number(variantCount?.c ?? 0) === 0) {
+    if (products.length !== ids.length) {
+      return res.status(400).json({ error: "One or more products not found" });
+    }
+    const noVariants = products.filter((p) => Number(p.variant_count) === 0);
+    if (noVariants.length > 0) {
       return res.status(400).json({
-        error: "Add at least one product variant before creating a pack definition",
+        error: `These products have no variants yet: ${noVariants
+          .map((p) => p.title)
+          .join(", ")}`,
       });
     }
-    const slug = (b.handle?.trim() || `${String(product.handle)}-pack`)
+
+    const slug = (b.handle?.trim() || `${String(products[0].handle)}-pack`)
       .toLowerCase()
       .replace(/[^a-z0-9-]+/g, "-")
       .replace(/(^-|-$)/g, "");
     const id = newId("packdef");
     const status = b.status === "published" ? "published" : "draft";
+
+    // Single packs also populate the legacy product_id column for backward
+    // compat with consumers that haven't migrated to the join table yet.
+    const legacyProductId = kind === "single" ? ids[0] : null;
+
     await execute(
-      `INSERT INTO pack_definition (id, product_id, title, handle, description, status)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
+      `INSERT INTO pack_definition
+        (id, product_id, pack_kind, title, handle, description, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [
         id,
-        b.product_id,
+        legacyProductId,
+        kind,
         b.title.trim(),
         slug,
         b.description?.trim() || null,
         status,
       ]
     );
+    for (let i = 0; i < ids.length; i++) {
+      await execute(
+        `INSERT INTO pack_definition_product (id, pack_definition_id, product_id, position)
+         VALUES ($1, $2, $3, $4)`,
+        [newId("pdp"), id, ids[i], i]
+      );
+    }
     const row = await queryOne(`SELECT * FROM pack_definition WHERE id = $1`, [id]);
     res.status(201).json({ definition: row });
   } catch (err: unknown) {
@@ -225,17 +278,28 @@ adminPacksRouter.post("/packs/definitions/:id/launch", async (req, res) => {
     if (def.status !== "published") {
       return res.status(400).json({ error: "Publish the definition before launching" });
     }
+    // Pull every variant of every product linked to this definition. For
+    // single packs the join table has one row; merge packs may have many.
+    // Falls back to the legacy product_id column if no rows exist yet.
     const variants = await query(
-      `SELECT v.id, v.title, vov.value AS size_value
+      `SELECT v.id, v.title, p.title AS product_title, v.product_id,
+              vov.value AS size_value
          FROM shop_product_variant v
+         JOIN shop_product p ON p.id = v.product_id
          LEFT JOIN shop_variant_option_value vov ON vov.variant_id = v.id
          LEFT JOIN shop_product_option_value pov ON pov.id = vov.option_value_id
-         LEFT JOIN shop_product_option po ON po.id = pov.option_id AND LOWER(po.title) IN ('size', 'sizes')
-        WHERE v.product_id = $1`,
-      [def.product_id]
+         LEFT JOIN shop_product_option po
+           ON po.id = pov.option_id AND LOWER(po.title) IN ('size', 'sizes')
+        WHERE v.product_id IN (
+          SELECT product_id FROM pack_definition_product WHERE pack_definition_id = $1
+          UNION
+          SELECT $2 WHERE $2 IS NOT NULL
+        )
+        ORDER BY p.title, v.title`,
+      [def.id, def.product_id]
     );
     if (variants.length === 0) {
-      return res.status(400).json({ error: "Product has no variants" });
+      return res.status(400).json({ error: "Pack products have no variants" });
     }
     const campaignId = newId("packcamp");
     const publicCode = `BLP-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random()

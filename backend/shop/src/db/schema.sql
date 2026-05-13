@@ -619,3 +619,34 @@ ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES s
 ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS host_kind TEXT NOT NULL DEFAULT 'affiliate' CHECK (host_kind IN ('affiliate', 'customer', 'admin'));
 ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS title TEXT;
 CREATE INDEX IF NOT EXISTS idx_pack_campaign_customer_id ON pack_campaign(customer_id) WHERE deleted_at IS NULL;
+
+-- ─── Pack kind + multi-product packs ────────────────────────────────────
+-- 'single' = one product, slots = its variants (legacy default).
+-- 'merge'  = many products, slots = union of all their variants.
+ALTER TABLE pack_definition ADD COLUMN IF NOT EXISTS pack_kind TEXT NOT NULL DEFAULT 'single'
+  CHECK (pack_kind IN ('single', 'merge'));
+ALTER TABLE pack_definition ALTER COLUMN product_id DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS pack_definition_product (
+  id                 TEXT PRIMARY KEY,
+  pack_definition_id TEXT NOT NULL REFERENCES pack_definition(id) ON DELETE CASCADE,
+  product_id         TEXT NOT NULL REFERENCES shop_product(id)   ON DELETE CASCADE,
+  position           INT NOT NULL DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pack_def_product_lookup
+  ON pack_definition_product(pack_definition_id, position);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pack_def_product_uniq
+  ON pack_definition_product(pack_definition_id, product_id);
+
+-- Backfill: every existing single pack with a still-valid product gets a
+-- join-table row. Orphaned product references (deleted product) are skipped
+-- so the migration is safe to re-run.
+INSERT INTO pack_definition_product (id, pack_definition_id, product_id, position)
+SELECT 'pdp_' || md5(d.id || d.product_id), d.id, d.product_id, 0
+  FROM pack_definition d
+  JOIN shop_product p ON p.id = d.product_id
+ WHERE d.product_id IS NOT NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM pack_definition_product j WHERE j.pack_definition_id = d.id
+   );

@@ -94,6 +94,9 @@ export default function PacksPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [createKind, setCreateKind] = useState<"single" | "merge">("single");
+  const [createSelectedProducts, setCreateSelectedProducts] = useState<string[]>([]);
+  const [createProductSearch, setCreateProductSearch] = useState("");
 
   const [camps, setCamps] = useState<PackCampaign[]>([]);
   const [campsCount, setCampsCount] = useState(0);
@@ -220,8 +223,22 @@ export default function PacksPage() {
     e.preventDefault();
     setCreateBusy(true);
     const fd = new FormData(e.currentTarget);
+    const kind = (String(fd.get("pack_kind") || "single") === "merge"
+      ? "merge"
+      : "single") as "single" | "merge";
+    const productIds = createSelectedProducts;
+    if (productIds.length === 0) {
+      setCreateBusy(false);
+      await dialog.alert({
+        title: "Pick at least one product",
+        message: "A pack needs at least one product. Merge packs allow multiple.",
+        tone: "warning",
+      });
+      return;
+    }
     const body = {
-      product_id: String(fd.get("product_id") || "").trim(),
+      pack_kind: kind,
+      product_ids: productIds,
       title: String(fd.get("title") || "").trim(),
       handle: String(fd.get("handle") || "").trim() || undefined,
       description: String(fd.get("description") || "").trim() || undefined,
@@ -230,6 +247,8 @@ export default function PacksPage() {
     try {
       await api.post("/admin/packs/definitions", body);
       setCreateOpen(false);
+      setCreateSelectedProducts([]);
+      setCreateKind("single");
       // Force a refetch via state bump
       setDefsPage((p) => p);
       setDefsSearch((s) => s);
@@ -632,22 +651,126 @@ export default function PacksPage() {
         }
       >
         <form id="pack-create-form" onSubmit={onCreateDefinition} className="space-y-4">
-          <p className="text-xs text-[var(--ink-muted)]">
-            A pack groups one product into a multi-customer drop. Each variant of the
-            chosen product becomes a slot customers can claim.
-          </p>
-          <Field label="Product" required hint="Only products with at least one variant can become packs.">
-            <select name="product_id" required className="select" defaultValue="">
-              <option value="" disabled>
-                — pick a product —
-              </option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title} · {p.handle}
-                </option>
-              ))}
-            </select>
+          <Field label="Pack kind" required>
+            <div className="grid grid-cols-2 gap-2">
+              <label
+                className={`cursor-pointer rounded-sm border px-4 py-3 transition-colors ${
+                  createKind === "single"
+                    ? "border-[var(--gold)] bg-[var(--cream)]"
+                    : "border-[var(--line)] hover:bg-[var(--cream-dark)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="pack_kind"
+                  value="single"
+                  className="hidden"
+                  checked={createKind === "single"}
+                  onChange={() => {
+                    setCreateKind("single");
+                    setCreateSelectedProducts((cur) => cur.slice(0, 1));
+                  }}
+                />
+                <p className="font-semibold text-sm">Single pack</p>
+                <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
+                  One product, every variant becomes a slot (e.g. all sizes of one shirt).
+                </p>
+              </label>
+              <label
+                className={`cursor-pointer rounded-sm border px-4 py-3 transition-colors ${
+                  createKind === "merge"
+                    ? "border-[var(--gold)] bg-[var(--cream)]"
+                    : "border-[var(--line)] hover:bg-[var(--cream-dark)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="pack_kind"
+                  value="merge"
+                  className="hidden"
+                  checked={createKind === "merge"}
+                  onChange={() => setCreateKind("merge")}
+                />
+                <p className="font-semibold text-sm">Merge pack</p>
+                <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
+                  Many products together (e.g. a shirt + trousers + shoes outfit).
+                </p>
+              </label>
+            </div>
           </Field>
+
+          <Field
+            label={createKind === "merge" ? "Products" : "Product"}
+            required
+            hint={
+              createKind === "merge"
+                ? "Add as many products as you want. Each variant becomes a slot customers can claim."
+                : "Only products with at least one variant can become packs."
+            }
+          >
+            <input
+              type="search"
+              value={createProductSearch}
+              onChange={(e) => setCreateProductSearch(e.target.value)}
+              placeholder="Search products…"
+              className={`${inputCls} mb-2`}
+            />
+            <div
+              className="max-h-56 overflow-y-auto rounded-sm bg-white"
+              style={{ border: "1px solid var(--line)" }}
+            >
+              {products
+                .filter((p) => {
+                  const q = createProductSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    p.title.toLowerCase().includes(q) ||
+                    p.handle.toLowerCase().includes(q)
+                  );
+                })
+                .map((p) => {
+                  const checked = createSelectedProducts.includes(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--cream-dark)]"
+                      style={{ borderBottom: "1px solid var(--line-soft)" }}
+                    >
+                      <input
+                        type={createKind === "merge" ? "checkbox" : "radio"}
+                        name="product_pick"
+                        checked={checked}
+                        onChange={() => {
+                          if (createKind === "single") {
+                            setCreateSelectedProducts([p.id]);
+                          } else {
+                            setCreateSelectedProducts((cur) =>
+                              cur.includes(p.id)
+                                ? cur.filter((x) => x !== p.id)
+                                : [...cur, p.id]
+                            );
+                          }
+                        }}
+                        className="h-4 w-4 accent-[var(--gold-dark)]"
+                      />
+                      <span className="text-sm flex-1 truncate">{p.title}</span>
+                      <span className="font-mono text-[10px] text-[var(--ink-muted)]">
+                        {p.handle}
+                      </span>
+                    </label>
+                  );
+                })}
+              {products.length === 0 && (
+                <p className="px-3 py-3 text-xs italic text-[var(--ink-muted)]">
+                  No products loaded.
+                </p>
+              )}
+            </div>
+            <p className="mt-1.5 text-[10px] uppercase tracking-luxe text-[var(--gold-dark)]">
+              {createSelectedProducts.length} selected
+            </p>
+          </Field>
+
           <Field label="Pack title" required>
             <input
               name="title"
