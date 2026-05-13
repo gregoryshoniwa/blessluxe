@@ -47,6 +47,10 @@ services:
       PUBLISHABLE_API_KEY: ${SHOP_PUBLISHABLE_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET:-blessluxe-shop-secret-change-me}
       UPLOAD_DIR: /app/backend/shop/uploads
+      # AI generation (Nano Banana images + Veo 3 video)
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+      GOOGLE_NANO_BANANA_MODEL: ${GOOGLE_NANO_BANANA_MODEL:-}
+      GOOGLE_VEO_MODEL: ${GOOGLE_VEO_MODEL:-}
     volumes:
       - shop_uploads:/app/backend/shop/uploads
     healthcheck:
