@@ -527,6 +527,68 @@ CREATE TABLE IF NOT EXISTS shop_faq (
 );
 CREATE INDEX IF NOT EXISTS idx_shop_faq_active ON shop_faq(is_active, sort_order);
 
+-- ─── AI Models / Avatars (admin-managed virtual photoshoot subjects) ────
+CREATE TABLE IF NOT EXISTS shop_model (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  description     TEXT,
+  gender          TEXT,                                     -- woman | man | nonbinary | child
+  age_range       TEXT,                                     -- e.g. "20–30"
+  ethnicity       TEXT,                                     -- short freeform descriptor
+  prompt_template TEXT,                                     -- base identity prompt for AI generation
+  primary_asset_id TEXT,                                    -- FK set after first asset is created
+  is_active       BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_model_active ON shop_model(is_active, created_at);
+
+CREATE TABLE IF NOT EXISTS shop_model_asset (
+  id              TEXT PRIMARY KEY,
+  model_id        TEXT NOT NULL REFERENCES shop_model(id) ON DELETE CASCADE,
+  source_kind     TEXT NOT NULL DEFAULT 'upload',           -- upload | generated_image | generated_video
+  media_type      TEXT NOT NULL DEFAULT 'image',            -- image | video | gif
+  media_url       TEXT NOT NULL,
+  thumbnail_url   TEXT,
+  caption         TEXT,                                     -- e.g. "Front, neutral light"
+  prompt          TEXT,                                     -- if generated, the prompt used
+  generation_meta JSONB,                                    -- model name, durations, etc.
+  status          TEXT NOT NULL DEFAULT 'ready',            -- pending | ready | failed
+  status_message  TEXT,
+  operation_name  TEXT,                                     -- Veo long-running operation handle
+  position        INT NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_model_asset_model ON shop_model_asset(model_id, position);
+
+-- ─── Product media (image | video | gif), primary-flag aware ─────────────
+CREATE TABLE IF NOT EXISTS shop_product_media (
+  id              TEXT PRIMARY KEY,
+  product_id      TEXT NOT NULL REFERENCES shop_product(id) ON DELETE CASCADE,
+  media_type      TEXT NOT NULL DEFAULT 'image',            -- image | video | gif
+  media_url       TEXT NOT NULL,
+  thumbnail_url   TEXT,                                     -- preview frame for videos
+  alt_text        TEXT,
+  source_kind     TEXT NOT NULL DEFAULT 'upload',           -- upload | generated_image | generated_video
+  source_model_id TEXT REFERENCES shop_model(id) ON DELETE SET NULL,
+  prompt          TEXT,
+  generation_meta JSONB,
+  status          TEXT NOT NULL DEFAULT 'ready',            -- pending | ready | failed
+  status_message  TEXT,
+  operation_name  TEXT,
+  is_primary      BOOLEAN NOT NULL DEFAULT false,
+  position        INT NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_product_media_product ON shop_product_media(product_id, position);
+CREATE INDEX IF NOT EXISTS idx_shop_product_media_primary ON shop_product_media(product_id, is_primary);
+
+-- Only one primary media per product (partial unique index)
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_shop_product_media_primary
+  ON shop_product_media(product_id) WHERE is_primary = true;
+
 -- ─── Hero / announcement slides (image, video, gif) ──────────────────────
 CREATE TABLE IF NOT EXISTS shop_announcement (
   id            TEXT PRIMARY KEY,

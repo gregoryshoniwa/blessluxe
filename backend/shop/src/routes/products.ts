@@ -12,6 +12,7 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
 
   const [
     imageRows,
+    mediaRows,
     catRows,
     catalogueRows,
     tagRows,
@@ -23,6 +24,14 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
   ] = await Promise.all([
       query(
         `SELECT id, product_id, url, rank FROM shop_product_image WHERE product_id = ANY($1) ORDER BY rank`,
+        [ids]
+      ),
+      query(
+        `SELECT id, product_id, media_type, media_url, thumbnail_url, alt_text,
+                is_primary, position, status
+         FROM shop_product_media
+         WHERE product_id = ANY($1) AND status = 'ready'
+         ORDER BY is_primary DESC, position ASC, created_at ASC`,
         [ids]
       ),
       query(
@@ -85,6 +94,7 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
     ]);
 
   const imagesByProduct = groupBy(imageRows, "product_id");
+  const mediaByProduct = groupBy(mediaRows, "product_id");
   const catsByProduct = groupBy(catRows, "product_id");
   const cataloguesByProduct = groupBy(catalogueRows, "product_id");
   const tagsByProduct = groupBy(tagRows, "product_id");
@@ -99,6 +109,15 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
     const images = (imagesByProduct[pid] || []).map((i) => ({
       id: i.id,
       url: i.url,
+    }));
+    const media = (mediaByProduct[pid] || []).map((m) => ({
+      id: String(m.id),
+      media_type: String(m.media_type || "image"),
+      url: String(m.media_url || ""),
+      thumbnail_url: (m.thumbnail_url as string) || null,
+      alt_text: (m.alt_text as string) || null,
+      is_primary: Boolean(m.is_primary),
+      position: Number(m.position ?? 0),
     }));
     const categories = (catsByProduct[pid] || []).map((c) => ({
       id: c.id,
@@ -170,10 +189,16 @@ async function enrichProducts(productRows: ProductRow[], regionId?: string) {
       handle: p.handle,
       description: p.description || null,
       subtitle: p.subtitle || null,
-      thumbnail: (p.thumbnail as string) || images[0]?.url || null,
+      thumbnail:
+        media.find((m) => m.is_primary)?.thumbnail_url ||
+        media.find((m) => m.is_primary && m.media_type === "image")?.url ||
+        (p.thumbnail as string) ||
+        images[0]?.url ||
+        null,
       status: p.status,
       metadata: p.metadata || null,
       images,
+      media,
       categories,
       catalogues,
       tags,

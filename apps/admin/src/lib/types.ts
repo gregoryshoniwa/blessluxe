@@ -339,3 +339,61 @@ export interface PackageDetail {
   items: PackageDetailItem[];
   events: PackageEvent[];
 }
+
+// ─── AI Models / Avatars ──────────────────────────────────────────────
+export interface ModelAsset {
+  id: string;
+  model_id: string;
+  source_kind: "upload" | "generated_image" | "generated_video";
+  media_type: "image" | "video" | "gif";
+  media_url: string;
+  thumbnail_url: string | null;
+  caption: string | null;
+  prompt: string | null;
+  status: "pending" | "ready" | "failed";
+  status_message: string | null;
+  operation_name: string | null;
+  position: number;
+  created_at: string;
+}
+
+export interface ModelRow {
+  id: string;
+  name: string;
+  description: string | null;
+  gender: string | null;
+  age_range: string | null;
+  ethnicity: string | null;
+  prompt_template: string | null;
+  primary_asset_id: string | null;
+  primary_media_url: string | null;
+  primary_thumbnail_url: string | null;
+  primary_media_type: string | null;
+  asset_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ModelDetail extends Omit<ModelRow,
+  "primary_media_url" | "primary_thumbnail_url" | "primary_media_type" | "asset_count"> {
+  assets: ModelAsset[];
+}
+
+// ─── Product Media ────────────────────────────────────────────────────
+export interface ProductMedia {
+  id: string;
+  product_id: string;
+  media_type: "image" | "video" | "gif";
+  media_url: string;
+  thumbnail_url: string | null;
+  alt_text: string | null;
+  source_kind: "upload" | "generated_image" | "generated_video";
+  source_model_id: string | null;
+  prompt: string | null;
+  status: "pending" | "ready" | "failed";
+  status_message: string | null;
+  operation_name: string | null;
+  is_primary: boolean;
+  position: number;
+  created_at: string;
+}

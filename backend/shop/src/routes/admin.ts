@@ -19,6 +19,8 @@ import { adminPackagesRouter } from "./admin-packages.ts";
 import { adminSettingsRouter } from "./admin-settings.ts";
 import { adminFaqRouter } from "./admin-faq.ts";
 import { adminAnnouncementsRouter } from "./admin-announcements.ts";
+import { adminModelsRouter } from "./admin-models.ts";
+import { adminProductMediaRouter } from "./admin-product-media.ts";
 import { adminCurrenciesRouter } from "./admin-currencies.ts";
 import { adminCountriesRouter } from "./admin-countries.ts";
 
@@ -39,6 +41,8 @@ adminRouter.use(adminPackagesRouter);
 adminRouter.use(adminSettingsRouter);
 adminRouter.use(adminFaqRouter);
 adminRouter.use(adminAnnouncementsRouter);
+adminRouter.use(adminModelsRouter);
+adminRouter.use(adminProductMediaRouter);
 adminRouter.use(adminCurrenciesRouter);
 adminRouter.use(adminCountriesRouter);
 

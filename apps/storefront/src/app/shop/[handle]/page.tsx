@@ -1,6 +1,9 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { ImageGallery } from '@/components/product/ImageGallery';
+import {
+  ProductMediaGallery,
+  type ProductMediaItem,
+} from '@/components/product/ProductMediaGallery';
 import { ProductClientWrapper, ReviewsClientWrapper } from '@/components/product/ProductClientWrapper';
 import { Accordion } from '@/components/product/Accordion';
 import { RelatedProducts } from '@/components/product/RelatedProducts';
@@ -26,6 +29,7 @@ interface Product {
   description: string;
   category: string;
   images: string[];
+  media: ProductMediaItem[];
   colors: Array<{ name: string; value: string }>;
   sizes: Array<{ name: string; inStock: boolean }>;
   /** Medusa variant rows (pricing + inventory). When present, add-to-cart uses real variant ids. */
@@ -214,6 +218,14 @@ function mapStoreProduct(raw: Record<string, unknown>): Product {
     images: mergedImages.length
       ? mergedImages
       : ['https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=1200'],
+    media: ((raw.media as Array<Record<string, unknown>>) || []).map((m) => ({
+      id: String(m.id),
+      media_type: (String(m.media_type || 'image') as 'image' | 'video' | 'gif'),
+      url: String(m.url || ''),
+      thumbnail_url: (m.thumbnail_url as string) || null,
+      alt_text: (m.alt_text as string) || null,
+      is_primary: Boolean(m.is_primary),
+    })),
     colors: outColors,
     sizes: outSizes,
     variantRows: variantRows.length > 0 ? variantRows : undefined,
@@ -424,7 +436,11 @@ export default async function ProductPage({
           {/* Product Details Grid */}
           <div className="grid lg:grid-cols-2 gap-12 mb-16">
             {/* Left: Image Gallery */}
-            <ImageGallery images={product.images} productName={product.name} />
+            <ProductMediaGallery
+              media={product.media}
+              fallbackImages={product.images}
+              productName={product.name}
+            />
 
             {/* Right: Product Info */}
             <ProductClientWrapper product={productWithReviews} packDefinitionId={packDefinitionId} />

@@ -20,6 +20,7 @@ import {
   HelpCircle,
   Megaphone as MegaphoneIcon,
   DollarSign,
+  Sparkles,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -71,6 +72,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Content",
     items: [
       { href: "/announcements", label: "Announcements", icon: <MegaphoneIcon className="h-4 w-4" /> },
+      { href: "/models", label: "Models", icon: <Sparkles className="h-4 w-4" /> },
       { href: "/faq", label: "FAQ", icon: <HelpCircle className="h-4 w-4" /> },
     ],
   },

@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, Save, ImageIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Save,
+  ImageIcon,
+  Sparkles,
+  Star,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import type {
@@ -13,6 +21,8 @@ import type {
   ProductTag,
   Variant,
   VariantPrice,
+  ProductMedia,
+  ModelRow,
 } from "@/lib/types";
 import { AdminShell } from "@/components/AdminShell";
 import { useDialog } from "@/components/Dialog";
@@ -52,7 +62,7 @@ export default function ProductDetailPage() {
   const [productCatalogueIds, setProductCatalogueIds] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<ProductTag[]>([]);
   const [productTags, setProductTags] = useState<string[]>([]);
-  const [tab, setTab] = useState<"general" | "variants" | "options" | "tags">("general");
+  const [tab, setTab] = useState<"general" | "variants" | "options" | "tags" | "media">("general");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
@@ -144,7 +154,7 @@ export default function ProductDetailPage() {
         className="mb-6 flex gap-1"
         style={{ borderBottom: "1px solid var(--line)" }}
       >
-        {(["general", "variants", "options", "tags"] as const).map((t) => (
+        {(["general", "variants", "options", "tags", "media"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -280,6 +290,11 @@ export default function ProductDetailPage() {
           variants={data.variants}
           onChange={load}
         />
+      )}
+
+      {/* Media tab */}
+      {tab === "media" && (
+        <MediaTab productId={data.product.id} productTitle={data.product.title} />
       )}
     </AdminShell>
   );
@@ -1148,5 +1163,361 @@ function MarginCalculator({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Product Media tab ───────────────────────────────────────────────
+function MediaTab({ productId, productTitle }: { productId: string; productTitle: string }) {
+  const dialog = useDialog();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [media, setMedia] = useState<ProductMedia[]>([]);
+  const [models, setModels] = useState<ModelRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [genOpen, setGenOpen] = useState(false);
+  const [vidOpen, setVidOpen] = useState(false);
+
+  const load = async () => {
+    const [m, mods] = await Promise.all([
+      api.get<{ media: ProductMedia[] }>(`/admin/products/${productId}/media`),
+      api.get<{ models: ModelRow[] }>(`/admin/models`),
+    ]);
+    setMedia(m.media);
+    setModels(mods.models);
+  };
+
+  useEffect(() => {
+    void load();
+  }, [productId]);
+
+  // Auto-poll pending videos every 6s
+  useEffect(() => {
+    const pending = media.filter((m) => m.status === "pending" && m.operation_name);
+    if (pending.length === 0) return;
+    const t = setInterval(async () => {
+      for (const p of pending) {
+        try {
+          await api.post(`/admin/products/${productId}/media/${p.id}/poll`, {});
+        } catch {
+          /* ignore */
+        }
+      }
+      void load();
+    }, 6000);
+    return () => clearInterval(t);
+  }, [media, productId]);
+
+  const onUpload = async (file: File) => {
+    setBusy(true);
+    try {
+      const up = await api.upload<{ url: string }>("/admin/uploads", file);
+      const mediaType = file.type.startsWith("video/")
+        ? "video"
+        : file.type === "image/gif"
+          ? "gif"
+          : "image";
+      await api.post(`/admin/products/${productId}/media`, {
+        media_url: up.url,
+        media_type: mediaType,
+      });
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      await dialog.alert({ title: "Upload failed", message, tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onGenImage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      model_id: String(fd.get("model_id") || "") || undefined,
+      angle: String(fd.get("angle") || "").trim() || undefined,
+      scene: String(fd.get("scene") || "").trim() || undefined,
+      prompt: String(fd.get("prompt") || "").trim() || undefined,
+    };
+    try {
+      await api.post(`/admin/products/${productId}/media/generate-image`, body);
+      setGenOpen(false);
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Generation failed";
+      await dialog.alert({ title: "Generation failed", message, tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onGenVideo = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      model_id: String(fd.get("model_id") || "") || undefined,
+      prompt: String(fd.get("prompt") || "").trim() || undefined,
+      duration_seconds: Number(fd.get("duration_seconds") || 8),
+      aspect_ratio: String(fd.get("aspect_ratio") || "16:9") as "16:9" | "9:16" | "1:1",
+    };
+    try {
+      await api.post(`/admin/products/${productId}/media/generate-video`, body);
+      setVidOpen(false);
+      await load();
+      await dialog.alert({
+        title: "Video generation started",
+        message: "Veo 3 takes 1–3 minutes. The card refreshes automatically.",
+        tone: "info",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Generation failed";
+      await dialog.alert({ title: "Generation failed", message, tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSetPrimary = async (m: ProductMedia) => {
+    await api.patch(`/admin/products/${productId}/media/${m.id}`, { is_primary: true });
+    await load();
+  };
+
+  const onDelete = async (m: ProductMedia) => {
+    const ok = await dialog.confirm({
+      title: "Delete this media?",
+      message: m.alt_text || m.prompt || "Removes from storefront immediately.",
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    await api.delete(`/admin/products/${productId}/media/${m.id}`);
+    await load();
+  };
+
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <SectionTitle hint="Customers see these on the product page. Star one to make it the main thumbnail.">
+          Media · {media.length}
+        </SectionTitle>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onUpload(f);
+              e.currentTarget.value = "";
+            }}
+          />
+          <button onClick={() => fileRef.current?.click()} disabled={busy} className={btnGhost}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Upload
+          </button>
+          <button onClick={() => setGenOpen(true)} disabled={busy} className={btnPrimary}>
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            AI image
+          </button>
+          <button onClick={() => setVidOpen(true)} disabled={busy} className={btnPrimary}>
+            AI video
+          </button>
+        </div>
+      </div>
+
+      {media.length === 0 ? (
+        <div className="py-14 text-center text-sm italic text-[var(--ink-muted)]">
+          No media yet — upload product photos or generate with a model.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {media.map((m) => (
+            <article
+              key={m.id}
+              className="bg-white overflow-hidden"
+              style={{ border: "1px solid var(--line)", borderRadius: 4 }}
+            >
+              <div className="aspect-square bg-[var(--cream-dark)] relative">
+                {m.status === "ready" ? (
+                  m.media_type === "video" ? (
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <video
+                      src={m.media_url}
+                      controls
+                      muted
+                      poster={m.thumbnail_url || undefined}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.thumbnail_url || m.media_url}
+                      alt={m.alt_text || ""}
+                      className="w-full h-full object-cover"
+                    />
+                  )
+                ) : m.status === "pending" ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-[var(--ink-muted)]">
+                    <p className="text-xs uppercase tracking-luxe">Generating…</p>
+                    <p className="text-[10px] mt-1">Veo polling every 6s</p>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[#B91C1C] p-2 text-center">
+                    <p className="text-xs">{m.status_message || "Failed"}</p>
+                  </div>
+                )}
+                {m.is_primary && (
+                  <span className="absolute top-2 left-2 badge badge-success">Primary</span>
+                )}
+                {m.source_kind !== "upload" && (
+                  <span className="absolute top-2 right-2 badge badge-info">AI</span>
+                )}
+              </div>
+              <div className="p-3">
+                <p className="text-[10px] uppercase tracking-luxe text-[var(--gold-dark)]">
+                  {m.media_type}
+                </p>
+                <p className="text-xs text-[var(--ink-muted)] truncate mt-0.5">
+                  {m.alt_text || m.prompt || "—"}
+                </p>
+                <div className="mt-2 flex gap-1">
+                  {!m.is_primary && m.status === "ready" && (
+                    <button
+                      onClick={() => onSetPrimary(m)}
+                      title="Make primary"
+                      aria-label="Make primary"
+                      className="flex h-7 w-7 items-center justify-center rounded-sm text-[var(--ink-muted)] hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
+                    >
+                      <Star className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onDelete(m)}
+                    title="Delete"
+                    aria-label="Delete"
+                    className="flex h-7 w-7 items-center justify-center rounded-sm text-[var(--ink-muted)] hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Generate image ─── */}
+      <Modal
+        open={genOpen}
+        onClose={() => setGenOpen(false)}
+        title={`Generate image for "${productTitle}"`}
+        footer={
+          <>
+            <button onClick={() => setGenOpen(false)} className={btnGhost}>Cancel</button>
+            <button form="prod-gen-img" type="submit" disabled={busy} className={btnPrimary}>
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              {busy ? "Generating…" : "Generate"}
+            </button>
+          </>
+        }
+      >
+        <form id="prod-gen-img" onSubmit={onGenImage} className="space-y-4">
+          <Field
+            label="Model"
+            hint="The avatar that will wear this product. Without one, the AI uses the product photo only."
+          >
+            <select name="model_id" className="select" defaultValue="">
+              <option value="">(no model — product-only shot)</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{m.gender ? ` · ${m.gender}` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Camera angle">
+            <input
+              name="angle"
+              className={inputCls}
+              placeholder="three-quarter, full body, eye level"
+            />
+          </Field>
+          <Field label="Setting / scene">
+            <input
+              name="scene"
+              className={inputCls}
+              placeholder="sunlit Cape Town terrace, golden hour"
+            />
+          </Field>
+          <Field label="Extra direction (optional)">
+            <textarea
+              name="prompt"
+              rows={3}
+              className={inputCls}
+              placeholder="Anything else specific to this shot…"
+            />
+          </Field>
+        </form>
+      </Modal>
+
+      {/* ─── Generate video ─── */}
+      <Modal
+        open={vidOpen}
+        onClose={() => setVidOpen(false)}
+        title={`Generate video for "${productTitle}"`}
+        footer={
+          <>
+            <button onClick={() => setVidOpen(false)} className={btnGhost}>Cancel</button>
+            <button form="prod-gen-vid" type="submit" disabled={busy} className={btnPrimary}>
+              {busy ? "Starting…" : "Start generation"}
+            </button>
+          </>
+        }
+      >
+        <form id="prod-gen-vid" onSubmit={onGenVideo} className="space-y-4">
+          <p className="text-xs text-[var(--ink-muted)]">
+            Veo 3 takes 1–3 minutes. The card refreshes automatically when ready.
+          </p>
+          <Field label="Model" hint="Optional — the avatar wearing the product.">
+            <select name="model_id" className="select" defaultValue="">
+              <option value="">(product only)</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Direction">
+            <textarea
+              name="prompt"
+              rows={4}
+              className={inputCls}
+              placeholder="8-second slow dolly: model walks toward camera in slow motion, the garment catches the warm afternoon light, gentle film grain."
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Duration (s)">
+              <input
+                type="number"
+                name="duration_seconds"
+                defaultValue={8}
+                min={4}
+                max={8}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Aspect">
+              <select name="aspect_ratio" className="select" defaultValue="16:9">
+                <option value="16:9">16:9</option>
+                <option value="9:16">9:16</option>
+                <option value="1:1">1:1</option>
+              </select>
+            </Field>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }
