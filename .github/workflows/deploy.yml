@@ -1,0 +1,86 @@
+name: Deploy to droplet
+
+# Trigger on every push to master, and allow manual runs.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Cancel an in-flight deploy if a newer push lands while we're working.
+concurrency:
+  group: deploy-master
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Pull + rebuild on droplet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout (for sha tagging)
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${USER}@${HOST}" \
+            "set -euo pipefail; \
+             cd /root/blessluxe; \
+             echo '═══ pulling master ═══'; \
+             git fetch --quiet origin master; \
+             git reset --hard origin/master; \
+             git log -1 --pretty='format:%h %s'; \
+             echo; \
+             echo '═══ running migrations ═══'; \
+             docker compose up -d postgres; \
+             # wait for postgres to be ready before migrating
+             for i in {1..30}; do \
+               docker compose exec -T postgres pg_isready -U blessluxe > /dev/null 2>&1 && break; \
+               sleep 2; \
+             done; \
+             docker compose run --rm shop \
+               node --experimental-strip-types --experimental-transform-types \
+               src/db/migrate.ts; \
+             echo '═══ rebuilding images ═══'; \
+             docker compose build; \
+             echo '═══ recreating containers ═══'; \
+             docker compose up -d --remove-orphans; \
+             echo '═══ pruning old images ═══'; \
+             docker image prune -af --filter 'until=72h' > /dev/null 2>&1 || true; \
+             echo '═══ deploy ${GIT_SHA:0:7} complete ═══'"
+
+      - name: Health check
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          # Give services 30s to come back, then probe the API health endpoint
+          # *through* Caddy (so we know HTTPS termination is also working).
+          for i in 1 2 3 4 5 6; do
+            sleep 5
+            STATUS=$(curl -sk -o /dev/null -w '%{http_code}' https://api.blessluxe.com/health || echo 000)
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ API is up at the new commit"
+              exit 0
+            fi
+          done
+          echo "✗ Health check never returned 200 — tailing shop logs:"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${USER}@${HOST}" \
+            "cd /root/blessluxe && docker compose logs shop --tail 50"
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
