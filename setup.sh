@@ -40,6 +40,9 @@ echo
 # ─── 1. System update + essentials ────────────────────────────────────
 blue "[1/8] Updating apt and installing base packages…"
 export DEBIAN_FRONTEND=noninteractive
+# Stop needrestart from prompting about service restarts on package installs.
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
 apt-get update -qq
 apt-get install -y -qq curl ca-certificates git ufw openssl > /dev/null
 
@@ -57,7 +60,9 @@ blue "[3/8] Configuring firewall (allow 22, 80, 443)…"
 ufw allow 22/tcp  > /dev/null
 ufw allow 80/tcp  > /dev/null
 ufw allow 443/tcp > /dev/null
-yes | ufw --force enable > /dev/null
+# --force enables non-interactively. No need to pipe `yes` (that triggers
+# SIGPIPE under `set -o pipefail` and silently aborts the script).
+ufw --force enable > /dev/null
 
 # ─── 4. Clone repo ────────────────────────────────────────────────────
 if [[ -d "$INSTALL_DIR/.git" ]]; then
