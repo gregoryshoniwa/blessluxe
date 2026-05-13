@@ -14,14 +14,35 @@ const newId = (p: string) => `${p}_${uuid().replace(/-/g, "")}`;
 // ─── List models ────────────────────────────────────────────────────────
 adminModelsRouter.get("/models", async (_req, res) => {
   try {
+    // Preview pick order:
+    //   1. The starred primary IF it's ready and has a non-empty URL
+    //   2. Otherwise the first ready image asset (uploads beat AI gens)
+    //   3. Otherwise the first ready asset of any type
+    // This protects the card thumbnail when the primary points at a failed
+    // generation (e.g. a Veo job that never produced a URL).
     const rows = await query(
       `SELECT m.*,
-              a.media_url     AS primary_media_url,
-              a.thumbnail_url AS primary_thumbnail_url,
-              a.media_type    AS primary_media_type,
+              COALESCE(p.media_url, fb.media_url)         AS primary_media_url,
+              COALESCE(p.thumbnail_url, fb.thumbnail_url) AS primary_thumbnail_url,
+              COALESCE(p.media_type, fb.media_type)       AS primary_media_type,
               (SELECT count(*)::int FROM shop_model_asset WHERE model_id = m.id) AS asset_count
        FROM shop_model m
-       LEFT JOIN shop_model_asset a ON a.id = m.primary_asset_id
+       LEFT JOIN shop_model_asset p
+              ON p.id = m.primary_asset_id
+             AND p.status = 'ready'
+             AND COALESCE(p.media_url, '') <> ''
+       LEFT JOIN LATERAL (
+         SELECT media_url, thumbnail_url, media_type
+           FROM shop_model_asset
+          WHERE model_id = m.id
+            AND status = 'ready'
+            AND COALESCE(media_url, '') <> ''
+          ORDER BY
+            CASE WHEN media_type = 'image' THEN 0 ELSE 1 END,
+            CASE WHEN source_kind = 'upload' THEN 0 ELSE 1 END,
+            position, created_at
+          LIMIT 1
+       ) fb ON true
        ORDER BY m.created_at DESC`
     );
     res.json({ models: rows });
@@ -451,6 +472,30 @@ adminModelsRouter.delete("/models/:id/assets/:assetId", async (req, res) => {
       req.params.assetId,
       req.params.id,
     ]);
+    // If we just deleted the primary, promote a sensible replacement so the
+    // card thumbnail and reference chain don't break.
+    const model = await queryOne(
+      `SELECT primary_asset_id FROM shop_model WHERE id = $1`,
+      [req.params.id]
+    );
+    if (model && (!model.primary_asset_id || model.primary_asset_id === req.params.assetId)) {
+      const replacement = await queryOne(
+        `SELECT id FROM shop_model_asset
+          WHERE model_id = $1
+            AND status = 'ready'
+            AND COALESCE(media_url, '') <> ''
+          ORDER BY
+            CASE WHEN media_type = 'image'  THEN 0 ELSE 1 END,
+            CASE WHEN source_kind = 'upload' THEN 0 ELSE 1 END,
+            position, created_at
+          LIMIT 1`,
+        [req.params.id]
+      );
+      await execute(
+        `UPDATE shop_model SET primary_asset_id = $1, updated_at = NOW() WHERE id = $2`,
+        [replacement?.id || null, req.params.id]
+      );
+    }
     res.json({ deleted: true });
   } catch (err) {
     console.error("[admin model delete asset]", err);
