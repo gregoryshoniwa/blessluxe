@@ -242,9 +242,9 @@ export async function pollVideoOperation(
   hint = "video"
 ): Promise<VideoPollResult> {
   const key = requireKey();
-  const opPath = operationName.startsWith("operations/")
-    ? operationName
-    : `operations/${operationName}`;
+  // Veo returns operation names like "models/veo-3.0-generate-001/operations/<id>"
+  // — that's the full path under /v1beta/. Strip any leading slash and use as-is.
+  const opPath = operationName.replace(/^\/+/, "");
   const res = await fetch(`${GEN_API_BASE}/${opPath}?key=${key}`);
   const raw = await res.text();
   let payload: Record<string, unknown> = {};
@@ -268,11 +268,16 @@ export async function pollVideoOperation(
     return { done: true, error: (errorObj.message as string) || "Veo generation failed" };
   }
 
-  // Predictions live under response.predictions, each with bytesBase64Encoded.
+  // Veo's payload shape varies between vertex-style and AI-Studio-style:
+  //   response.generatedVideos[].video.uri              (most common)
+  //   response.predictions[].bytesBase64Encoded         (legacy vertex)
+  //   response.generateVideoResponse.generatedSamples[] (vertex prediction)
   const response = (payload.response as Record<string, unknown>) || {};
   const predictions =
+    (response.generatedVideos as Array<Record<string, unknown>>) ||
     (response.predictions as Array<Record<string, unknown>>) ||
-    (response.generateVideoResponse as Record<string, unknown>)?.generatedSamples ||
+    ((response.generateVideoResponse as Record<string, unknown>)
+      ?.generatedSamples as Array<Record<string, unknown>>) ||
     [];
   for (const p of predictions as Array<Record<string, unknown>>) {
     const video = (p.video as Record<string, unknown>) || p;
