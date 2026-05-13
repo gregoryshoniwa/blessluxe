@@ -1,8 +1,12 @@
 {
   "name": "blessluxe",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0 <23.0.0"
+  },
   "scripts": {
-    "build": "turbo build",
+    "build": "turbo build --concurrency=1",
+    "start": "pnpm --filter @blessluxe/shop-backend start",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
