@@ -89,4 +89,3 @@ done
 echo "$LOG_PREFIX ✗ health check failed — recent shop logs:"
 docker compose logs shop --tail 40
 exit 1
-# Deploy heartbeat: 2026-05-13T14:53:18Z
