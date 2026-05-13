@@ -382,7 +382,7 @@ export default function ModelDetailPage() {
               placeholder="6-second slow dolly: model walks toward camera in slow motion, glances over her shoulder at the final beat. Warm cinematic grade, gentle dust particles in the light."
             />
           </Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Duration (s)">
               <input
                 type="number"
@@ -400,17 +400,24 @@ export default function ModelDetailPage() {
                 <option value="1:1">1:1 — square</option>
               </select>
             </Field>
-            <Field label="Identity reference">
-              <select name="reference_asset_id" className="select" defaultValue="">
-                <option value="">(use primary)</option>
-                {imageAssets.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.caption || a.id.slice(-6)}
-                  </option>
-                ))}
-              </select>
-            </Field>
           </div>
+          <Field
+            label="Identity reference"
+            hint="Locks the face. Leave on (use primary) for the model's main shot."
+          >
+            <select
+              name="reference_asset_id"
+              className="select w-full"
+              defaultValue=""
+            >
+              <option value="">(use primary)</option>
+              {imageAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.caption || a.id.slice(-6)}
+                </option>
+              ))}
+            </select>
+          </Field>
         </form>
       </Modal>
     </AdminShell>
