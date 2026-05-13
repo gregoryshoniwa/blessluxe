@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import Link from "next/link";
-import { Plus, ImageIcon, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, ImageIcon, Sparkles, Upload, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { AdminShell } from "@/components/AdminShell";
@@ -19,11 +20,26 @@ import {
 } from "@/components/Modal";
 
 export default function ModelsPage() {
+  const router = useRouter();
   const { user, loading } = useAuthGate();
   const dialog = useDialog();
   const [models, setModels] = useState<ModelRow[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refFile, setRefFile] = useState<File | null>(null);
+  const [refPreview, setRefPreview] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const resetForm = () => {
+    setRefFile(null);
+    setRefPreview(null);
+  };
+
+  const onPickFile = (f: File | null) => {
+    setRefFile(f);
+    if (refPreview) URL.revokeObjectURL(refPreview);
+    setRefPreview(f ? URL.createObjectURL(f) : null);
+  };
 
   const load = async () => {
     const res = await api.get<{ models: ModelRow[] }>("/admin/models");
@@ -47,9 +63,31 @@ export default function ModelsPage() {
       prompt_template: String(fd.get("prompt_template") || "").trim() || undefined,
     };
     try {
-      await api.post("/admin/models", body);
+      // 1. Create the model record
+      const created = await api.post<{ model: ModelRow }>("/admin/models", body);
+      const modelId = created.model.id;
+
+      // 2. If a reference image was provided, upload it and attach as the first asset
+      if (refFile) {
+        const up = await api.upload<{ url: string }>("/admin/uploads", refFile);
+        const mediaType = refFile.type.startsWith("video/")
+          ? "video"
+          : refFile.type === "image/gif"
+            ? "gif"
+            : "image";
+        await api.post(`/admin/models/${modelId}/assets`, {
+          media_url: up.url,
+          media_type: mediaType,
+          source_kind: "upload",
+          caption: "Reference photo",
+        });
+      }
+
       setOpen(false);
-      await load();
+      resetForm();
+      // 3. Send the admin straight to the model detail page so they can
+      //    keep adding angles or generate variants.
+      router.push(`/models/${modelId}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed";
       await dialog.alert({ title: "Create failed", message, tone: "danger" });
@@ -144,11 +182,22 @@ export default function ModelsPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          resetForm();
+        }}
         title="New model"
         footer={
           <>
-            <button onClick={() => setOpen(false)} className={btnGhost}>Cancel</button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                resetForm();
+              }}
+              className={btnGhost}
+            >
+              Cancel
+            </button>
             <button form="new-model-form" type="submit" disabled={busy} className={btnPrimary}>
               {busy ? "Saving…" : "Create model"}
             </button>
@@ -156,6 +205,58 @@ export default function ModelsPage() {
         }
       >
         <form id="new-model-form" onSubmit={onCreate} className="space-y-4">
+          <Field
+            label="Reference photo"
+            hint="Optional — but the AI uses this to lock the face when generating new angles. Skip to start with text only."
+          >
+            <div className="space-y-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  onPickFile(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+              {refPreview ? (
+                <div
+                  className="relative w-full overflow-hidden rounded-sm bg-[var(--cream-dark)]"
+                  style={{ border: "1px solid var(--line)" }}
+                >
+                  {refFile?.type.startsWith("video/") ? (
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <video src={refPreview} controls className="w-full max-h-64 object-contain" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={refPreview} alt="reference" className="w-full max-h-64 object-contain" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onPickFile(null)}
+                    title="Remove"
+                    aria-label="Remove reference"
+                    className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[var(--ink)] shadow hover:bg-white"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-2 rounded-sm py-6 text-sm text-[var(--ink-muted)] transition-colors hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
+                  style={{ border: "1px dashed var(--line)" }}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload reference photo
+                </button>
+              )}
+            </div>
+          </Field>
+
           <Field label="Name" required>
             <input name="name" required className={inputCls} placeholder="Amara" />
           </Field>

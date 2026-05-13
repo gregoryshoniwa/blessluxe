@@ -8,6 +8,7 @@
     "build": "turbo build --concurrency=1",
     "start": "pnpm --filter @blessluxe/shop-backend start",
     "dev": "turbo dev",
+    "push": "git push && docker compose up -d --build && echo '✓ master pushed + local docker rebuilt'",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
