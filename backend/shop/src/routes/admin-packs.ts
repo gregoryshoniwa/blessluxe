@@ -1,5 +1,8 @@
 import { Router } from "express";
+import { v4 as uuid } from "uuid";
 import { query, queryOne, execute } from "../db/pool.ts";
+
+const newId = (p: string) => `${p}_${uuid().replace(/-/g, "")}`;
 
 /**
  * Admin pack tracking. Packs live in the storefront's pack_* tables (not in
@@ -91,19 +94,186 @@ adminPacksRouter.get("/packs/definitions", async (req, res) => {
 
 adminPacksRouter.patch("/packs/definitions/:id", async (req, res) => {
   try {
-    const { status } = req.body as { status?: string };
-    if (!status || !["draft", "published"].includes(status)) {
-      return res.status(400).json({ error: "status must be draft or published" });
+    const { status, title, description } = req.body as Partial<{
+      status: string;
+      title: string;
+      description: string;
+    }>;
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let i = 1;
+    if (status !== undefined) {
+      if (!["draft", "published"].includes(status)) {
+        return res.status(400).json({ error: "status must be draft or published" });
+      }
+      sets.push(`status = $${i++}`);
+      params.push(status);
     }
-    await execute(
-      `UPDATE pack_definition SET status = $1, updated_at = NOW() WHERE id = $2`,
-      [status, req.params.id]
-    );
+    if (title !== undefined) {
+      sets.push(`title = $${i++}`);
+      params.push(String(title).trim());
+    }
+    if (description !== undefined) {
+      sets.push(`description = $${i++}`);
+      params.push(description ? String(description).trim() : null);
+    }
+    if (sets.length > 0) {
+      sets.push("updated_at = NOW()");
+      params.push(req.params.id);
+      await execute(
+        `UPDATE pack_definition SET ${sets.join(", ")} WHERE id = $${i}`,
+        params
+      );
+    }
     const row = await queryOne(`SELECT * FROM pack_definition WHERE id = $1`, [req.params.id]);
     res.json({ definition: row });
   } catch (err) {
     console.error("[admin pack def update]", err);
     res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── Create a new pack definition (admin only) ──────────────────────────
+adminPacksRouter.post("/packs/definitions", async (req, res) => {
+  try {
+    const b = req.body as {
+      product_id: string;
+      title: string;
+      handle?: string;
+      description?: string;
+      status?: "draft" | "published";
+    };
+    if (!b.product_id?.trim()) {
+      return res.status(400).json({ error: "product_id required" });
+    }
+    if (!b.title?.trim()) {
+      return res.status(400).json({ error: "title required" });
+    }
+    // Confirm the product exists and has variants — packs are useless without them.
+    const product = await queryOne(
+      `SELECT id, handle, title FROM shop_product WHERE id = $1`,
+      [b.product_id]
+    );
+    if (!product) return res.status(400).json({ error: "Product not found" });
+    const variantCount = await queryOne(
+      `SELECT count(*)::int AS c FROM shop_product_variant WHERE product_id = $1`,
+      [b.product_id]
+    );
+    if (Number(variantCount?.c ?? 0) === 0) {
+      return res.status(400).json({
+        error: "Add at least one product variant before creating a pack definition",
+      });
+    }
+    const slug = (b.handle?.trim() || `${String(product.handle)}-pack`)
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const id = newId("packdef");
+    const status = b.status === "published" ? "published" : "draft";
+    await execute(
+      `INSERT INTO pack_definition (id, product_id, title, handle, description, status)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        id,
+        b.product_id,
+        b.title.trim(),
+        slug,
+        b.description?.trim() || null,
+        status,
+      ]
+    );
+    const row = await queryOne(`SELECT * FROM pack_definition WHERE id = $1`, [id]);
+    res.status(201).json({ definition: row });
+  } catch (err: unknown) {
+    console.error("[admin pack def create]", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to create pack definition";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ─── Soft-delete a definition (also cancels its open campaigns) ─────────
+adminPacksRouter.delete("/packs/definitions/:id", async (req, res) => {
+  try {
+    await execute(
+      `UPDATE pack_definition SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [req.params.id]
+    );
+    await execute(
+      `UPDATE pack_campaign SET status = 'cancelled', updated_at = NOW()
+        WHERE pack_definition_id = $1 AND status IN ('open', 'filling')`,
+      [req.params.id]
+    );
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error("[admin pack def delete]", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── Launch an admin-hosted campaign immediately ────────────────────────
+// Builds one slot per variant of the underlying product. Customers join by
+// claiming a slot via the existing pack-campaign join flow.
+adminPacksRouter.post("/packs/definitions/:id/launch", async (req, res) => {
+  try {
+    const b = req.body as { expires_at?: string; title?: string };
+    const def = await queryOne(
+      `SELECT * FROM pack_definition WHERE id = $1 AND deleted_at IS NULL`,
+      [req.params.id]
+    );
+    if (!def) return res.status(404).json({ error: "Definition not found" });
+    if (def.status !== "published") {
+      return res.status(400).json({ error: "Publish the definition before launching" });
+    }
+    const variants = await query(
+      `SELECT v.id, v.title, vov.value AS size_value
+         FROM shop_product_variant v
+         LEFT JOIN shop_variant_option_value vov ON vov.variant_id = v.id
+         LEFT JOIN shop_product_option_value pov ON pov.id = vov.option_value_id
+         LEFT JOIN shop_product_option po ON po.id = pov.option_id AND LOWER(po.title) IN ('size', 'sizes')
+        WHERE v.product_id = $1`,
+      [def.product_id]
+    );
+    if (variants.length === 0) {
+      return res.status(400).json({ error: "Product has no variants" });
+    }
+    const campaignId = newId("packcamp");
+    const publicCode = `BLP-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random()
+      .toString(36)
+      .slice(2, 6)
+      .toUpperCase()}`;
+    await execute(
+      `INSERT INTO pack_campaign
+        (id, pack_definition_id, host_kind, public_code, status, expires_at, title)
+       VALUES ($1,$2,'admin',$3,'open',$4,$5)`,
+      [
+        campaignId,
+        def.id,
+        publicCode,
+        b.expires_at || null,
+        b.title?.trim() || `${def.title} drop`,
+      ]
+    );
+    // One slot per variant, size_label preferred from the size option value.
+    for (const v of variants) {
+      await execute(
+        `INSERT INTO pack_slot (id, pack_campaign_id, variant_id, size_label, status)
+         VALUES ($1,$2,$3,$4,'available')`,
+        [
+          newId("packslot"),
+          campaignId,
+          v.id,
+          String(v.size_value || v.title || "One size"),
+        ]
+      );
+    }
+    const row = await queryOne(`SELECT * FROM pack_campaign WHERE id = $1`, [campaignId]);
+    res.status(201).json({ campaign: row, public_code: publicCode });
+  } catch (err) {
+    console.error("[admin pack campaign launch]", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to launch campaign";
+    res.status(500).json({ error: message });
   }
 });
 

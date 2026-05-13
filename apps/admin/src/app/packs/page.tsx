@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Package, Megaphone, Ticket, ImageIcon } from "lucide-react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
+import { Package, Megaphone, Ticket, ImageIcon, Plus, Trash2, Rocket } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { useDialog } from "@/components/Dialog";
@@ -10,11 +10,15 @@ import type {
   PackCampaign,
   PackSlot,
   PackStats,
+  Product,
 } from "@/lib/types";
 import { AdminShell } from "@/components/AdminShell";
 import {
+  Modal,
+  Field,
   PageHeader,
   inputCls,
+  btnPrimary,
   btnGhost,
   SectionTitle,
 } from "@/components/Modal";
@@ -85,6 +89,11 @@ export default function PacksPage() {
   const [defsStatus, setDefsStatus] = useState<string>("");
   const [defsSearch, setDefsSearch] = useState("");
   const [defsSearchInput, setDefsSearchInput] = useState("");
+
+  // Create-definition modal
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
 
   const [camps, setCamps] = useState<PackCampaign[]>([]);
   const [campsCount, setCampsCount] = useState(0);
@@ -192,6 +201,97 @@ export default function PacksPage() {
     setDefs((prev) => prev.map((x) => (x.id === d.id ? { ...x, status: next } : x)));
   };
 
+  // ─── Create / launch / delete pack definitions ──────────────────────────
+  const openCreate = async () => {
+    setCreateOpen(true);
+    if (products.length === 0) {
+      try {
+        const res = await api.get<{ products: Product[] }>(
+          "/admin/products?limit=200"
+        );
+        setProducts(res.products);
+      } catch {
+        // non-fatal — admin can still type details
+      }
+    }
+  };
+
+  const onCreateDefinition = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setCreateBusy(true);
+    const fd = new FormData(e.currentTarget);
+    const body = {
+      product_id: String(fd.get("product_id") || "").trim(),
+      title: String(fd.get("title") || "").trim(),
+      handle: String(fd.get("handle") || "").trim() || undefined,
+      description: String(fd.get("description") || "").trim() || undefined,
+      status: String(fd.get("status") || "draft") as "draft" | "published",
+    };
+    try {
+      await api.post("/admin/packs/definitions", body);
+      setCreateOpen(false);
+      // Force a refetch via state bump
+      setDefsPage((p) => p);
+      setDefsSearch((s) => s);
+      const r = await api.get<{ definitions: PackDefinition[]; count: number }>(
+        `/admin/packs/definitions?limit=${defsPageSize}&offset=${(defsPage - 1) * defsPageSize}${defsStatus ? `&status=${defsStatus}` : ""}${defsSearch ? `&q=${encodeURIComponent(defsSearch)}` : ""}`
+      );
+      setDefs(r.definitions);
+      setDefsCount(r.count);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed";
+      await dialog.alert({ title: "Create failed", message, tone: "danger" });
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const onLaunchCampaign = async (d: PackDefinition) => {
+    if (d.status !== "published") {
+      const ok = await dialog.confirm({
+        title: "Publish this pack first?",
+        message: "Only published packs can be launched into a campaign.",
+        tone: "warning",
+        confirmLabel: "Publish + launch",
+      });
+      if (!ok) return;
+      await api.patch(`/admin/packs/definitions/${d.id}`, { status: "published" });
+    }
+    try {
+      const res = await api.post<{ campaign: PackCampaign; public_code: string }>(
+        `/admin/packs/definitions/${d.id}/launch`,
+        {}
+      );
+      await dialog.alert({
+        title: "Campaign live",
+        message: `Public code: ${res.public_code}. Customers can now claim slots.`,
+        tone: "success",
+      });
+      setTab("campaigns");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Launch failed";
+      await dialog.alert({ title: "Launch failed", message, tone: "danger" });
+    }
+  };
+
+  const onDeleteDefinition = async (d: PackDefinition) => {
+    const ok = await dialog.confirm({
+      title: `Delete pack "${d.title}"?`,
+      message:
+        "The definition is soft-deleted and any open campaigns are cancelled. Already-fulfilled orders are untouched.",
+      tone: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/admin/packs/definitions/${d.id}`);
+      setDefs((prev) => prev.filter((x) => x.id !== d.id));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed";
+      await dialog.alert({ title: "Delete failed", message, tone: "danger" });
+    }
+  };
+
   const onChangeCampaignStatus = async (c: PackCampaign, status: string) => {
     if (status === c.status) return;
     const ok = await dialog.confirm({
@@ -278,6 +378,10 @@ export default function PacksPage() {
               <option value="">All statuses</option>
               {DEF_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <button onClick={openCreate} className={btnPrimary}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New pack
+            </button>
           </div>
 
           <div className="overflow-hidden bg-white" style={{ border: "1px solid var(--line)", borderRadius: 4 }}>
@@ -317,9 +421,27 @@ export default function PacksPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => onToggleDefinitionStatus(d)} className={`${btnGhost} btn-sm`}>
-                        {d.status === "published" ? "Unpublish" : "Publish"}
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onLaunchCampaign(d)}
+                          title="Launch a public campaign"
+                          aria-label="Launch campaign"
+                          className="flex h-8 w-8 items-center justify-center rounded-sm text-[var(--ink-muted)] transition-colors hover:bg-[var(--cream-dark)] hover:text-[var(--gold-dark)]"
+                        >
+                          <Rocket className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => onToggleDefinitionStatus(d)} className={`${btnGhost} btn-sm`}>
+                          {d.status === "published" ? "Unpublish" : "Publish"}
+                        </button>
+                        <button
+                          onClick={() => onDeleteDefinition(d)}
+                          title="Delete"
+                          aria-label="Delete"
+                          className="flex h-8 w-8 items-center justify-center rounded-sm text-[var(--ink-muted)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -495,6 +617,68 @@ export default function PacksPage() {
           </div>
         </div>
       )}
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="New pack"
+        footer={
+          <>
+            <button onClick={() => setCreateOpen(false)} className={btnGhost}>Cancel</button>
+            <button form="pack-create-form" type="submit" disabled={createBusy} className={btnPrimary}>
+              {createBusy ? "Creating…" : "Create pack"}
+            </button>
+          </>
+        }
+      >
+        <form id="pack-create-form" onSubmit={onCreateDefinition} className="space-y-4">
+          <p className="text-xs text-[var(--ink-muted)]">
+            A pack groups one product into a multi-customer drop. Each variant of the
+            chosen product becomes a slot customers can claim.
+          </p>
+          <Field label="Product" required hint="Only products with at least one variant can become packs.">
+            <select name="product_id" required className="select" defaultValue="">
+              <option value="" disabled>
+                — pick a product —
+              </option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title} · {p.handle}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Pack title" required>
+            <input
+              name="title"
+              required
+              className={inputCls}
+              placeholder="Summer Linen Drop"
+            />
+          </Field>
+          <Field label="Handle" hint="URL-safe slug. Leave blank to auto-generate.">
+            <input
+              name="handle"
+              className={inputCls}
+              placeholder="summer-linen-drop"
+            />
+          </Field>
+          <Field label="Description">
+            <textarea
+              name="description"
+              rows={3}
+              className={inputCls}
+              placeholder="Short copy customers see on the campaign page."
+            />
+          </Field>
+          <Field label="Status" hint="Draft hides the pack from customers; Publish makes it joinable.">
+            <select name="status" className="select" defaultValue="draft">
+              <option value="draft">Draft</option>
+              <option value="published">Publish immediately</option>
+            </select>
+          </Field>
+        </form>
+      </Modal>
     </AdminShell>
   );
 }

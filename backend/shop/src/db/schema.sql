@@ -609,3 +609,13 @@ CREATE TABLE IF NOT EXISTS shop_announcement (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_shop_announcement_pos ON shop_announcement(position, is_active, sort_order);
+
+-- ─── Pack creation: allow customer-hosted campaigns ──────────────────────
+-- The legacy pack_campaign.affiliate_id was NOT NULL, forcing every campaign
+-- to be tied to an affiliate. Now a campaign can be hosted by a customer OR
+-- an affiliate (one must be set, never both required).
+ALTER TABLE pack_campaign ALTER COLUMN affiliate_id DROP NOT NULL;
+ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS customer_id TEXT REFERENCES shop_customer(id) ON DELETE SET NULL;
+ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS host_kind TEXT NOT NULL DEFAULT 'affiliate' CHECK (host_kind IN ('affiliate', 'customer', 'admin'));
+ALTER TABLE pack_campaign ADD COLUMN IF NOT EXISTS title TEXT;
+CREATE INDEX IF NOT EXISTS idx_pack_campaign_customer_id ON pack_campaign(customer_id) WHERE deleted_at IS NULL;
