@@ -64,37 +64,26 @@ interface ProductClientWrapperProps {
 
 export function ProductClientWrapper({ product, packDefinitionId }: ProductClientWrapperProps) {
   const addMedusaVariant = useCartStore((state) => state.addMedusaVariant);
-  const addVirtualItem = useCartStore((state) => state.addVirtualItem);
   const openCart = useCartStore((state) => state.openCart);
   const toggleWishlist = useWishlistStore((state) => state.toggleItem);
 
   const handleAddToCart = async (data: { color: string; size: string; quantity: number }) => {
     const rows = product.variantRows;
-    if (rows?.length) {
-      const row = findVariantRow(rows, data.color, data.size);
-      if (!row) {
-        throw new Error('This combination is not available.');
-      }
-      await addMedusaVariant({
-        variantId: row.id,
-        quantity: data.quantity,
-      });
-      openCart();
-      return;
+    if (!rows?.length) {
+      // No real variants exist yet — refuse the action. Previously this
+      // path fabricated a variantId like `${product.id}-${color}-${size}`
+      // and added a "virtual item", which the order POST then silently
+      // dropped because the variant didn't exist in shop_product_variant.
+      // That produced empty orders. Stop the flow here instead.
+      throw new Error("This product isn't ready for purchase yet — variants and pricing haven't been set.");
     }
-
-    addVirtualItem({
-      productId: product.id,
-      handle: product.handle,
-      title: product.name,
-      thumbnail: product.images[0] || null,
-      variantId: `${product.id}-${data.color}-${data.size}`,
+    const row = findVariantRow(rows, data.color, data.size);
+    if (!row) {
+      throw new Error('This combination is not available.');
+    }
+    await addMedusaVariant({
+      variantId: row.id,
       quantity: data.quantity,
-      unitPrice: product.salePrice || product.price,
-      variant: {
-        title: `${data.color} / ${data.size}`,
-        sku: null,
-      },
     });
     openCart();
   };

@@ -236,7 +236,22 @@ productsRouter.get("/", async (req, res) => {
     const headingHandle = (req.query.heading_handle as string) || undefined;
     const idFilter = [...arrayParam("id")];
 
+    // include_unbuyable=true is opt-in for admin/preview tools; the storefront
+    // never passes it, so customers only ever see products with at least one
+    // priced variant.
+    const includeUnbuyable =
+      String(req.query.include_unbuyable || "").toLowerCase() === "true";
+
     const conditions: string[] = ["p.status = 'published'"];
+    if (!includeUnbuyable) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM shop_product_variant v
+          JOIN shop_variant_price vp ON vp.variant_id = v.id
+          WHERE v.product_id = p.id AND vp.amount > 0
+        )`
+      );
+    }
     const params: unknown[] = [];
     let paramIdx = 1;
 

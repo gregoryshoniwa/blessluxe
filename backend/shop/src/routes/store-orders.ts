@@ -163,6 +163,56 @@ storeOrdersRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "items required" });
     }
 
+    // ─── Validate every line UPFRONT before touching the database ───────
+    // Previously each item was looked up inside the persist loop and silently
+    // skipped if missing — which produced "orders" with zero line items when
+    // the storefront sent fabricated variant IDs (zero-variant products).
+    type ResolvedLine = {
+      line: typeof b.items[number];
+      variant: Record<string, unknown>;
+    };
+    const resolved: ResolvedLine[] = [];
+    for (const it of b.items) {
+      if (!it.variant_id) {
+        return res.status(400).json({ error: "Each item must include variant_id" });
+      }
+      if (!Number.isFinite(it.quantity) || it.quantity <= 0) {
+        return res
+          .status(400)
+          .json({ error: `Quantity must be > 0 for variant ${it.variant_id}` });
+      }
+      if (!Number.isFinite(it.unit_price) || it.unit_price <= 0) {
+        return res
+          .status(400)
+          .json({ error: `Unit price must be > 0 for variant ${it.variant_id}` });
+      }
+      const variant = await queryOne(
+        `SELECT v.id, v.title, v.sku, v.product_id, v.cost_price,
+                v.manage_inventory, v.inventory_quantity, v.allow_backorder,
+                p.title AS product_title, p.thumbnail
+           FROM shop_product_variant v
+           JOIN shop_product p ON p.id = v.product_id
+          WHERE v.id = $1`,
+        [it.variant_id]
+      );
+      if (!variant) {
+        return res
+          .status(400)
+          .json({ error: `Variant ${it.variant_id} no longer exists` });
+      }
+      if (
+        variant.manage_inventory &&
+        !variant.allow_backorder &&
+        Number(variant.inventory_quantity ?? 0) < Number(it.quantity)
+      ) {
+        return res.status(409).json({
+          error: `Only ${variant.inventory_quantity} in stock for ${variant.product_title} · ${variant.title}`,
+          variant_id: it.variant_id,
+        });
+      }
+      resolved.push({ line: it, variant });
+    }
+
     const customerId = await resolveCustomerIdWithEmailFallback(
       req.headers.authorization,
       b.email
@@ -215,17 +265,7 @@ storeOrdersRouter.post("/", async (req, res) => {
       quantity: number;
       unit_price: number;
     }> = [];
-    for (const it of b.items) {
-      const variant = await queryOne(
-        `SELECT v.id, v.title, v.sku, v.product_id, v.cost_price,
-                p.title AS product_title, p.thumbnail
-         FROM shop_product_variant v
-         JOIN shop_product p ON p.id = v.product_id
-         WHERE v.id = $1`,
-        [it.variant_id]
-      );
-      if (!variant) continue;
-
+    for (const { line: it, variant } of resolved) {
       const lineId = newId("line");
       await execute(
         `INSERT INTO shop_order_line_item

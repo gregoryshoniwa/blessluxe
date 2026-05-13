@@ -289,6 +289,7 @@ export default function ProductDetailPage() {
           options={data.options}
           variants={data.variants}
           onChange={load}
+          onJumpToOptions={() => setTab("options")}
         />
       )}
 
@@ -523,11 +524,13 @@ function VariantsTab({
   options,
   variants,
   onChange,
+  onJumpToOptions,
 }: {
   productId: string;
   options: ProductOption[];
   variants: Variant[];
   onChange: () => Promise<void>;
+  onJumpToOptions: () => void;
 }) {
   const dialog = useDialog();
   const [open, setOpen] = useState(false);
@@ -680,12 +683,25 @@ function VariantsTab({
       </div>
 
       {options.length === 0 && (
-        <p
-          className="mb-5 rounded-sm px-4 py-3 text-sm text-[var(--ink-muted)]"
-          style={{ background: "var(--cream)", border: "1px solid var(--line-soft)" }}
+        <div
+          className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-sm px-5 py-4"
+          style={{ background: "var(--cream)", border: "1px solid var(--gold)" }}
         >
-          Define product options first (Size, Color, etc.) in the Options tab.
-        </p>
+          <div className="flex-1 min-w-[260px]">
+            <p className="text-sm font-semibold text-[var(--ink)]">
+              No options yet
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--ink-muted)]">
+              Define what the customer chooses (e.g. Size, Color) before adding
+              variants. Without options, this product cannot be purchased on the
+              storefront.
+            </p>
+          </div>
+          <button onClick={onJumpToOptions} type="button" className={btnPrimary}>
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5 rotate-180" />
+            Open Options tab
+          </button>
+        </div>
       )}
 
       <div
