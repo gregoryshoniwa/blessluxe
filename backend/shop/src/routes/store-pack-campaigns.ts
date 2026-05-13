@@ -47,18 +47,26 @@ storePackCampaignsRouter.post("/host", async (req, res) => {
         error: "Pack is not currently available for hosting",
       });
     }
+    // For multi-product packs we sweep variants across every linked product;
+    // single packs fall back to the legacy product_id column. pov.value is
+    // the actual size label — vov is only the variant↔option-value join.
     const variants = await query(
-      `SELECT v.id, v.title, vov.value AS size_value
+      `SELECT v.id, v.title, v.product_id, MAX(pov.value) AS size_value
          FROM shop_product_variant v
          LEFT JOIN shop_variant_option_value vov ON vov.variant_id = v.id
          LEFT JOIN shop_product_option_value pov ON pov.id = vov.option_value_id
          LEFT JOIN shop_product_option po
            ON po.id = pov.option_id AND LOWER(po.title) IN ('size', 'sizes')
-        WHERE v.product_id = $1`,
-      [def.product_id]
+        WHERE v.product_id IN (
+          SELECT product_id FROM pack_definition_product WHERE pack_definition_id = $1
+          UNION
+          SELECT $2 WHERE $2 IS NOT NULL
+        )
+        GROUP BY v.id`,
+      [def.id, def.product_id]
     );
     if (variants.length === 0) {
-      return res.status(400).json({ error: "Underlying product has no variants" });
+      return res.status(400).json({ error: "Pack products have no variants" });
     }
 
     // Generate a unique public code (retry on rare collision).

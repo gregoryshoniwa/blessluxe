@@ -281,9 +281,13 @@ adminPacksRouter.post("/packs/definitions/:id/launch", async (req, res) => {
     // Pull every variant of every product linked to this definition. For
     // single packs the join table has one row; merge packs may have many.
     // Falls back to the legacy product_id column if no rows exist yet.
+    // Variants ∪ pack products. For the size label, only the option-value
+    // that belongs to the "Size" option counts — match it via po.title
+    // (case-insensitive). The actual label lives on pov.value, NOT vov which
+    // is just the join table.
     const variants = await query(
       `SELECT v.id, v.title, p.title AS product_title, v.product_id,
-              vov.value AS size_value
+              MAX(pov.value) AS size_value
          FROM shop_product_variant v
          JOIN shop_product p ON p.id = v.product_id
          LEFT JOIN shop_variant_option_value vov ON vov.variant_id = v.id
@@ -295,6 +299,7 @@ adminPacksRouter.post("/packs/definitions/:id/launch", async (req, res) => {
           UNION
           SELECT $2 WHERE $2 IS NOT NULL
         )
+        GROUP BY v.id, p.title
         ORDER BY p.title, v.title`,
       [def.id, def.product_id]
     );
