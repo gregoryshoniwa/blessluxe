@@ -1,0 +1,137 @@
+# ─────────────────────────────────────────────────────────────────────
+# BLESSLUXE — DigitalOcean App Platform spec
+#
+# Mirrors the local docker-compose layout: managed Postgres + three
+# services (shop, admin, storefront) each built from its own Dockerfile.
+#
+# Apply via:
+#   doctl apps update <APP_ID> --spec .do/app.yaml
+#   or:  doctl apps create --spec .do/app.yaml
+# ─────────────────────────────────────────────────────────────────────
+
+name: blessluxe
+region: nyc
+
+# ─── Managed PostgreSQL ──────────────────────────────────────────────
+# pgvector is available on DO Managed Postgres 16. The shop migration
+# job runs `CREATE EXTENSION IF NOT EXISTS vector` so this just works.
+databases:
+  - name: blessluxe-db
+    engine: PG
+    version: "16"
+    production: false
+    cluster_name: blessluxe-db
+
+# ─── Pre-deploy migration ────────────────────────────────────────────
+# Runs before any service is updated. Uses the shop image but overrides
+# CMD to execute the migration script, then exits.
+jobs:
+  - name: db-migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: backend/shop/Dockerfile
+    source_dir: /
+    github:
+      repo: gregoryshoniwa/blessluxe
+      branch: master
+      deploy_on_push: false
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    run_command: node --experimental-strip-types --experimental-transform-types src/db/migrate.ts
+    envs:
+      - key: DATABASE_URL
+        value: ${blessluxe-db.DATABASE_URL}
+
+# ─── Services ────────────────────────────────────────────────────────
+services:
+  # ── Shop backend (Express, port 9001) ─────────────────────────────
+  - name: shop
+    dockerfile_path: backend/shop/Dockerfile
+    source_dir: /
+    github:
+      repo: gregoryshoniwa/blessluxe
+      branch: master
+      deploy_on_push: true
+    instance_count: 1
+    instance_size_slug: basic-xs
+    http_port: 9001
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+    envs:
+      - key: PORT
+        value: "9001"
+      - key: DATABASE_URL
+        value: ${blessluxe-db.DATABASE_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: STORE_CORS
+        value: ${storefront.PUBLIC_URL},${admin.PUBLIC_URL}
+      - key: ADMIN_CORS
+        value: ${admin.PUBLIC_URL}
+      - key: UPLOAD_DIR
+        value: /app/backend/shop/uploads
+      - key: PUBLISHABLE_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+
+  # ── Admin dashboard (Next.js, port 3001) ──────────────────────────
+  - name: admin
+    dockerfile_path: apps/admin/Dockerfile
+    source_dir: /
+    github:
+      repo: gregoryshoniwa/blessluxe
+      branch: master
+      deploy_on_push: true
+    instance_count: 1
+    instance_size_slug: basic-xs
+    http_port: 3001
+    health_check:
+      http_path: /
+      initial_delay_seconds: 30
+    envs:
+      # Baked into the client bundle at build time — the admin UI is
+      # 100% client-side fetches, so it talks to shop via the public URL.
+      - key: NEXT_PUBLIC_SHOP_BACKEND
+        scope: BUILD_TIME
+        value: ${shop.PUBLIC_URL}
+
+  # ── Storefront (Next.js, port 3000) ───────────────────────────────
+  - name: storefront
+    dockerfile_path: apps/storefront/Dockerfile
+    source_dir: /
+    github:
+      repo: gregoryshoniwa/blessluxe
+      branch: master
+      deploy_on_push: true
+    instance_count: 1
+    instance_size_slug: basic-xs
+    http_port: 3000
+    health_check:
+      http_path: /
+      initial_delay_seconds: 60
+    envs:
+      # Browser fetches use the public URL.
+      - key: NEXT_PUBLIC_COMMERCE_BACKEND
+        scope: BUILD_TIME
+        value: ${shop.PUBLIC_URL}
+      # Server-side fetches (RSC, /api routes) use the private hostname
+      # so we stay inside DO's VPC instead of round-tripping through HTTPS.
+      - key: SHOP_BACKEND_INTERNAL_URL
+        scope: RUN_TIME
+        value: http://shop:9001
+      - key: NEXTAUTH_URL
+        scope: RUN_TIME
+        value: ${storefront.PUBLIC_URL}
+      - key: NEXTAUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      # Google OAuth — optional, set as SECRETs in the DO dashboard.
+      - key: GOOGLE_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
