@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Star } from 'lucide-react';
+import { Star, Users, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useCartStore } from '@/stores/cart';
 import { useWishlistStore } from '@/stores/wishlist';
@@ -118,13 +118,139 @@ export function ProductClientWrapper({ product, packDefinitionId }: ProductClien
   };
 
   return (
-    <ProductInfo
-      product={product}
-      packFullOnly={!!packDefinitionId}
-      onAddFullPack={packDefinitionId ? handleAddFullPack : undefined}
-      onAddToCart={handleAddToCart}
-      onAddToWishlist={handleAddToWishlist}
-    />
+    <div className="space-y-6">
+      <ProductInfo
+        product={product}
+        packFullOnly={!!packDefinitionId}
+        onAddFullPack={packDefinitionId ? handleAddFullPack : undefined}
+        onAddToCart={handleAddToCart}
+        onAddToWishlist={handleAddToWishlist}
+      />
+      {packDefinitionId && (
+        <HostPackCard
+          packDefinitionId={packDefinitionId}
+          productName={product.name}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Customer-host invite card ─────────────────────────────────────────
+function HostPackCard({
+  packDefinitionId,
+  productName,
+}: {
+  packDefinitionId: string;
+  productName: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+
+  const onHost = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/pack-campaigns/host", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pack_definition_id: packDefinitionId,
+          title: `${productName} — group buy`,
+        }),
+      });
+      const data = (await res.json()) as { public_code?: string; error?: string };
+      if (!res.ok || !data.public_code) {
+        const message = data.error || "Could not start the group buy.";
+        setError(message);
+        if (res.status === 401) {
+          toast.showToast({ variant: "error", title: "Sign in to host a pack." });
+        }
+        return;
+      }
+      setCode(data.public_code);
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      setShareUrl(`${origin}/packs/${data.public_code}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCopy = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // ignore — user can select manually
+    }
+  };
+
+  if (code && shareUrl) {
+    return (
+      <div className="border border-gold/40 bg-cream/40 p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-gold" />
+          <p className="font-display tracking-widest uppercase text-sm text-gold-dark">
+            Your group buy is live
+          </p>
+        </div>
+        <p className="text-sm text-black/70">
+          Share this link with friends. As they each claim a size, the campaign
+          fills up. When it&apos;s full, everyone&apos;s order ships together.
+        </p>
+        <div className="flex items-stretch gap-2">
+          <input
+            readOnly
+            value={shareUrl}
+            className="flex-1 bg-white border border-black/10 px-3 py-2.5 text-sm font-mono"
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button
+            onClick={onCopy}
+            className="inline-flex items-center gap-1.5 bg-black text-white px-4 py-2.5 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? "Copied" : "Copy link"}
+          </button>
+        </div>
+        <p className="text-xs text-black/50">
+          Public code: <span className="font-mono">{code}</span>. Manage it any
+          time from your <Link href="/account?tab=packs" className="underline">account</Link>.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-black/10 p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <Users className="w-4 h-4 text-gold-dark" />
+        <p className="font-display tracking-widest uppercase text-sm">
+          Host a group buy
+        </p>
+      </div>
+      <p className="text-sm text-black/70">
+        Invite friends to claim sizes from this pack. The campaign ships when
+        it&apos;s full — and you earn loyalty Bits for each slot filled.
+      </p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <button
+        onClick={onHost}
+        disabled={busy}
+        className="inline-flex items-center gap-2 bg-gold text-white px-6 py-2.5 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors disabled:opacity-60"
+      >
+        <Users className="w-3.5 h-3.5" />
+        {busy ? "Starting…" : "Start a group buy"}
+      </button>
+    </div>
   );
 }
 

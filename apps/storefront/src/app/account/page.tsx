@@ -1040,6 +1040,10 @@ function AccountPageContent() {
             </div>
           ) : null}
 
+          {activeTab === "Packs" ? (
+            <HostedCampaignsCard />
+          ) : null}
+
           {activeTab === "Tickets" ? (
             <div className="grid md:grid-cols-2 gap-5">
               <form onSubmit={onCreateTicket} className="border border-black/10 p-5 space-y-3">
@@ -1279,5 +1283,124 @@ export default function AccountPage() {
     <Suspense fallback={<div className="px-[5%] py-20 text-center text-black/60">Loading account…</div>}>
       <AccountPageContent />
     </Suspense>
+  );
+}
+
+interface HostedCampaign {
+  id: string;
+  public_code: string;
+  title: string | null;
+  status: string;
+  created_at: string;
+  expires_at: string | null;
+  pack_title: string;
+  pack_handle: string;
+  product_id: string;
+  slot_count: number;
+  claimed_count: number;
+}
+
+function HostedCampaignsCard() {
+  const [campaigns, setCampaigns] = useState<HostedCampaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/pack-campaigns/hosted", { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setCampaigns([]);
+          return;
+        }
+        const data = (await res.json()) as { campaigns?: HostedCampaign[] };
+        if (!cancelled) setCampaigns(data.campaigns || []);
+      } catch {
+        if (!cancelled) setCampaigns([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onCopy = async (code: string) => {
+    const url = `${window.location.origin}/packs/${code}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 1800);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="mt-6 border border-black/10 bg-white p-6">
+      <div className="flex items-baseline justify-between mb-4">
+        <div>
+          <p className="font-script text-xl text-gold">You host</p>
+          <h3 className="font-display tracking-widest uppercase">Group buys</h3>
+        </div>
+        <span className="text-xs text-black/55">
+          {loading ? "Loading…" : `${campaigns.length} campaign${campaigns.length === 1 ? "" : "s"}`}
+        </span>
+      </div>
+
+      {!loading && campaigns.length === 0 ? (
+        <p className="text-sm italic text-black/50">
+          You haven&apos;t started any group buys yet. Open a product that supports packs
+          and click <span className="font-semibold">Start a group buy</span>.
+        </p>
+      ) : (
+        <ul className="divide-y divide-black/10">
+          {campaigns.map((c) => {
+            const ratio = c.slot_count > 0 ? Math.round((c.claimed_count / c.slot_count) * 100) : 0;
+            return (
+              <li key={c.id} className="py-4 flex items-center gap-4 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold">{c.title || c.pack_title}</p>
+                  <p className="text-xs text-black/55 mt-0.5">
+                    <span className="font-mono">{c.public_code}</span>
+                    {" · "}
+                    {c.claimed_count}/{c.slot_count} slots claimed
+                    {" · "}
+                    {new Date(c.created_at).toLocaleDateString()}
+                  </p>
+                  <div className="mt-2 h-1 w-full max-w-[260px] bg-black/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gold transition-all"
+                      style={{ width: `${ratio}%` }}
+                    />
+                  </div>
+                </div>
+                <span
+                  className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
+                  style={
+                    c.status === "fulfilled"
+                      ? { background: "#DCFCE7", color: "#15803D" }
+                      : c.status === "cancelled"
+                        ? { background: "#FEE2E2", color: "#B91C1C" }
+                        : { background: "#FEF3C7", color: "#92400E" }
+                  }
+                >
+                  {c.status}
+                </span>
+                <button
+                  onClick={() => onCopy(c.public_code)}
+                  className="bg-black text-white px-4 py-2 text-xs tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors"
+                >
+                  {copiedCode === c.public_code ? "Copied" : "Copy link"}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
