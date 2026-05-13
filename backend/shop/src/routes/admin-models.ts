@@ -291,20 +291,41 @@ adminModelsRouter.post("/models/:id/assets/generate-video", async (req, res) => 
     ]);
     if (!model) return res.status(404).json({ error: "Model not found" });
 
-    let imageReference: { mimeType: string; base64: string } | undefined;
+    // Resolve identity-reference image: explicit choice → model primary →
+    // first ready image asset. Veo without a reference invents a new face,
+    // so this chain is what keeps the character consistent across clips.
+    let refAsset: Record<string, unknown> | null = null;
     if (b.reference_asset_id) {
-      const refAsset = await queryOne(
-        `SELECT media_url FROM shop_model_asset WHERE id = $1 AND media_type = 'image'`,
+      refAsset = await queryOne(
+        `SELECT media_url FROM shop_model_asset
+          WHERE id = $1 AND media_type = 'image' AND status = 'ready'`,
         [b.reference_asset_id]
       );
-      if (refAsset) {
-        const part = await fetchAsInlinePart(String(refAsset.media_url));
-        if (part) {
-          imageReference = {
-            mimeType: part.inlineData.mimeType,
-            base64: part.inlineData.data,
-          };
-        }
+    }
+    if (!refAsset && model.primary_asset_id) {
+      refAsset = await queryOne(
+        `SELECT media_url FROM shop_model_asset
+          WHERE id = $1 AND media_type = 'image' AND status = 'ready'`,
+        [model.primary_asset_id]
+      );
+    }
+    if (!refAsset) {
+      refAsset = await queryOne(
+        `SELECT media_url FROM shop_model_asset
+          WHERE model_id = $1 AND media_type = 'image' AND status = 'ready'
+          ORDER BY position, created_at LIMIT 1`,
+        [req.params.id]
+      );
+    }
+
+    let imageReference: { mimeType: string; base64: string } | undefined;
+    if (refAsset) {
+      const part = await fetchAsInlinePart(String(refAsset.media_url));
+      if (part) {
+        imageReference = {
+          mimeType: part.inlineData.mimeType,
+          base64: part.inlineData.data,
+        };
       }
     }
 
@@ -315,9 +336,17 @@ adminModelsRouter.post("/models/:id/assets/generate-video", async (req, res) => 
         .join(", ") ||
       "BLESSLUXE house model";
 
+    // Emphasise identity-lock when we have a reference image. Veo will
+    // otherwise treat the image as a scene starter rather than an identity
+    // anchor and drift to a different face mid-clip.
+    const identityLock = imageReference
+      ? "Critical: the reference image shows the exact subject. Preserve the same facial structure, skin tone, hair, and body proportions throughout the entire clip. Do not invent a different person."
+      : "";
+
     const prompt = [
       `8-second cinematic editorial fashion video.`,
       `Subject: ${identityPrompt}.`,
+      identityLock,
       "Slow dolly shot, warm cinematic grade, soft golden lighting, ambient luxury vibe.",
       b.prompt?.trim(),
     ]

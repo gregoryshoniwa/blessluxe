@@ -248,9 +248,14 @@ adminProductMediaRouter.post(
         }
       }
 
+      const identityLock = imageReference
+        ? "Critical: the reference image shows the exact subject. Preserve the same facial structure, skin tone, hair, and body proportions throughout the entire clip. Do not invent a different person. Dress the subject in the garment described below — do not change the garment to something else."
+        : "";
+
       const prompt = [
         `8-second cinematic fashion campaign video.`,
         modelIdentity ? `Subject: ${modelIdentity}.` : "",
+        identityLock,
         `Featuring: ${product.title}${product.description ? ` — ${product.description}` : ""}.`,
         "Slow elegant motion: a gentle dolly + reveal of the garment, warm cinematic grade, soft directional light, luxury atmosphere.",
         b.prompt?.trim(),
