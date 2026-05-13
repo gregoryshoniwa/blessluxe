@@ -104,11 +104,22 @@ adminProductMediaRouter.post(
             .join(", ") ||
           (model.description as string) ||
           "";
+        // Prefer the starred primary, then uploads, then AI-generated — same
+        // priority chain we use in admin-models so the same face shows up.
         const refs = await query(
-          `SELECT media_url FROM shop_model_asset
-            WHERE model_id = $1 AND media_type = 'image' AND status = 'ready'
-            ORDER BY position, created_at LIMIT 3`,
-          [b.model_id]
+          `SELECT media_url,
+                  CASE
+                    WHEN id = $2                THEN 0
+                    WHEN source_kind = 'upload' THEN 1
+                    ELSE 2
+                  END AS rank
+             FROM shop_model_asset
+            WHERE model_id = $1
+              AND media_type = 'image'
+              AND status = 'ready'
+            ORDER BY rank, position, created_at
+            LIMIT 2`,
+          [b.model_id, model.primary_asset_id || ""]
         );
         const parts = await Promise.all(
           refs.map((r) => fetchAsInlinePart(String(r.media_url)))
@@ -127,12 +138,22 @@ adminProductMediaRouter.post(
         ? await fetchAsInlinePart(String(productImg.media_url))
         : null;
 
+      const refs = [...modelRefParts];
+      if (productRef) refs.push(productRef);
+
+      const identityLock = modelRefParts.length
+        ? "Critical identity-lock: the first reference image is the ground-truth subject. Preserve the exact facial structure, skin tone, hair texture, body proportions, and distinguishing features. Do not invent a new face, do not beautify, do not change ethnicity, age, or body shape. The model in the final image must be unmistakably the same person."
+        : "";
+      const wardrobeLock = productRef
+        ? "Wardrobe transfer: the last reference image shows the actual garment. Dress the subject in this exact piece — preserve silhouette, fabric texture, colour, and every design detail. Do not substitute a similar-looking garment."
+        : "";
+
       const prompt = [
         "Generate a luxury fashion campaign image (16:9).",
         modelIdentity ? `Subject: ${modelIdentity}.` : "",
-        "Identity lock: if reference images of the subject are provided, preserve facial features exactly. Do not invent a new person.",
+        identityLock,
         `Outfit: ${product.title}${product.description ? ` — ${product.description}` : ""}.`,
-        "Wardrobe transfer: if a product reference image is provided, dress the subject in that exact garment, preserving silhouette, fabric, and details.",
+        wardrobeLock,
         b.angle && `Camera angle: ${b.angle}.`,
         b.scene && `Setting / scene: ${b.scene}.`,
         b.prompt?.trim(),
@@ -140,9 +161,6 @@ adminProductMediaRouter.post(
       ]
         .filter(Boolean)
         .join(" ");
-
-      const refs = [...modelRefParts];
-      if (productRef) refs.push(productRef);
 
       const generated = await generateImage({
         prompt,

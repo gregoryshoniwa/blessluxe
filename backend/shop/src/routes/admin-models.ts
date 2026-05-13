@@ -212,31 +212,48 @@ adminModelsRouter.post("/models/:id/assets/generate-image", async (req, res) => 
       .filter(Boolean)
       .join("; ");
 
-    const prompt = [
-      "Generate a high-end editorial fashion photograph (16:9).",
-      `Subject: ${identityPrompt}.`,
-      "Keep the same facial identity if a reference image is provided — do not invent a new face.",
-      extras,
-      b.prompt?.trim(),
-      "Use cinematic luxury lighting, soft cream and gold palette, 50mm lens look, gentle film grain. No text overlays.",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    // Inline existing assets as identity references when requested (or by default).
+    // Build the reference set in priority order:
+    //   1. The starred primary asset (the admin's chosen ground truth)
+    //   2. Other original UPLOADS (real photos > previously-generated images)
+    //   3. Finally any AI-generated images as last resort
+    // Then cap at 3 references — too many can confuse the model.
     let referenceParts: Awaited<ReturnType<typeof fetchAsInlinePart>>[] = [];
     if (b.use_existing_as_reference !== false) {
       const refs = await query(
-        `SELECT media_url FROM shop_model_asset
-          WHERE model_id = $1 AND media_type = 'image' AND status = 'ready'
-          ORDER BY position, created_at LIMIT 3`,
-        [req.params.id]
+        `SELECT media_url, source_kind,
+                CASE
+                  WHEN id = $2                THEN 0   -- starred primary first
+                  WHEN source_kind = 'upload' THEN 1   -- real photos next
+                  ELSE 2                                -- AI-generated last
+                END AS rank
+           FROM shop_model_asset
+          WHERE model_id = $1
+            AND media_type = 'image'
+            AND status = 'ready'
+          ORDER BY rank, position, created_at
+          LIMIT 3`,
+        [req.params.id, model.primary_asset_id || ""]
       );
       const parts = await Promise.all(
         refs.map((r) => fetchAsInlinePart(String(r.media_url)))
       );
       referenceParts = parts.filter(Boolean);
     }
+
+    const identityLock = referenceParts.length
+      ? "Critical identity-lock: the first reference image is the ground-truth subject. Preserve the exact facial structure, skin tone, hair texture, body proportions, and distinguishing features. Do not invent a new face, do not beautify, do not change ethnicity, age, or body shape. Treat the reference as the actual person being photographed in a new pose."
+      : "";
+
+    const prompt = [
+      "Generate a high-end editorial fashion photograph (16:9).",
+      `Subject: ${identityPrompt}.`,
+      identityLock,
+      extras,
+      b.prompt?.trim(),
+      "Use cinematic luxury lighting, soft cream and gold palette, 50mm lens look, gentle film grain. No text overlays. Output a polished photo, not commentary.",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     const generated = await generateImage({
       prompt,
