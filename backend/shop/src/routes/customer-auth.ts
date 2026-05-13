@@ -153,6 +153,10 @@ customerAuthRouter.post("/oauth", async (req, res) => {
       );
     }
 
+    if (!customer) {
+      return res.status(500).json({ error: "Customer not found after OAuth flow" });
+    }
+
     const { token } = await issueSession(String(customer.id));
     res.json({ token, customer: sanitizeCustomer(customer) });
   } catch (err) {

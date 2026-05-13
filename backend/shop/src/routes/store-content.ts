@@ -86,7 +86,7 @@ storeContentRouter.get("/access", async (req, res) => {
     const totalRow = await query(
       `SELECT count(*)::int AS c FROM shop_country WHERE is_allowed = true`
     );
-    const allowedTotal = totalRow[0]?.c ?? 0;
+    const allowedTotal = Number(totalRow[0]?.c ?? 0);
     if (allowedTotal === 0) {
       // Admin hasn't configured an allow-list yet — open by default.
       return res.json({ allowed: true, country: code, reason: "no-allowlist" });
@@ -95,7 +95,7 @@ storeContentRouter.get("/access", async (req, res) => {
       `SELECT count(*)::int AS c FROM shop_country WHERE code = $1 AND is_allowed = true`,
       [code]
     );
-    const allowed = (row[0]?.c ?? 0) > 0;
+    const allowed = Number(row[0]?.c ?? 0) > 0;
     res.json({ allowed, country: code });
   } catch (err) {
     console.error("[store access]", err);
