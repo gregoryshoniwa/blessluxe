@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Lock, Loader2 } from "lucide-react";
+import { Check, Lock, Loader2, X } from "lucide-react";
 import { useCartStore } from "@/stores/cart";
 import { useToast } from "@/providers";
 
@@ -14,6 +14,7 @@ export interface CampaignSlot {
   customer_id: string | null;
   product_id: string;
   variant_title: string;
+  is_mine?: boolean;
 }
 
 interface CampaignSlotListProps {
@@ -93,7 +94,7 @@ export function CampaignSlotList({
       });
       setSlots((prev) =>
         prev.map((s) =>
-          s.id === slot.id ? { ...s, status: "reserved" } : s
+          s.id === slot.id ? { ...s, status: "reserved", is_mine: true } : s
         )
       );
       toast.showToast({
@@ -108,22 +109,73 @@ export function CampaignSlotList({
     }
   };
 
+  const release = async (slot: CampaignSlot) => {
+    setBusyId(slot.id);
+    try {
+      const res = await fetch(
+        `/api/pack-campaigns/by-code/${encodeURIComponent(campaignCode)}/slots/${slot.id}/release`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.showToast({
+          variant: "error",
+          title: "Couldn’t release",
+          message: data.error || "Try again in a moment.",
+        });
+        return;
+      }
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? { ...s, status: "available", is_mine: false, customer_id: null }
+            : s
+        )
+      );
+      toast.showToast({
+        variant: "info",
+        title: "Slot released",
+        message: "Someone else can claim it now.",
+      });
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <ul className="divide-y divide-black/10">
       {slots.map((slot) => {
         const isClaimed = ["paid", "reserved", "fulfilled"].includes(slot.status);
         const busy = busyId === slot.id;
+        const mineReserved = isClaimed && slot.is_mine && slot.status === "reserved";
+
+        let hint: string;
+        if (mineReserved) hint = "You're holding this slot — release if you’ve changed your mind.";
+        else if (isClaimed) hint = "Taken — another customer holds this slot";
+        else hint = "Available — first come, first served";
+
         return (
           <li key={slot.id} className="flex items-center gap-4 px-5 py-3">
             <span className="text-base font-semibold tracking-widest uppercase w-20">
               {slot.size_label}
             </span>
-            <span className="flex-1 text-xs text-black/55">
-              {isClaimed
-                ? "Taken — another customer holds this slot"
-                : "Available — first come, first served"}
-            </span>
-            {isClaimed ? (
+            <span className="flex-1 text-xs text-black/55">{hint}</span>
+
+            {mineReserved ? (
+              <button
+                onClick={() => release(slot)}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 border border-black/15 px-4 py-2 text-xs font-semibold tracking-widest uppercase text-black/70 hover:bg-black/[0.05] transition-colors disabled:opacity-60"
+              >
+                {busy ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <X className="w-3 h-3" />
+                )}
+                {busy ? "Releasing…" : "Release"}
+              </button>
+            ) : isClaimed ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold tracking-widest uppercase text-black/55">
                 {slot.status === "paid" ? (
                   <Check className="w-3 h-3" />

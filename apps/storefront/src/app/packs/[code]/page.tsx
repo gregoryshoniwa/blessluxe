@@ -6,6 +6,7 @@ import {
   getStoreMedusaFetchHeaders,
   MEDUSA_BACKEND_URL,
 } from "@/lib/medusa";
+import { getShopCustomerToken } from "@/lib/customer-account";
 import { CampaignSlotList, type CampaignSlot } from "@/components/packs/CampaignSlotList";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +31,16 @@ async function loadCampaign(code: string): Promise<CampaignDetail | null> {
       `/store/pack-campaigns/by-code/${encodeURIComponent(code)}`,
       getInternalBackendUrl()
     );
-    const res = await fetch(url.toString(), {
-      cache: "no-store",
-      headers: { ...getStoreMedusaFetchHeaders(), connection: "close" },
-    });
+    // Forward the customer's bearer when present so the backend can mark
+    // slots as is_mine — that's what lets the UI show a Release button on
+    // slots the signed-in customer is currently holding.
+    const token = await getShopCustomerToken();
+    const headers: Record<string, string> = {
+      ...getStoreMedusaFetchHeaders(),
+      connection: "close",
+    };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const res = await fetch(url.toString(), { cache: "no-store", headers });
     if (!res.ok) return null;
     const json = (await res.json()) as { campaign?: CampaignDetail };
     return json.campaign || null;

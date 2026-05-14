@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ImageIcon, PackagePlus, TrendingUp, AlertTriangle, Clock } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, mediaUrl } from "@/lib/api";
 import { useAuthGate } from "@/lib/useAuthGate";
 import { AdminShell } from "@/components/AdminShell";
 import { useDialog } from "@/components/Dialog";
@@ -320,7 +320,7 @@ export default function InventoryPage() {
                           {r.product_thumbnail ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={r.product_thumbnail}
+                              src={mediaUrl(r.product_thumbnail)}
                               alt=""
                               className="h-9 w-9 flex-shrink-0 rounded-sm object-cover"
                               style={{ border: "1px solid var(--line-soft)" }}

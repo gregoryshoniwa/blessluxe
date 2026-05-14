@@ -252,6 +252,11 @@ storePackCampaignsRouter.post("/:code/slots/:slotId/release", async (req, res) =
 storePackCampaignsRouter.get("/by-code/:code", async (req, res) => {
   try {
     const code = String(req.params.code || "").toUpperCase().trim();
+    // Optional auth — if the caller is signed in we annotate each slot with
+    // is_mine so the UI can swap Claim → Release for that customer's own
+    // reservations. Anonymous browsers still get the read-only view.
+    const customerId = await resolveCustomerId(req.headers.authorization);
+
     const campaign = await queryOne(
       `SELECT c.*, d.title AS pack_title, d.handle AS pack_handle,
               d.description AS pack_description, d.product_id
@@ -261,8 +266,22 @@ storePackCampaignsRouter.get("/by-code/:code", async (req, res) => {
       [code]
     );
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    // Release expired holds on read so the displayed state is fresh.
+    await execute(
+      `UPDATE pack_slot
+          SET status = 'available', customer_id = NULL, reserved_until = NULL,
+              updated_at = NOW()
+        WHERE pack_campaign_id = $1
+          AND status = 'reserved'
+          AND reserved_until IS NOT NULL
+          AND reserved_until < NOW()`,
+      [campaign.id]
+    );
+
     const slots = await query(
       `SELECT s.id, s.variant_id, s.size_label, s.status, s.customer_id,
+              s.reserved_until,
               v.product_id, v.title AS variant_title
          FROM pack_slot s
          JOIN shop_product_variant v ON v.id = s.variant_id
@@ -270,7 +289,13 @@ storePackCampaignsRouter.get("/by-code/:code", async (req, res) => {
         ORDER BY v.product_id, s.size_label`,
       [campaign.id]
     );
-    res.json({ campaign: { ...campaign, slots } });
+    const annotated = slots.map((s) => ({
+      ...s,
+      is_mine: Boolean(
+        customerId && s.customer_id && String(s.customer_id) === customerId
+      ),
+    }));
+    res.json({ campaign: { ...campaign, slots: annotated } });
   } catch (err) {
     console.error("[store pack-campaigns by-code]", err);
     res.status(500).json({ error: "Failed" });
