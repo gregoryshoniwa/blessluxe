@@ -46,6 +46,11 @@ export async function POST(req: Request) {
 
   const normalizedItems = items.map((item: unknown) => {
     const o = item as Record<string, unknown>;
+    const metaRaw = o.metadata;
+    const metadata =
+      metaRaw && typeof metaRaw === "object" && !Array.isArray(metaRaw)
+        ? (metaRaw as Record<string, unknown>)
+        : undefined;
     return {
       productId: String(o.productId || ""),
       productHandle: o.productHandle ? String(o.productHandle) : undefined,
@@ -53,6 +58,7 @@ export async function POST(req: Request) {
       variantId: o.variantId ? String(o.variantId) : undefined,
       quantity: Number(o.quantity || 1),
       unitPrice: Number(o.unitPrice || 0),
+      metadata,
     };
   });
 
@@ -69,7 +75,14 @@ export async function POST(req: Request) {
   // sales. Resolve variant ids on the fly when older callers only pass
   // product_id. Errors are logged loudly so we can see if the mirror skips.
   try {
-    const itemsForShop: Array<{ variant_id: string; quantity: number; unit_price: number }> = [];
+    const itemsForShop: Array<{
+      variant_id: string;
+      quantity: number;
+      unit_price: number;
+      pack_slot_id?: string;
+      pack_campaign_id?: string;
+      metadata?: Record<string, unknown>;
+    }> = [];
     let skippedNoVariant = 0;
     for (const it of normalizedItems) {
       const variantId = await resolveVariantId({
@@ -77,10 +90,18 @@ export async function POST(req: Request) {
         variantId: it.variantId,
       });
       if (!variantId) { skippedNoVariant++; continue; }
+      // Forward pack-slot metadata so the order POST can flip
+      // reserved → paid for group buys.
+      const meta = (it as { metadata?: Record<string, unknown> }).metadata;
       itemsForShop.push({
         variant_id: variantId,
         quantity: it.quantity,
         unit_price: Math.round(it.unitPrice * 100),
+        pack_slot_id: meta?.pack_slot_id ? String(meta.pack_slot_id) : undefined,
+        pack_campaign_id: meta?.pack_campaign_id
+          ? String(meta.pack_campaign_id)
+          : undefined,
+        metadata: meta,
       });
     }
     if (itemsForShop.length > 0) {

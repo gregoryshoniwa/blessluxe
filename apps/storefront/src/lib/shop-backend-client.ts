@@ -189,7 +189,15 @@ export interface ShopOrderInput {
   email?: string;
   customer_token?: string;
   currency_code: string;
-  items: Array<{ variant_id: string; quantity: number; unit_price: number }>;
+  items: Array<{
+    variant_id: string;
+    quantity: number;
+    unit_price: number;
+    /** Forwards pack-slot link so the backend can flip 'reserved' → 'paid'. */
+    pack_slot_id?: string;
+    pack_campaign_id?: string;
+    metadata?: Record<string, unknown>;
+  }>;
   shipping_total?: number;
   tax_total?: number;
   discount_total?: number;

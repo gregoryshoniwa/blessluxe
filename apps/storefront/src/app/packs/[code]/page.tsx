@@ -1,23 +1,16 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Users, Check, Lock } from "lucide-react";
+import { ChevronRight, Users } from "lucide-react";
 import {
   getInternalBackendUrl,
   getStoreMedusaFetchHeaders,
   MEDUSA_BACKEND_URL,
 } from "@/lib/medusa";
+import { CampaignSlotList, type CampaignSlot } from "@/components/packs/CampaignSlotList";
 
 export const dynamic = "force-dynamic";
 
-interface Slot {
-  id: string;
-  variant_id: string;
-  size_label: string;
-  status: string;
-  customer_id: string | null;
-  product_id: string;
-  variant_title: string;
-}
+type Slot = CampaignSlot;
 
 interface CampaignDetail {
   id: string;
@@ -194,47 +187,11 @@ export default async function PackCampaignPage({
                     </div>
                   </div>
                 )}
-                <ul className="divide-y divide-black/10">
-                  {slots.map((slot) => {
-                    const isClaimed = ["paid", "reserved", "fulfilled"].includes(slot.status);
-                    return (
-                      <li
-                        key={slot.id}
-                        className="flex items-center gap-4 px-5 py-3"
-                      >
-                        <span className="text-base font-semibold tracking-widest uppercase w-20">
-                          {slot.size_label}
-                        </span>
-                        <span className="flex-1 text-xs text-black/55">
-                          {isClaimed
-                            ? "Taken by another customer"
-                            : "Available — first come, first served"}
-                        </span>
-                        {isClaimed ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold tracking-widest uppercase text-black/55">
-                            {slot.status === "paid" ? (
-                              <Check className="w-3 h-3" />
-                            ) : (
-                              <Lock className="w-3 h-3" />
-                            )}
-                            {slot.status}
-                          </span>
-                        ) : product ? (
-                          <Link
-                            href={`/shop/${encodeURIComponent(product.handle)}`}
-                            className="bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
-                          >
-                            Claim
-                          </Link>
-                        ) : (
-                          <span className="text-xs italic text-black/45">
-                            Product unavailable
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <CampaignSlotList
+                  campaignCode={campaign.public_code}
+                  campaignId={campaign.id}
+                  slots={slots}
+                />
               </section>
             );
           })}

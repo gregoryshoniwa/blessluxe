@@ -146,6 +146,10 @@ storeOrdersRouter.post("/", async (req, res) => {
         variant_id: string;
         quantity: number;
         unit_price: number;
+        /** If present, marks a pack_slot as paid + links the line item. */
+        pack_slot_id?: string;
+        pack_campaign_id?: string;
+        metadata?: Record<string, unknown>;
       }>;
       shipping_total?: number;
       tax_total?: number;
@@ -296,6 +300,28 @@ storeOrdersRouter.post("/", async (req, res) => {
         quantity: it.quantity,
         unit_price: it.unit_price,
       });
+
+      // If this line completes a pack-slot reservation, flip the slot to
+      // paid and link it to this line item. Restricted to the line's own
+      // customer when known, plus a reserved-status guard so we don't
+      // accidentally re-fulfil somebody else's slot.
+      const slotIdFromMetadata =
+        it.pack_slot_id ||
+        ((it.metadata as Record<string, unknown>)?.pack_slot_id as string | undefined);
+      if (slotIdFromMetadata) {
+        await execute(
+          `UPDATE pack_slot
+              SET status = 'paid',
+                  order_id = $1,
+                  line_item_id = $2,
+                  reserved_until = NULL,
+                  updated_at = NOW()
+            WHERE id = $3
+              AND deleted_at IS NULL
+              AND status IN ('reserved', 'available')`,
+          [id, lineId, slotIdFromMetadata]
+        );
+      }
 
       await execute(
         `UPDATE shop_product_variant

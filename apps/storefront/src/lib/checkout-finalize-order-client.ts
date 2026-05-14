@@ -202,6 +202,9 @@ export async function finalizeOrderAfterPayment(input: {
           productTitle: item.title,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          // Forward pack-slot metadata so the shop-order mirror can flip
+          // reserved → paid on each pack_slot the customer claimed.
+          metadata: item.lineMetadata as Record<string, unknown> | undefined,
         })),
       }),
     });

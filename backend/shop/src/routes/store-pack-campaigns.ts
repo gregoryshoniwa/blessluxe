@@ -144,6 +144,110 @@ storePackCampaignsRouter.get("/hosted", async (req, res) => {
   }
 });
 
+/**
+ * Reserve a slot for the authenticated customer. Atomic via a single UPDATE
+ * guarded by status + reservation expiry, so two simultaneous claims for the
+ * same size can't both win. The hold lasts 10 minutes — if the customer
+ * doesn't complete checkout, the slot reverts to available the next time
+ * any reservation request runs (or via order POST completing checkout).
+ */
+storePackCampaignsRouter.post("/:code/slots/:slotId/reserve", async (req, res) => {
+  try {
+    const customerId = await resolveCustomerId(req.headers.authorization);
+    if (!customerId) {
+      return res.status(401).json({ error: "Sign in to claim a slot" });
+    }
+    const code = String(req.params.code || "").toUpperCase().trim();
+    const slotId = String(req.params.slotId || "").trim();
+    const campaign = await queryOne(
+      `SELECT id, status FROM pack_campaign
+        WHERE public_code = $1 AND deleted_at IS NULL`,
+      [code]
+    );
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+    if (!["open", "filling"].includes(String(campaign.status))) {
+      return res
+        .status(409)
+        .json({ error: `Campaign is ${campaign.status} — slots are locked` });
+    }
+    // Release any expired holds first so we don't reject this customer
+    // because of someone else's stale reservation.
+    await execute(
+      `UPDATE pack_slot
+          SET status = 'available', customer_id = NULL, reserved_until = NULL,
+              updated_at = NOW()
+        WHERE pack_campaign_id = $1
+          AND status = 'reserved'
+          AND reserved_until IS NOT NULL
+          AND reserved_until < NOW()`,
+      [campaign.id]
+    );
+    // Try to claim atomically. Allowed if:
+    //   - currently available, OR
+    //   - already reserved by THIS customer (renew the hold)
+    const result = await query(
+      `UPDATE pack_slot
+          SET status = 'reserved',
+              customer_id = $1,
+              reserved_until = NOW() + INTERVAL '10 minutes',
+              updated_at = NOW()
+        WHERE id = $2
+          AND pack_campaign_id = $3
+          AND deleted_at IS NULL
+          AND (
+            status = 'available'
+            OR (status = 'reserved' AND customer_id = $1)
+          )
+        RETURNING id, variant_id, size_label, status, reserved_until`,
+      [customerId, slotId, campaign.id]
+    );
+    if (result.length === 0) {
+      return res
+        .status(409)
+        .json({ error: "Slot is no longer available", slot_id: slotId });
+    }
+    // Bump the campaign to 'filling' once at least one slot is claimed.
+    if (campaign.status === "open") {
+      await execute(
+        `UPDATE pack_campaign SET status = 'filling', updated_at = NOW() WHERE id = $1`,
+        [campaign.id]
+      );
+    }
+    res.json({ slot: result[0] });
+  } catch (err) {
+    console.error("[store pack-campaigns reserve]", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+/** Release a slot the customer reserved (gives up the hold). */
+storePackCampaignsRouter.post("/:code/slots/:slotId/release", async (req, res) => {
+  try {
+    const customerId = await resolveCustomerId(req.headers.authorization);
+    if (!customerId) return res.status(401).json({ error: "Not authenticated" });
+    const code = String(req.params.code || "").toUpperCase().trim();
+    const campaign = await queryOne(
+      `SELECT id FROM pack_campaign WHERE public_code = $1 AND deleted_at IS NULL`,
+      [code]
+    );
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+    await execute(
+      `UPDATE pack_slot
+          SET status = 'available', customer_id = NULL, reserved_until = NULL,
+              updated_at = NOW()
+        WHERE id = $1
+          AND pack_campaign_id = $2
+          AND status = 'reserved'
+          AND customer_id = $3`,
+      [req.params.slotId, campaign.id, customerId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[store pack-campaigns release]", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 /** Public lookup by code so anyone with a share link can join. */
 storePackCampaignsRouter.get("/by-code/:code", async (req, res) => {
   try {
