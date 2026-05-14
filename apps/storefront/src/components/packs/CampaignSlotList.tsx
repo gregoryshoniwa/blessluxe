@@ -45,7 +45,7 @@ export function CampaignSlotList({
     setBusyId(slot.id);
     try {
       const res = await fetch(
-        `/api/pack-campaigns/${encodeURIComponent(campaignCode)}/slots/${slot.id}/reserve`,
+        `/api/pack-campaigns/by-code/${encodeURIComponent(campaignCode)}/slots/${slot.id}/reserve`,
         { method: "POST" }
       );
       const data = (await res.json()) as { slot?: CampaignSlot; error?: string };
