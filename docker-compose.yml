@@ -51,6 +51,12 @@ services:
       GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
       GOOGLE_NANO_BANANA_MODEL: ${GOOGLE_NANO_BANANA_MODEL:-}
       GOOGLE_VEO_MODEL: ${GOOGLE_VEO_MODEL:-}
+      # Paynow web integration — keys MUST stay server-side
+      PAYNOW_INTEGRATION_ID: ${PAYNOW_INTEGRATION_ID:-}
+      PAYNOW_INTEGRATION_KEY: ${PAYNOW_INTEGRATION_KEY:-}
+      PAYNOW_RESULT_URL: ${PAYNOW_RESULT_URL:-}
+      PAYNOW_RETURN_URL: ${PAYNOW_RETURN_URL:-}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
     volumes:
       - shop_uploads:/app/backend/shop/uploads
     healthcheck:

@@ -650,3 +650,32 @@ SELECT 'pdp_' || md5(d.id || d.product_id), d.id, d.product_id, 0
    AND NOT EXISTS (
      SELECT 1 FROM pack_definition_product j WHERE j.pack_definition_id = d.id
    );
+
+-- ─── Payment sessions (Paynow + future providers) ───────────────────────
+-- A session is a pending intent created before redirecting the customer to
+-- an external payment provider. The provider's IPN/return callback updates
+-- it to paid/failed/cancelled. When paid, we materialise a shop_order from
+-- the cart_snapshot exactly as if the customer had completed a normal
+-- in-app checkout.
+CREATE TABLE IF NOT EXISTS shop_payment_session (
+  id                TEXT PRIMARY KEY,
+  reference         TEXT NOT NULL UNIQUE,                -- our reference sent to the provider
+  provider          TEXT NOT NULL DEFAULT 'paynow',
+  status            TEXT NOT NULL DEFAULT 'pending'      -- pending | paid | failed | cancelled
+                    CHECK (status IN ('pending','paid','failed','cancelled')),
+  provider_status   TEXT,                                -- raw status string from provider
+  provider_reference TEXT,                               -- their reference (e.g. paynowreference)
+  poll_url          TEXT,                                -- provider polling URL for retries
+  amount            INT NOT NULL,                        -- minor units (cents)
+  currency_code     TEXT NOT NULL,
+  email             TEXT,
+  customer_id       TEXT REFERENCES shop_customer(id) ON DELETE SET NULL,
+  cart_snapshot     JSONB NOT NULL,                      -- items + totals + addresses
+  order_id          TEXT REFERENCES shop_order(id) ON DELETE SET NULL,
+  raw_init_response TEXT,
+  raw_ipn_payload   TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_shop_payment_session_reference ON shop_payment_session(reference);
+CREATE INDEX IF NOT EXISTS idx_shop_payment_session_status ON shop_payment_session(status, created_at);

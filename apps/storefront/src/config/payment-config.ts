@@ -17,7 +17,7 @@ export interface PaymentMethod {
   description: string;
   enabled: boolean;
   /** `blits` / `blits_split` are injected at runtime on checkout when the customer is logged in. */
-  type: 'card' | 'mobile' | 'bank' | 'blits' | 'blits_split';
+  type: 'card' | 'mobile' | 'bank' | 'blits' | 'blits_split' | 'paynow';
   // For mobile money - phone format
   phoneFormat?: string;
   // For card - supported networks
@@ -60,6 +60,14 @@ export const paymentMethods: PaymentMethod[] = [
     enabled: true,
     type: 'mobile',
     phoneFormat: '+263 7X XXX XXXX',
+  },
+  {
+    id: 'paynow',
+    name: 'Paynow',
+    icon: 'Wallet',
+    description: 'EcoCash, OneMoney, ZIPIT or card via Paynow',
+    enabled: true,
+    type: 'paynow',
   },
   // Add more payment methods below
   // {

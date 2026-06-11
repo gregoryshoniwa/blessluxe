@@ -51,10 +51,11 @@ const steps = [
 export default function CheckoutPaymentPage() {
   const { showToast } = useToast();
   const router = useRouter();
-  const { 
-    shippingAddress, 
-    shippingMethod, 
-    setPaymentMethod, 
+  const {
+    email: checkoutEmail,
+    shippingAddress,
+    shippingMethod,
+    setPaymentMethod,
     setOrderComplete,
   } = useCheckoutStore();
   const clearCart = useCartStore((s) => s.clearCart);
@@ -584,6 +585,55 @@ export default function CheckoutPaymentPage() {
 
         splitAttemptKeyRef.current = null;
         chargeUsd = Number(payData.payableUsd ?? blitsPricing.payableUsd);
+      } else if (selectedMethod === "paynow") {
+        const payload = {
+          items: items.map((i) => ({
+            variant_id: i.variantId,
+            quantity: i.quantity,
+            unit_price: Math.round(i.unitPrice * 100),
+            pack_slot_id:
+              (i.lineMetadata as Record<string, unknown> | null | undefined)?.pack_slot_id as
+                | string
+                | undefined,
+            metadata: i.lineMetadata || undefined,
+          })),
+          email: checkoutEmail || undefined,
+          auth_phone: shippingAddress?.phone || undefined,
+          auth_name:
+            [shippingAddress?.firstName, shippingAddress?.lastName].filter(Boolean).join(" ") ||
+            undefined,
+          currency_code: "usd",
+          shipping_total: Math.round(shipping * 100),
+          tax_total: 0,
+          discount_total: 0,
+          shipping_address: shippingAddress
+            ? { ...shippingAddress, address_1: shippingAddress.address1 }
+            : undefined,
+        };
+        const initRes = await fetch("/api/checkout/paynow/initiate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const initJson = (await initRes.json().catch(() => ({}))) as {
+          browser_url?: string;
+          reference?: string;
+          error?: string;
+        };
+        if (!initRes.ok || !initJson.browser_url) {
+          showToast({
+            title: "Could not start Paynow checkout",
+            message: initJson.error || "Please try again or pick another payment method.",
+            variant: "error",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        // Paynow runs the rest of the flow off-site; the order materialises
+        // in the IPN callback and the customer is bounced back to
+        // /checkout/paynow/return?reference=…
+        window.location.href = initJson.browser_url;
+        return;
       } else if (selectedMethod === "card" && useStripeCard) {
         const pending: StripePendingCheckout = {
           orderId,
