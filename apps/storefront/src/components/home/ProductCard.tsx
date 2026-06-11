@@ -91,7 +91,7 @@ export function ProductCard({
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
-      whileHover={{ y: -8 }}
+      whileHover={{ y: -4 }}
       transition={{ duration: 0.3 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -127,7 +127,7 @@ export function ProductCard({
           {badge && (
             <span
               className={cn(
-                "absolute top-4 left-4 px-3 py-1 text-xs font-semibold tracking-wide uppercase",
+                "absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
                 badge === "new" && "bg-gold text-white",
                 badge === "sale" && "bg-red-600 text-white",
                 badge === "hot" && "bg-red-500 text-white",
@@ -145,15 +145,15 @@ export function ProductCard({
             animate={{ opacity: isHovered || inWishlist ? 1 : 0 }}
             onClick={handleAddToWishlist}
             className={cn(
-              "absolute top-4 right-4 w-10 h-10 bg-white rounded-full",
-              "flex items-center justify-center shadow-lg",
+              "absolute top-2 right-2 w-7 h-7 bg-white rounded-full",
+              "flex items-center justify-center shadow-md",
               "transition-colors",
               inWishlist && "bg-gold"
             )}
           >
             <Heart
               className={cn(
-                "w-5 h-5 transition-colors",
+                "w-3.5 h-3.5 transition-colors",
                 inWishlist ? "text-white fill-white" : "text-black"
               )}
             />
@@ -162,16 +162,16 @@ export function ProductCard({
         </div>
 
         {/* Info */}
-        <div className="p-5">
-          <h3 className="font-display text-lg mb-2 group-hover:text-gold transition-colors">
+        <div className="p-2.5 sm:p-3">
+          <h3 className="font-display text-sm sm:text-base leading-tight mb-1 line-clamp-1 group-hover:text-gold transition-colors">
             {title}
           </h3>
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-black">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-black text-sm">
               {formatPrice(price)}
             </span>
             {compareAtPrice && compareAtPrice > price && (
-              <span className="text-sm text-black/50 line-through">
+              <span className="text-xs text-black/50 line-through">
                 {formatPrice(compareAtPrice)}
               </span>
             )}
@@ -179,7 +179,7 @@ export function ProductCard({
           {stockLabel ? (
             <p
               className={cn(
-                "mt-2 text-xs font-medium",
+                "mt-1 text-[10px] font-medium",
                 stockTone === "out" && "text-red-600",
                 stockTone === "critical" && "text-red-500",
                 stockTone === "low" && "text-amber-600",
@@ -190,14 +190,17 @@ export function ProductCard({
             </p>
           ) : null}
           {colors.length > 0 && (
-            <div className="flex gap-2 mt-3">
-              {colors.map((color) => (
+            <div className="flex gap-1.5 mt-2">
+              {colors.slice(0, 4).map((color) => (
                 <span
                   key={color}
-                  className="w-4 h-4 rounded-full border-2 border-white shadow-sm cursor-pointer hover:scale-125 transition-transform"
+                  className="w-3 h-3 rounded-full border border-white shadow-sm cursor-pointer hover:scale-125 transition-transform"
                   style={{ backgroundColor: color }}
                 />
               ))}
+              {colors.length > 4 && (
+                <span className="text-[10px] text-black/50 self-center">+{colors.length - 4}</span>
+              )}
             </div>
           )}
         </div>

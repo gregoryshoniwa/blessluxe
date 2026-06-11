@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useCartStore } from "@/stores/cart";
 
 type SessionState = "pending" | "paid" | "failed" | "cancelled" | "unknown";
 
@@ -18,9 +19,12 @@ export default function PaynowReturnPage() {
   const router = useRouter();
   const params = useSearchParams();
   const reference = params.get("reference");
+  const clearCart = useCartStore((s) => s.clearCart);
   const [state, setState] = useState<SessionState>("pending");
   const [providerStatus, setProviderStatus] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
+  /** Guards against double-clearing if the poll fires after `paid` is set. */
+  const clearedRef = useRef(false);
 
   useEffect(() => {
     if (!reference) {
@@ -48,6 +52,10 @@ export default function PaynowReturnPage() {
         setState(s.status);
         setProviderStatus(s.provider_status || null);
         if (s.status === "paid") {
+          if (!clearedRef.current) {
+            clearedRef.current = true;
+            clearCart();
+          }
           router.replace("/account?tab=transactions");
         }
       } finally {
@@ -63,7 +71,7 @@ export default function PaynowReturnPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [reference, router, state]);
+  }, [reference, router, state, clearCart]);
 
   return (
     <main className="min-h-screen bg-cream/40 flex items-center justify-center px-4">

@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { CheckCircle, Package, Truck, Mail } from 'lucide-react';
 import { useCheckoutStore } from '@/stores/checkout';
+import { useCartStore } from '@/stores/cart';
 import { BrandLoader } from '@/components/layout/BrandLoader';
 
 function ConfirmationContent() {
@@ -13,11 +14,19 @@ function ConfirmationContent() {
   const orderNumber = searchParams.get('order');
   const [showConfetti, setShowConfetti] = useState(true);
   const { shippingAddress, shippingMethod, email, resetCheckout } = useCheckoutStore();
+  const clearCart = useCartStore((s) => s.clearCart);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowConfetti(false), 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Safety net for the Paynow flow: redirecting offsite to Paynow means the
+  // client never reaches the `handlePlaceOrder` clearCart() call. If we land
+  // here with an order number, the cart should always be empty.
+  useEffect(() => {
+    if (orderNumber) clearCart();
+  }, [orderNumber, clearCart]);
 
   // Clean up checkout state after viewing confirmation
   useEffect(() => {

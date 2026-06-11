@@ -327,7 +327,7 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="animate-pulse">
               <div className="aspect-[3/4] bg-cream-dark rounded-lg mb-4" />
@@ -350,10 +350,9 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
         <>
           <div
             className={cn(
-              "grid gap-6",
               viewMode === "grid"
-                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                : "grid-cols-1"
+                ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4"
+                : "grid grid-cols-1 gap-6"
             )}
           >
             {visibleProducts.map((product, index) => (
@@ -380,7 +379,7 @@ export function ProductGrid({ onOpenFilters }: ProductGridProps) {
           </div>
 
           {loadingMore && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 mt-6">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="animate-pulse">
                   <div className="aspect-[3/4] bg-cream-dark rounded-lg mb-4" />
