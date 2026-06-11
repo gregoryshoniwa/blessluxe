@@ -1470,6 +1470,37 @@ export default function CheckoutPaymentPage() {
                   </motion.form>
                 )}
 
+                {selectedMethod === 'paynow' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="font-display text-lg tracking-widest uppercase mb-4">Paynow</h3>
+                    <p className="text-xs text-black/60 leading-relaxed">
+                      You&apos;ll be redirected to Paynow to complete payment with
+                      EcoCash, OneMoney, ZIPIT or a Visa/Mastercard, and bounced
+                      back when it&apos;s done.
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-black/50">
+                      <Lock className="w-3 h-3" />
+                      <span>Encrypted and secure</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePlaceOrder}
+                      disabled={isSubmitting}
+                      className={cn(
+                        "w-full bg-gold text-white py-4 rounded-none text-sm font-semibold tracking-widest uppercase",
+                        "hover:bg-gold-dark transition-colors",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {isSubmitting ? 'Redirecting…' : `Continue to Paynow · $${total.toFixed(2)}`}
+                    </button>
+                  </motion.div>
+                )}
+
                     </div>
             )}
             {stripeCheckout ? (

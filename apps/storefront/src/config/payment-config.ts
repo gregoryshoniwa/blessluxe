@@ -25,12 +25,15 @@ export interface PaymentMethod {
 }
 
 export const paymentMethods: PaymentMethod[] = [
+  // Direct integrations (Stripe card, mock mobile-money, etc.) are disabled
+  // while Paynow handles every USD payment. Flip `enabled: true` to bring
+  // any of them back.
   {
     id: 'card',
     name: 'Card Payment',
     icon: 'CreditCard',
     description: 'Pay with Visa or Mastercard',
-    enabled: true,
+    enabled: false,
     type: 'card',
     supportedNetworks: ['visa', 'mastercard'],
   },
@@ -39,7 +42,7 @@ export const paymentMethods: PaymentMethod[] = [
     name: 'EcoCash',
     icon: 'Smartphone',
     description: 'Pay from your EcoCash wallet',
-    enabled: true,
+    enabled: false,
     type: 'mobile',
     phoneFormat: '+263 7X XXX XXXX',
   },
@@ -48,7 +51,7 @@ export const paymentMethods: PaymentMethod[] = [
     name: 'ZIMSWITCH',
     icon: 'CreditCard',
     description: 'Pay with ZIMSWITCH using your card details',
-    enabled: true,
+    enabled: false,
     type: 'card',
     supportedNetworks: ['visa', 'mastercard'],
   },
@@ -57,7 +60,7 @@ export const paymentMethods: PaymentMethod[] = [
     name: 'Innbucks',
     icon: 'Wallet',
     description: 'Pay with Innbucks',
-    enabled: true,
+    enabled: false,
     type: 'mobile',
     phoneFormat: '+263 7X XXX XXXX',
   },

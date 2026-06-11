@@ -26,6 +26,12 @@ export interface PaynowConfig {
   resultUrl: string;
   /** Storefront URL Paynow redirects the customer back to. */
   returnUrl: string;
+  /**
+   * When set (typically only during test mode), overrides the `authemail`
+   * sent to Paynow. Paynow rejects any other email while the integration is
+   * in test mode, so the merchant's registered email must be used.
+   */
+  authEmailOverride?: string;
 }
 
 export interface InitiateInput {
@@ -106,16 +112,23 @@ export async function initiateTransaction(
   config: PaynowConfig,
   input: InitiateInput
 ): Promise<InitiateOk | InitiateErr> {
+  // Paynow doesn't append any query params on redirect; we have to bake the
+  // reference into the returnurl ourselves so /paynow/return knows which
+  // session the customer is coming back from.
+  const sep = config.returnUrl.includes("?") ? "&" : "?";
+  const returnUrlWithRef = `${config.returnUrl}${sep}reference=${encodeURIComponent(input.reference)}`;
+
   // Field order is significant for hashing.
   const fields: Array<[string, string]> = [
     ["id", config.integrationId],
     ["reference", input.reference],
     ["amount", input.amount.toFixed(2)],
     ["additionalinfo", input.additionalInfo || ""],
-    ["returnurl", config.returnUrl],
+    ["returnurl", returnUrlWithRef],
     ["resulturl", config.resultUrl],
   ];
-  if (input.authEmail) fields.push(["authemail", input.authEmail]);
+  const authEmail = config.authEmailOverride || input.authEmail;
+  if (authEmail) fields.push(["authemail", authEmail]);
   if (input.authPhone) fields.push(["authphone", input.authPhone]);
   if (input.authName) fields.push(["authname", input.authName]);
   fields.push(["status", "Message"]);
@@ -195,10 +208,13 @@ export function loadConfig(): PaynowConfig {
   if (!resultUrl || !returnUrl) {
     throw new Error("PAYNOW_RESULT_URL and PAYNOW_RETURN_URL must be set to publicly reachable URLs");
   }
+  const authEmailOverride =
+    (process.env.PAYNOW_AUTH_EMAIL_OVERRIDE || "").trim() || undefined;
   return {
     integrationId: id,
     integrationKey: key,
     resultUrl,
     returnUrl,
+    authEmailOverride,
   };
 }

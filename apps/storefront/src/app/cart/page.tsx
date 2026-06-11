@@ -13,7 +13,9 @@ export default function CartPage() {
   const [mounted, setMounted] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
-  
+  /** null = still checking, false = guest, true = logged in. */
+  const [hasCustomer, setHasCustomer] = useState<null | boolean>(null);
+
   const medusaLines = useCartStore((s) => s.medusaLines);
   const virtualLines = useCartStore((s) => s.virtualLines);
   const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
@@ -23,6 +25,22 @@ export default function CartPage() {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/account/me', { cache: 'no-store' });
+        const data = (await res.json().catch(() => ({}))) as { customer?: unknown };
+        if (!cancelled) setHasCustomer(!!data.customer);
+      } catch {
+        if (!cancelled) setHasCustomer(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!mounted) {
@@ -238,14 +256,41 @@ export default function CartPage() {
                 </div>
               </div>
 
-              {/* Checkout */}
-              <Link
-                href="/checkout"
-                className="flex items-center justify-center gap-2 w-full mt-6 bg-gold text-white py-4 rounded-none text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
-              >
-                Proceed to Checkout
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {/* Checkout — guests must sign in first; we have no order
+                  history to write against and no way to email a receipt. */}
+              {hasCustomer === false ? (
+                <>
+                  <Link
+                    href="/account/login?next=/checkout"
+                    className="flex items-center justify-center gap-2 w-full mt-6 bg-gold text-white py-4 rounded-none text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+                  >
+                    Sign in to Checkout
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  <p className="mt-3 text-center text-xs text-black/55">
+                    New here?{' '}
+                    <Link
+                      href="/account/signup?next=/checkout"
+                      className="underline text-gold-dark hover:text-gold"
+                    >
+                      Create an account
+                    </Link>{' '}
+                    — you&apos;ll be back at checkout in seconds.
+                  </p>
+                </>
+              ) : (
+                <Link
+                  href="/checkout"
+                  aria-disabled={hasCustomer === null}
+                  className={cn(
+                    'flex items-center justify-center gap-2 w-full mt-6 bg-gold text-white py-4 rounded-none text-sm font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors',
+                    hasCustomer === null && 'opacity-60 pointer-events-none'
+                  )}
+                >
+                  Proceed to Checkout
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
 
               {/* Trust badges */}
               <div className="mt-6 pt-6 border-t border-gold/20">

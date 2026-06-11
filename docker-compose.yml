@@ -56,6 +56,11 @@ services:
       PAYNOW_INTEGRATION_KEY: ${PAYNOW_INTEGRATION_KEY:-}
       PAYNOW_RESULT_URL: ${PAYNOW_RESULT_URL:-}
       PAYNOW_RETURN_URL: ${PAYNOW_RETURN_URL:-}
+      # While the Paynow integration is in test mode, the authemail sent in
+      # initiate must match the merchant's registered email. Set this var
+      # locally to the merchant email so any customer's checkout email is
+      # transparently rewritten; leave it empty in production.
+      PAYNOW_AUTH_EMAIL_OVERRIDE: ${PAYNOW_AUTH_EMAIL_OVERRIDE:-}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
     volumes:
       - shop_uploads:/app/backend/shop/uploads

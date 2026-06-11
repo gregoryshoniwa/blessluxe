@@ -24,6 +24,8 @@ export default function CheckoutLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  /** null = unknown (still checking), false = guest, true = logged in. */
+  const [authState, setAuthState] = useState<null | boolean>(null);
   const medusaLines = useCartStore((s) => s.medusaLines);
   const virtualLines = useCartStore((s) => s.virtualLines);
   const items = useMemo(() => [...medusaLines, ...virtualLines], [medusaLines, virtualLines]);
@@ -32,6 +34,44 @@ export default function CheckoutLayout({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // /checkout/confirmation and /checkout/paynow/* are reachable from Paynow's
+  // server-to-server return URL — never gate them on auth.
+  const requiresAuth = useMemo(
+    () => !pathname.includes('confirmation') && !pathname.includes('paynow'),
+    [pathname]
+  );
+
+  // Guests can browse but not check out — bounce to /account/login with
+  // a `next` hint so we land them back where they were after login.
+  useEffect(() => {
+    if (!requiresAuth) {
+      setAuthState(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/account/me', { cache: 'no-store' });
+        const data = (await res.json().catch(() => ({}))) as { customer?: unknown };
+        if (cancelled) return;
+        const loggedIn = !!data.customer;
+        setAuthState(loggedIn);
+        if (!loggedIn) {
+          const next = encodeURIComponent(pathname || '/checkout');
+          router.replace(`/account/login?next=${next}`);
+        }
+      } catch {
+        if (!cancelled) {
+          const next = encodeURIComponent(pathname || '/checkout');
+          router.replace(`/account/login?next=${next}`);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, requiresAuth]);
 
   // Redirect to cart if empty (after mount)
   useEffect(() => {
@@ -50,17 +90,30 @@ export default function CheckoutLayout({
 
   const currentStep = getCurrentStep();
 
-  // Don't show layout for confirmation or payment page (payment has its own layout)
-  if (pathname.includes('confirmation') || pathname.includes('payment')) {
+  // Confirmation and Paynow return pages render bare and are never auth-gated.
+  if (pathname.includes('confirmation') || pathname.includes('paynow')) {
     return <>{children}</>;
   }
 
-  if (!mounted) {
+  // Everything from here on is gated.
+  if (!mounted || authState === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-cream">
         <BrandLoader label="Preparing checkout" />
       </div>
     );
+  }
+  if (authState === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <BrandLoader label="Sign in to continue" />
+      </div>
+    );
+  }
+
+  // Payment page renders bare (handles its own layout) once auth is resolved.
+  if (pathname.includes('payment')) {
+    return <>{children}</>;
   }
 
   const subtotal = getSubtotal();
