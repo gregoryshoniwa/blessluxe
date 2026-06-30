@@ -14,6 +14,17 @@ export default {
             affiliate: null,
             affiliateChecked: false,
             copyState: '',
+            addresses: [],
+            addrEditing: null,
+            addrForm: {
+                label: '', first_name: '', last_name: '', phone: '',
+                line1: '', line2: '', city: '', region: '', postal_code: '', country: 'ZW',
+                is_default_shipping: false, is_default_billing: false,
+            },
+            addrBusy: false,
+            addrError: '',
+            verifySending: false,
+            verifyState: '',
             activeTab: 'overview',
             tabs: [
                 { id: 'overview',     label: 'Overview' },
@@ -36,6 +47,11 @@ export default {
     async mounted() {
         const tab = this.$route.query.tab;
         if (tab && this.tabs.some((t) => t.id === tab)) this.activeTab = tab;
+        // Show toast for verify-email landing.
+        const v = this.$route.query.verify;
+        if (v === 'ok') this.verifyState = 'Email verified ✓';
+        else if (v === 'expired') this.verifyState = 'That link expired. Send a new one below.';
+        else if (v) this.verifyState = 'That link is invalid. Send a new one below.';
         await this.loadMe();
     },
     methods: {
@@ -67,6 +83,11 @@ export default {
                     this.affiliate = a.affiliate;
                 } catch { /* leave null */ }
                 this.affiliateChecked = true;
+                // Addresses.
+                try {
+                    const r = await api.get('/api/account/addresses');
+                    this.addresses = r.addresses || [];
+                } catch { this.addresses = []; }
             } catch {
                 this.customer = null;
             } finally {
@@ -92,6 +113,71 @@ export default {
                 this.copyState = 'Press ⌘C';
             }
             setTimeout(() => { this.copyState = ''; }, 1800);
+        },
+        async resendVerify() {
+            this.verifySending = true;
+            try {
+                await api.post('/api/account/verify-email/resend');
+                this.verifyState = 'Sent — check your inbox.';
+            } catch {
+                this.verifyState = "Couldn't send. Try again in a moment.";
+            } finally {
+                this.verifySending = false;
+            }
+        },
+        blankAddressForm() {
+            return {
+                label: '', first_name: '', last_name: '', phone: '',
+                line1: '', line2: '', city: '', region: '', postal_code: '', country: 'ZW',
+                is_default_shipping: false, is_default_billing: false,
+            };
+        },
+        startAddAddress() {
+            this.addrEditing = 'new';
+            this.addrForm = this.blankAddressForm();
+            this.addrError = '';
+        },
+        startEditAddress(a) {
+            this.addrEditing = a.id;
+            this.addrForm = { ...a };
+            this.addrError = '';
+        },
+        cancelAddress() {
+            this.addrEditing = null;
+            this.addrError = '';
+        },
+        async saveAddress() {
+            this.addrBusy = true;
+            this.addrError = '';
+            try {
+                if (this.addrEditing === 'new') {
+                    const r = await api.post('/api/account/addresses', this.addrForm);
+                    this.addresses.unshift(r.address);
+                } else {
+                    const r = await api.put(`/api/account/addresses/${this.addrEditing}`, this.addrForm);
+                    const idx = this.addresses.findIndex((x) => x.id === this.addrEditing);
+                    if (idx >= 0) this.addresses[idx] = r.address;
+                    // If the saved address became default, reflect that on the others client-side.
+                    if (r.address.is_default_shipping) this.addresses.forEach((x) => { if (x.id !== r.address.id) x.is_default_shipping = false; });
+                    if (r.address.is_default_billing)  this.addresses.forEach((x) => { if (x.id !== r.address.id) x.is_default_billing  = false; });
+                }
+                this.addrEditing = null;
+            } catch (e) {
+                this.addrError = e.payload?.error
+                    || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0])
+                    || 'Could not save the address.';
+            } finally {
+                this.addrBusy = false;
+            }
+        },
+        async deleteAddress(a) {
+            if (!confirm('Delete this address?')) return;
+            try {
+                await api.del(`/api/account/addresses/${a.id}`);
+                this.addresses = this.addresses.filter((x) => x.id !== a.id);
+            } catch {
+                alert('Could not delete that address.');
+            }
         },
         async signOut() {
             try {
@@ -131,6 +217,19 @@ export default {
                     Sign out
                 </button>
             </div>
+
+            <!-- Verify-email banner: shows only when the customer's email
+                 isn't verified (or a verify link came back with an issue). -->
+            <div v-if="!customer.email_verified_at" class="bg-amber-50 border border-amber-200 text-amber-900 p-4 mb-6 flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <p class="text-sm font-medium">Verify your email to secure your account.</p>
+                    <p v-if="verifyState" class="text-xs text-amber-700 mt-1">{{ verifyState }}</p>
+                </div>
+                <button @click="resendVerify" :disabled="verifySending" class="text-[10px] tracking-widest uppercase border border-amber-600 text-amber-800 px-4 py-2 hover:bg-amber-100 disabled:opacity-50">
+                    {{ verifySending ? 'Sending…' : 'Send verification link' }}
+                </button>
+            </div>
+            <div v-else-if="verifyState" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 mb-6">{{ verifyState }}</div>
 
             <div class="grid grid-cols-12 gap-8">
                 <aside class="col-span-12 md:col-span-3 space-y-1">
@@ -214,14 +313,21 @@ export default {
                             </thead>
                             <tbody>
                                 <tr v-for="o in orders" :key="o.order_number" class="border-b border-gold/5">
-                                    <td class="py-3 font-mono text-xs">{{ o.order_number }}</td>
+                                    <td class="py-3 font-mono text-xs">
+                                        <router-link :to="`/account/orders/${o.order_number}`" class="hover:text-gold transition-colors">
+                                            {{ o.order_number }}
+                                        </router-link>
+                                    </td>
                                     <td class="py-3 text-xs text-black/55">{{ fmtDate(o.created_at) }}</td>
                                     <td class="py-3">{{ o.total_label }}</td>
                                     <td class="py-3">
                                         <span class="text-[10px] px-2 py-0.5 rounded bg-cream-dark/60">{{ o.status }}</span>
                                         <span v-if="o.payment_status === 'paid'" class="ml-1 text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">paid</span>
                                     </td>
-                                    <td class="py-3 text-right">
+                                    <td class="py-3 text-right space-x-3">
+                                        <router-link :to="`/account/orders/${o.order_number}`" class="text-xs tracking-widest uppercase text-black/55 hover:text-gold">
+                                            View
+                                        </router-link>
                                         <router-link v-if="o.tracking_code" :to="`/track/${o.tracking_code}`" class="text-xs tracking-widest uppercase text-gold-dark hover:text-gold">
                                             Track →
                                         </router-link>
@@ -307,8 +413,67 @@ export default {
                         </div>
                     </div>
                     <div v-else-if="activeTab === 'addresses'">
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-2">Addresses</h2>
-                        <p class="text-sm text-black/65">Saved addresses appear here after your first checkout.</p>
+                        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                            <h2 class="font-display text-xl tracking-widest uppercase">Addresses</h2>
+                            <button v-if="!addrEditing" @click="startAddAddress" class="bg-gold text-white px-4 py-2 text-[10px] tracking-widest uppercase hover:bg-gold-dark transition-colors">
+                                + Add address
+                            </button>
+                        </div>
+
+                        <!-- Add/edit form -->
+                        <form v-if="addrEditing" @submit.prevent="saveAddress" class="bg-cream-dark/40 border border-gold/10 p-5 mb-5 space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input v-model="addrForm.label" placeholder="Label (Home, Work…)" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.phone" placeholder="Phone" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.first_name" placeholder="First name" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.last_name" placeholder="Last name" class="border border-black/15 px-3 py-2 text-sm" />
+                            </div>
+                            <input v-model="addrForm.line1" placeholder="Street address" required class="w-full border border-black/15 px-3 py-2 text-sm" />
+                            <input v-model="addrForm.line2" placeholder="Apartment, suite, etc. (optional)" class="w-full border border-black/15 px-3 py-2 text-sm" />
+                            <div class="grid grid-cols-2 gap-3">
+                                <input v-model="addrForm.city" placeholder="City" required class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.region" placeholder="Province / region" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.postal_code" placeholder="Postal code" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.country" placeholder="Country (2 letters, e.g. ZW)" maxlength="2" required class="border border-black/15 px-3 py-2 text-sm uppercase" />
+                            </div>
+                            <div class="flex items-center gap-4 text-xs">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" v-model="addrForm.is_default_shipping" /> Default shipping</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" v-model="addrForm.is_default_billing" /> Default billing</label>
+                            </div>
+                            <p v-if="addrError" class="text-sm text-red-600">{{ addrError }}</p>
+                            <div class="flex items-center gap-2">
+                                <button type="submit" :disabled="addrBusy" class="bg-gold text-white px-5 py-2 text-[10px] tracking-widest uppercase hover:bg-gold-dark transition-colors disabled:opacity-50">
+                                    {{ addrBusy ? 'Saving…' : 'Save address' }}
+                                </button>
+                                <button type="button" @click="cancelAddress" class="text-[10px] tracking-widest uppercase text-black/55 hover:text-black">Cancel</button>
+                            </div>
+                        </form>
+
+                        <p v-if="!addresses.length && !addrEditing" class="text-sm text-black/65">
+                            No saved addresses yet. Add one to speed up future checkouts.
+                        </p>
+
+                        <ul v-else-if="!addrEditing" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <li v-for="a in addresses" :key="a.id" class="bg-white border border-gold/10 p-4">
+                                <div class="flex items-start justify-between gap-2 mb-2">
+                                    <p class="font-display text-sm tracking-widest uppercase">{{ a.label || 'Address' }}</p>
+                                    <div class="flex gap-1 text-[9px] tracking-widest uppercase">
+                                        <span v-if="a.is_default_shipping" class="bg-gold/15 text-gold-dark px-1.5 py-0.5">Ship</span>
+                                        <span v-if="a.is_default_billing" class="bg-gold/15 text-gold-dark px-1.5 py-0.5">Bill</span>
+                                    </div>
+                                </div>
+                                <p class="text-sm">{{ [a.first_name, a.last_name].filter(Boolean).join(' ') }}</p>
+                                <p class="text-sm text-black/75">{{ a.line1 }}</p>
+                                <p v-if="a.line2" class="text-sm text-black/75">{{ a.line2 }}</p>
+                                <p class="text-sm text-black/75">{{ [a.city, a.region, a.postal_code].filter(Boolean).join(', ') }}</p>
+                                <p class="text-sm text-black/75">{{ a.country }}</p>
+                                <p v-if="a.phone" class="text-xs text-black/55 mt-1">{{ a.phone }}</p>
+                                <div class="flex gap-3 mt-3">
+                                    <button @click="startEditAddress(a)" class="text-[10px] tracking-widest uppercase text-gold-dark hover:text-gold">Edit</button>
+                                    <button @click="deleteAddress(a)" class="text-[10px] tracking-widest uppercase text-black/45 hover:text-red-600">Delete</button>
+                                </div>
+                            </li>
+                        </ul>
                     </div>
                     <div v-else-if="activeTab === 'wishlist'">
                         <h2 class="font-display text-xl tracking-widest uppercase mb-2">Wishlist</h2>

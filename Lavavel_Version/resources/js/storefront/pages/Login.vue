@@ -86,6 +86,9 @@ export default {
                     No account?
                     <router-link :to="`/account/signup?next=${encodeURIComponent(nextPath)}`" class="text-gold underline">Create one</router-link>
                 </p>
+                <p class="text-center text-xs">
+                    <router-link to="/account/forgot" class="text-black/55 hover:text-gold transition-colors">Forgot your password?</router-link>
+                </p>
             </form>
         </div>
     </div>

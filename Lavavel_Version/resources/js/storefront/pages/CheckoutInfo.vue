@@ -21,6 +21,8 @@ export default {
             country: draft.shipping_address.country || 'Zimbabwe',
             shipping_method: draft.shipping_method || 'standard',
             cart: null,
+            savedAddresses: [],
+            selectedAddressId: '',
             loading: true,
             saving: false,
             error: '',
@@ -45,6 +47,14 @@ export default {
             this.first_name = this.first_name || c.first_name || '';
             this.last_name = this.last_name || c.last_name || '';
             this.phone = this.phone || c.phone || '';
+            // Pull saved addresses so the customer can pick one instead of
+            // retyping. Default-shipping (if any) gets pre-selected.
+            try {
+                const r = await api.get('/api/account/addresses');
+                this.savedAddresses = r.addresses || [];
+                const def = this.savedAddresses.find((a) => a.is_default_shipping) || this.savedAddresses[0];
+                if (def && !this.address1) this.applyAddress(def);
+            } catch { /* no addresses */ }
         }
         this.cart = cartRes.cart;
         if (!this.cart?.items?.length) {
@@ -80,6 +90,24 @@ export default {
             this.$router.push('/checkout/payment');
         },
         money(cents) { return `$${(cents / 100).toFixed(2)}`; },
+        applyAddress(a) {
+            this.selectedAddressId = a.id;
+            this.first_name  = a.first_name  || this.first_name;
+            this.last_name   = a.last_name   || this.last_name;
+            this.phone       = a.phone       || this.phone;
+            this.address1    = a.line1       || '';
+            this.address2    = a.line2       || '';
+            this.city        = a.city        || '';
+            this.province    = a.region      || '';
+            this.postal_code = a.postal_code || '';
+            this.country     = a.country     || this.country;
+        },
+        onAddressPick(e) {
+            const id = e.target.value;
+            if (!id) return;
+            const a = this.savedAddresses.find((x) => x.id === id);
+            if (a) this.applyAddress(a);
+        },
     },
 };
 </script>
@@ -138,6 +166,15 @@ export default {
                         <h2 class="font-display text-xl tracking-widest uppercase mb-4 flex items-center gap-2">
                             <MapPin class="w-4 h-4 text-gold" /> Shipping address
                         </h2>
+                        <div v-if="savedAddresses.length" class="mb-3">
+                            <label class="text-[10px] tracking-widest uppercase text-black/55 block mb-1">Use a saved address</label>
+                            <select :value="selectedAddressId" @change="onAddressPick" class="w-full border border-black/15 px-4 py-3 focus:outline-none focus:border-gold bg-white">
+                                <option value="">— Enter a new one —</option>
+                                <option v-for="a in savedAddresses" :key="a.id" :value="a.id">
+                                    {{ [a.label, a.line1, a.city].filter(Boolean).join(' · ') }}{{ a.is_default_shipping ? ' (default)' : '' }}
+                                </option>
+                            </select>
+                        </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <input v-model="address1" type="text" placeholder="Street address" required autocomplete="address-line1"
                                 class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />

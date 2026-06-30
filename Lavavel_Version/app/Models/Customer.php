@@ -39,4 +39,9 @@ class Customer extends Authenticatable
     {
         return $this->hasMany(ProductReview::class);
     }
+
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(CustomerAddress::class);
+    }
 }

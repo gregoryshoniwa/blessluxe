@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\PasswordResetMail;
+use App\Mail\VerifyEmailMail;
 use App\Mail\WelcomeMail;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderLineItem;
 use App\Models\Package;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Laravel\Socialite\Facades\Socialite;
@@ -67,6 +73,9 @@ class AccountController extends Controller
         } catch (\Throwable $e) {
             Log::warning('[welcome mail] '.$e->getMessage());
         }
+        // Fire the verify-email link as well — separate try/catch so a
+        // welcome-mail SMTP hiccup doesn't suppress the verification mail.
+        $this->sendVerificationLink($customer);
 
         return [
             'customer' => $this->shape($customer->fresh()),
@@ -223,6 +232,187 @@ class AccountController extends Controller
     private function assertProvider(string $provider): void
     {
         abort_unless(in_array($provider, ['google'], true), 404, 'Unsupported provider.');
+    }
+
+    /**
+     * GET /api/account/orders/{orderNumber}
+     *
+     * Detailed view for the storefront's order detail page — line items,
+     * shipping address, totals, tracking. Scoped to the signed-in customer
+     * by order_number so we don't leak across accounts.
+     */
+    public function orderDetail(Request $request, string $orderNumber)
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) abort(response()->json(['error' => 'Sign in required.'], 401));
+
+        $order = Order::query()
+            ->where('customer_id', $customer->id)
+            ->where('order_number', $orderNumber)
+            ->first();
+        if (! $order) abort(response()->json(['error' => 'Not found.'], 404));
+
+        $items = OrderLineItem::query()->where('order_id', $order->id)->get();
+        $package = Package::query()->where('order_id', $order->id)->first();
+
+        return [
+            'order' => [
+                'order_number'     => $order->order_number,
+                'status'           => $order->status,
+                'payment_status'   => $order->payment_status,
+                'payment_method'   => $order->payment_method,
+                'currency_code'    => $order->currency_code,
+                'subtotal_label'   => $this->money((int) $order->subtotal),
+                'shipping_label'   => $this->money((int) $order->shipping_total),
+                'discount_label'   => $this->money((int) $order->discount_total),
+                'tax_label'        => $this->money((int) $order->tax_total),
+                'total_label'      => $this->money((int) $order->total),
+                'shipping_address' => $order->shipping_address,
+                'billing_address'  => $order->billing_address,
+                'created_at'       => $order->created_at?->toIso8601String(),
+                'items' => $items->map(fn ($i) => [
+                    'product_id'   => $i->product_id,
+                    'variant_id'   => $i->variant_id,
+                    'title'        => $i->title,
+                    'variant_title'=> $i->variant_title,
+                    'quantity'     => (int) $i->quantity,
+                    'unit_label'   => $this->money((int) $i->unit_price),
+                    'total_label'  => $this->money(((int) $i->unit_price) * ((int) $i->quantity)),
+                    'thumbnail'    => $i->thumbnail,
+                ]),
+                'tracking_code'    => $package?->package_code,
+                'carrier'          => $package?->carrier,
+                'tracking_number'  => $package?->tracking_number,
+            ],
+        ];
+    }
+
+    /**
+     * GET /api/account/verify-email/{id}/{hash} (signed)
+     *
+     * The signed URL Laravel built when we sent the verify mail. We confirm
+     * the hash matches the email (so a leaked link can't verify a different
+     * account), set email_verified_at, and bounce to /account.
+     */
+    public function verifyEmail(Request $request, string $id, string $hash)
+    {
+        if (! $request->hasValidSignature()) {
+            return redirect('/account?verify=expired');
+        }
+        $customer = Customer::query()->where('id', $id)->first();
+        if (! $customer) return redirect('/account?verify=missing');
+
+        // The hash is sha1(email) — same shape Laravel uses for its built-in
+        // MustVerifyEmail. Constant-time compare to avoid timing leaks.
+        if (! hash_equals(sha1($customer->email), $hash)) {
+            return redirect('/account?verify=mismatch');
+        }
+        if (! $customer->email_verified_at) {
+            $customer->forceFill(['email_verified_at' => now()])->save();
+        }
+        // If they aren't logged in (e.g., clicked from another device),
+        // log them in so they land directly in the account.
+        if (! Auth::guard('customer')->check()) {
+            Auth::guard('customer')->login($customer, remember: true);
+            $request->session()->regenerate();
+        }
+        return redirect('/account?verify=ok');
+    }
+
+    /** POST /api/account/verify-email/resend (signed-in only). */
+    public function resendVerification(Request $request)
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) abort(response()->json(['error' => 'Sign in required.'], 401));
+        if ($customer->email_verified_at) {
+            return ['ok' => true, 'already_verified' => true];
+        }
+        $this->sendVerificationLink($customer);
+        return ['ok' => true];
+    }
+
+    /** POST /api/account/forgot-password { email } */
+    public function forgotPassword(Request $request)
+    {
+        $data = $request->validate(['email' => ['required', 'email']]);
+        $email = strtolower(trim($data['email']));
+
+        $customer = Customer::query()->where('email', $email)->first();
+        // Always respond OK so we don't leak whether the email exists.
+        if (! $customer) return ['ok' => true];
+
+        $token = Str::random(64);
+        DB::table('customer_password_reset_tokens')->updateOrInsert(
+            ['email' => $email],
+            ['token' => Hash::make($token), 'created_at' => now()],
+        );
+
+        $resetUrl = rtrim(config('app.url', '/'), '/')
+            . '/account/reset/' . $token
+            . '?email=' . urlencode($email);
+
+        try {
+            Mail::to($email)->send(new PasswordResetMail($email, $resetUrl, $customer->first_name));
+        } catch (\Throwable $e) {
+            Log::warning('[password reset mail] '.$e->getMessage());
+        }
+        return ['ok' => true];
+    }
+
+    /** POST /api/account/reset-password { email, token, password } */
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'email'    => ['required', 'email'],
+            'token'    => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8'],
+        ]);
+        $email = strtolower(trim($data['email']));
+        $row = DB::table('customer_password_reset_tokens')->where('email', $email)->first();
+        if (! $row) {
+            return response()->json(['error' => 'This reset link is invalid or has been used.'], 422);
+        }
+        // 60-minute window.
+        if (Carbon::parse($row->created_at)->lt(now()->subMinutes(60))) {
+            DB::table('customer_password_reset_tokens')->where('email', $email)->delete();
+            return response()->json(['error' => 'This reset link has expired.'], 422);
+        }
+        if (! Hash::check($data['token'], $row->token)) {
+            return response()->json(['error' => 'This reset link is invalid.'], 422);
+        }
+        $customer = Customer::query()->where('email', $email)->first();
+        if (! $customer) {
+            DB::table('customer_password_reset_tokens')->where('email', $email)->delete();
+            return response()->json(['error' => 'Account not found.'], 422);
+        }
+        $customer->forceFill(['password' => Hash::make($data['password'])])->save();
+        DB::table('customer_password_reset_tokens')->where('email', $email)->delete();
+
+        Auth::guard('customer')->login($customer, remember: true);
+        $request->session()->regenerate();
+
+        return ['ok' => true, 'customer' => $this->shape($customer)];
+    }
+
+    /** Mint a signed verify-email URL and dispatch the mail. */
+    private function sendVerificationLink(Customer $customer): void
+    {
+        if (! $customer->email) return;
+        $url = URL::temporarySignedRoute(
+            'customer.verify-email',
+            now()->addHours(48),
+            ['id' => $customer->id, 'hash' => sha1($customer->email)],
+        );
+        try {
+            Mail::to($customer->email)->send(new VerifyEmailMail($customer, $url));
+        } catch (\Throwable $e) {
+            Log::warning('[verify mail] '.$e->getMessage());
+        }
+    }
+
+    private function money(int $cents): string
+    {
+        return '$' . number_format($cents / 100, 2);
     }
 
     private function shape(Customer $c): array

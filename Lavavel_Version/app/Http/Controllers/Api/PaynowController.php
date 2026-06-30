@@ -499,7 +499,45 @@ class PaynowController extends Controller
                 body: '$' . number_format($orderForNotify->total / 100, 2) . ' · ' . ($orderForNotify->email ?: 'guest'),
                 actionUrl: '/admin/orders/' . $orderForNotify->id,
             );
+
+            // Save the shipping address to the customer's address book if
+            // they don't already have one matching, so future checkouts can
+            // pre-fill. Guests + duplicates skip silently.
+            if ($orderForNotify->customer_id && is_array($orderForNotify->shipping_address)) {
+                $this->saveAddressToCustomerBook($orderForNotify->customer_id, $orderForNotify->shipping_address);
+            }
         }
+    }
+
+    /** Idempotent: skip if a row with the same line1 + city already exists. */
+    private function saveAddressToCustomerBook(string $customerId, array $addr): void
+    {
+        $line1 = trim((string) ($addr['line1'] ?? ''));
+        $city  = trim((string) ($addr['city']  ?? ''));
+        if ($line1 === '' || $city === '') return;
+        $exists = \App\Models\CustomerAddress::query()
+            ->where('customer_id', $customerId)
+            ->where('line1', $line1)
+            ->where('city', $city)
+            ->exists();
+        if ($exists) return;
+
+        $hasAny = \App\Models\CustomerAddress::query()->where('customer_id', $customerId)->exists();
+        \App\Models\CustomerAddress::create([
+            'id'                  => 'addr_' . Str::random(20),
+            'customer_id'         => $customerId,
+            'first_name'          => $addr['first_name']  ?? null,
+            'last_name'           => $addr['last_name']   ?? null,
+            'phone'               => $addr['phone']       ?? null,
+            'line1'               => $line1,
+            'line2'               => $addr['line2']       ?? null,
+            'city'                => $city,
+            'region'              => $addr['region']      ?? null,
+            'postal_code'         => $addr['postal_code'] ?? null,
+            'country'             => strtoupper(substr((string) ($addr['country'] ?? 'ZW'), 0, 2)),
+            'is_default_shipping' => ! $hasAny,
+            'is_default_billing'  => ! $hasAny,
+        ]);
     }
 
     /** Short, sortable, human-friendly reference. Matches Node app shape. */

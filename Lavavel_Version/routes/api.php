@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
+use App\Http\Controllers\Api\CustomerAddressController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
 use App\Http\Controllers\Api\BlitsController;
 use App\Http\Controllers\Api\ContentController;
@@ -104,9 +105,24 @@ Route::prefix('store')->group(function () {
 Route::middleware('web')->prefix('account')->group(function () {
     Route::get('/me',     [AccountController::class, 'me']);
     Route::get('/orders', [AccountController::class, 'orders']);
+    Route::get('/orders/{orderNumber}', [AccountController::class, 'orderDetail']);
     Route::post('/signup', [AccountController::class, 'signup']);
     Route::post('/login',  [AccountController::class, 'login']);
     Route::post('/logout', [AccountController::class, 'logout']);
+
+    // Email verification (signed URL — named route is referenced by AccountController::sendVerificationLink).
+    Route::get ('/verify-email/{id}/{hash}', [AccountController::class, 'verifyEmail'])->name('customer.verify-email');
+    Route::post('/verify-email/resend',      [AccountController::class, 'resendVerification']);
+
+    // Password reset.
+    Route::post('/forgot-password',  [AccountController::class, 'forgotPassword']);
+    Route::post('/reset-password',   [AccountController::class, 'resetPassword']);
+
+    // Saved addresses.
+    Route::get   ('/addresses',       [CustomerAddressController::class, 'index']);
+    Route::post  ('/addresses',       [CustomerAddressController::class, 'store']);
+    Route::put   ('/addresses/{id}',  [CustomerAddressController::class, 'update']);
+    Route::delete('/addresses/{id}',  [CustomerAddressController::class, 'destroy']);
 
     Route::get('/oauth/{provider}',          [AccountController::class, 'oauthRedirect']);
     Route::get('/oauth/{provider}/callback', [AccountController::class, 'oauthCallback']);
