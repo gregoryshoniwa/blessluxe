@@ -327,8 +327,9 @@ class PaynowController extends Controller
         // notifications AFTER it commits — sending mid-transaction would
         // lose the message if anything rolls back.
         $pendingAffiliateMails = [];
+        $lowStockCheckVariantIds = [];
 
-        DB::transaction(function () use ($session, $snap, $items, &$pendingAffiliateMails) {
+        DB::transaction(function () use ($session, $snap, $items, &$pendingAffiliateMails, &$lowStockCheckVariantIds) {
             $orderId    = 'order_' . Str::random(20);
             $orderNumber = (string) $session->reference;
             $subtotal   = (int) ($snap['subtotal'] ?? 0);
@@ -371,12 +372,14 @@ class PaynowController extends Controller
                     'unit_price'    => (int) $it['unit_price'],
                     'unit_cost'     => $variant->cost_price,
                 ]);
-                // Decrement inventory if it's tracked.
+                // Decrement inventory if it's tracked, and flag the
+                // variant for a post-commit low-stock notification.
                 if ($variant->manage_inventory) {
                     ProductVariant::where('id', $variant->id)
                         ->update([
                             'inventory_quantity' => DB::raw('GREATEST(0, inventory_quantity - ' . (int) $it['quantity'] . ')'),
                         ]);
+                    $lowStockCheckVariantIds[] = $variant->id;
                 }
             }
 
@@ -506,6 +509,23 @@ class PaynowController extends Controller
             if ($orderForNotify->customer_id && is_array($orderForNotify->shipping_address)) {
                 $this->saveAddressToCustomerBook($orderForNotify->customer_id, $orderForNotify->shipping_address);
             }
+        }
+
+        // Low-stock alerts: any tracked variant that dropped to/below
+        // the threshold gets one admin notification. Default threshold is
+        // 3 — overridable per variant via metadata.low_stock_threshold.
+        foreach (array_unique($lowStockCheckVariantIds) as $vid) {
+            $v = ProductVariant::with('product')->find($vid);
+            if (! $v || ! $v->manage_inventory) continue;
+            $threshold = (int) (($v->metadata['low_stock_threshold'] ?? null) ?: 3);
+            if ((int) $v->inventory_quantity > $threshold) continue;
+            $label = ($v->product?->title ?? 'Variant') . ' · ' . ($v->title ?: $v->sku ?: $v->id);
+            Notifications::forAllAdmins(
+                kind:      'low_stock',
+                title:     'Low stock: ' . $label,
+                body:      ((int) $v->inventory_quantity) . ' left (threshold ' . $threshold . ')',
+                actionUrl: '/admin/inventory',
+            );
         }
     }
 

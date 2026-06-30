@@ -33,9 +33,11 @@ class AdminAuthController extends Controller
             'remember' => ['nullable', 'boolean'],
         ]);
 
+        // is_active filter so disabled accounts can't log in.
         $ok = Auth::guard('web')->attempt([
-            'email'    => strtolower(trim($data['email'])),
-            'password' => $data['password'],
+            'email'     => strtolower(trim($data['email'])),
+            'password'  => $data['password'],
+            'is_active' => true,
         ], (bool) ($data['remember'] ?? false));
 
         if (! $ok) {
@@ -63,6 +65,7 @@ class AdminAuthController extends Controller
             'id'    => $u->id,
             'name'  => $u->name,
             'email' => $u->email,
+            'role'  => $u->role ?? 'admin',
         ];
     }
 }

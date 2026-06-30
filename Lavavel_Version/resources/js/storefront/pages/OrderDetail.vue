@@ -61,11 +61,18 @@ export default {
                     <h1 class="font-display text-3xl tracking-widest uppercase font-mono">{{ order.order_number }}</h1>
                     <p class="text-sm text-black/55 mt-1">Placed {{ fmtDate(order.created_at) }}</p>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-[10px] tracking-widest uppercase px-3 py-1 bg-cream-dark/60">{{ order.status }}</span>
                     <span v-if="order.payment_status === 'paid'" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-emerald-100 text-emerald-700">Paid</span>
                     <router-link v-if="order.tracking_code" :to="`/track/${order.tracking_code}`" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-gold text-white hover:bg-gold-dark transition-colors">
                         Track →
+                    </router-link>
+                    <router-link
+                        v-if="order.payment_status === 'paid' && order.status !== 'refunded' && order.status !== 'cancelled'"
+                        :to="`/account?tab=returns&start=${order.order_number}`"
+                        class="text-[10px] tracking-widest uppercase px-3 py-1 border border-black/20 hover:border-gold hover:text-gold transition-colors"
+                    >
+                        Request return
                     </router-link>
                 </div>
             </header>

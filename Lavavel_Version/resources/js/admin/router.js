@@ -21,6 +21,8 @@ const routes = [
     { path: '/admin/content',    name: 'admin-content',   component: () => import('./pages/Content.vue') },
     { path: '/admin/faqs',       name: 'admin-faqs',      component: () => import('./pages/Faqs.vue') },
     { path: '/admin/reports',    name: 'admin-reports',   component: () => import('./pages/Reports.vue') },
+    { path: '/admin/users',      name: 'admin-users',     component: () => import('./pages/Users.vue') },
+    { path: '/admin/returns',    name: 'admin-returns',   component: () => import('./pages/Returns.vue') },
     { path: '/admin/:pathMatch(.*)*', name: 'admin-404', component: () => import('./pages/NotFound.vue') },
 ];
 

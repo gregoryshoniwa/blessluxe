@@ -24,6 +24,7 @@ export default {
                     items: [
                         { to: '/admin/orders',   label: 'Orders' },
                         { to: '/admin/packages', label: 'Packages' },
+                        { to: '/admin/returns',  label: 'Returns' },
                     ],
                 },
                 {
@@ -53,6 +54,12 @@ export default {
                     title: 'Insights',
                     items: [
                         { to: '/admin/reports', label: 'Reports & Exports' },
+                    ],
+                },
+                {
+                    title: 'System',
+                    items: [
+                        { to: '/admin/users', label: 'Admin users' },
                     ],
                 },
             ],

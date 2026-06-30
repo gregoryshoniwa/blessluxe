@@ -271,6 +271,7 @@ class AccountController extends Controller
                 'billing_address'  => $order->billing_address,
                 'created_at'       => $order->created_at?->toIso8601String(),
                 'items' => $items->map(fn ($i) => [
+                    'id'           => $i->id,
                     'product_id'   => $i->product_id,
                     'variant_id'   => $i->variant_id,
                     'title'        => $i->title,

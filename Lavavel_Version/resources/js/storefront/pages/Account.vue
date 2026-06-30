@@ -30,10 +30,18 @@ export default {
                 { id: 'overview',     label: 'Overview' },
                 { id: 'blits',        label: 'Blits' },
                 { id: 'transactions', label: 'Transactions' },
+                { id: 'returns',      label: 'Returns' },
                 { id: 'affiliate',    label: 'Affiliate' },
                 { id: 'addresses',    label: 'Addresses' },
                 { id: 'wishlist',     label: 'Wishlist' },
             ],
+            returns: [],
+            returnsLoaded: false,
+            returnForm: { order_number: '', reason: '', items: [] },
+            returnFormOrder: null,
+            returnBusy: false,
+            returnError: '',
+            showReturnForm: false,
         };
     },
     computed: {
@@ -53,6 +61,12 @@ export default {
         else if (v === 'expired') this.verifyState = 'That link expired. Send a new one below.';
         else if (v) this.verifyState = 'That link is invalid. Send a new one below.';
         await this.loadMe();
+        // If we landed via "Request return" deep link, hydrate the form.
+        if (this.activeTab === 'returns') {
+            await this.loadReturns();
+            const start = this.$route.query.start;
+            if (start) this.startReturn(start);
+        }
     },
     methods: {
         async loadMe() {
@@ -113,6 +127,66 @@ export default {
                 this.copyState = 'Press ⌘C';
             }
             setTimeout(() => { this.copyState = ''; }, 1800);
+        },
+        async loadReturns() {
+            if (this.returnsLoaded) return;
+            try {
+                const r = await api.get('/api/account/returns');
+                this.returns = r.returns || [];
+            } catch { this.returns = []; }
+            this.returnsLoaded = true;
+        },
+        async startReturn(orderNumber) {
+            this.returnError = '';
+            this.returnForm = { order_number: orderNumber, reason: '', items: [] };
+            try {
+                const d = await api.get(`/api/account/orders/${orderNumber}`);
+                this.returnFormOrder = d.order;
+                this.returnForm.items = (d.order.items || []).map((it) => ({
+                    order_line_item_id: it.id,
+                    quantity: 0,
+                    reason: '',
+                    label: it.title + (it.variant_title ? ' · ' + it.variant_title : ''),
+                    max: it.quantity,
+                }));
+            } catch (e) {
+                this.returnError = e.payload?.error || 'Could not load this order.';
+            }
+            this.showReturnForm = true;
+        },
+        cancelReturn() {
+            this.showReturnForm = false;
+            this.returnFormOrder = null;
+            this.returnForm = { order_number: '', reason: '', items: [] };
+        },
+        async submitReturn() {
+            const items = this.returnForm.items.filter((i) => i.quantity > 0);
+            if (!items.length) {
+                this.returnError = 'Select at least one item to return.';
+                return;
+            }
+            this.returnBusy = true;
+            this.returnError = '';
+            try {
+                await api.post('/api/account/returns', {
+                    order_number: this.returnForm.order_number,
+                    reason: this.returnForm.reason || null,
+                    items: items.map((i) => ({
+                        order_line_item_id: i.order_line_item_id,
+                        quantity: i.quantity,
+                        reason: i.reason || null,
+                    })),
+                });
+                this.returnsLoaded = false;
+                await this.loadReturns();
+                this.cancelReturn();
+            } catch (e) {
+                this.returnError = e.payload?.error
+                    || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0])
+                    || 'Could not file return.';
+            } finally {
+                this.returnBusy = false;
+            }
         },
         async resendVerify() {
             this.verifySending = true;
@@ -236,7 +310,7 @@ export default {
                     <button
                         v-for="t in tabs"
                         :key="t.id"
-                        @click="activeTab = t.id"
+                        @click="activeTab = t.id; t.id === 'returns' && loadReturns()"
                         :class="[
                             'w-full text-left px-4 py-3 text-sm tracking-widest uppercase',
                             activeTab === t.id ? 'bg-gold text-white' : 'text-black/70 hover:bg-cream-dark',
@@ -471,6 +545,64 @@ export default {
                                 <div class="flex gap-3 mt-3">
                                     <button @click="startEditAddress(a)" class="text-[10px] tracking-widest uppercase text-gold-dark hover:text-gold">Edit</button>
                                     <button @click="deleteAddress(a)" class="text-[10px] tracking-widest uppercase text-black/45 hover:text-red-600">Delete</button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <div v-else-if="activeTab === 'returns'">
+                        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                            <h2 class="font-display text-xl tracking-widest uppercase">Returns</h2>
+                            <p class="text-xs text-black/55">30-day return window from order date.</p>
+                        </div>
+
+                        <!-- Return-request form -->
+                        <div v-if="showReturnForm" class="bg-cream-dark/40 border border-gold/10 p-5 mb-5">
+                            <p class="text-[10px] tracking-widest uppercase text-black/55 mb-2">Return from order</p>
+                            <p class="font-mono mb-4">{{ returnForm.order_number }}</p>
+                            <ul class="divide-y divide-gold/5 mb-4">
+                                <li v-for="(it, idx) in returnForm.items" :key="idx" class="py-2 flex items-center justify-between gap-3">
+                                    <p class="text-sm flex-1 min-w-0 line-clamp-1">{{ it.label }} <span class="text-black/55">(max {{ it.max }})</span></p>
+                                    <input type="number" v-model.number="it.quantity" min="0" :max="it.max" class="w-16 border border-black/15 px-2 py-1 text-sm text-right" />
+                                </li>
+                            </ul>
+                            <label class="block mb-3">
+                                <span class="text-[10px] tracking-widest uppercase text-black/55">Reason (optional)</span>
+                                <textarea v-model="returnForm.reason" rows="2" class="w-full border border-black/15 px-3 py-2 text-sm mt-1"></textarea>
+                            </label>
+                            <p v-if="returnError" class="text-sm text-red-600 mb-2">{{ returnError }}</p>
+                            <div class="flex gap-2">
+                                <button @click="submitReturn" :disabled="returnBusy" class="bg-gold text-white px-5 py-2 text-[10px] tracking-widest uppercase hover:bg-gold-dark disabled:opacity-50">
+                                    {{ returnBusy ? 'Submitting…' : 'Submit return' }}
+                                </button>
+                                <button @click="cancelReturn" class="text-[10px] tracking-widest uppercase text-black/55 hover:text-black">Cancel</button>
+                            </div>
+                        </div>
+
+                        <p v-if="!returnsLoaded" class="text-sm text-black/65">Loading…</p>
+                        <p v-else-if="!returns.length && !showReturnForm" class="text-sm text-black/65">
+                            No return requests yet. Start one from any paid order in
+                            <button @click="activeTab = 'transactions'" class="underline text-gold">Transactions</button>.
+                        </p>
+                        <ul v-else-if="!showReturnForm" class="divide-y divide-gold/10">
+                            <li v-for="r in returns" :key="r.id" class="py-3">
+                                <div class="flex items-start justify-between gap-3 flex-wrap">
+                                    <div>
+                                        <p class="text-sm">
+                                            <router-link :to="`/account/orders/${r.order_number}`" class="font-mono hover:text-gold">{{ r.order_number }}</router-link>
+                                            · {{ r.items.length }} item<span v-if="r.items.length !== 1">s</span>
+                                        </p>
+                                        <p v-if="r.reason" class="text-xs text-black/55 mt-1">{{ r.reason }}</p>
+                                        <p v-if="r.admin_notes" class="text-xs text-black/55 mt-1 italic">Note: {{ r.admin_notes }}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] tracking-widest uppercase">
+                                            <span v-if="r.status === 'requested'" class="bg-amber-100 text-amber-700 px-2 py-0.5">Pending</span>
+                                            <span v-else-if="r.status === 'approved'" class="bg-blue-100 text-blue-700 px-2 py-0.5">Approved</span>
+                                            <span v-else-if="r.status === 'refunded'" class="bg-emerald-100 text-emerald-700 px-2 py-0.5">Refunded {{ r.refund_label }}</span>
+                                            <span v-else class="bg-zinc-100 text-zinc-500 px-2 py-0.5">{{ r.status }}</span>
+                                        </p>
+                                        <p class="text-[10px] text-black/45 mt-1">{{ fmtDate(r.created_at) }}</p>
+                                    </div>
                                 </div>
                             </li>
                         </ul>

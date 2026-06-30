@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\CustomerAddressController;
+use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
 use App\Http\Controllers\Api\BlitsController;
 use App\Http\Controllers\Api\ContentController;
@@ -26,7 +27,9 @@ use App\Http\Controllers\Api\Admin\AdminInventoryController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminRegionController;
 use App\Http\Controllers\Api\Admin\AdminReportsController;
+use App\Http\Controllers\Api\Admin\AdminReturnController;
 use App\Http\Controllers\Api\Admin\AdminReviewController;
+use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CatalogueController;
 use App\Http\Controllers\Api\HeadingController;
@@ -144,6 +147,11 @@ Route::middleware('web')->prefix('account')->group(function () {
 
     // Affiliate (per signed-in customer).
     Route::get ('/affiliate',               [AffiliateController::class, 'mine']);
+
+    // Returns / RMA.
+    Route::get ('/returns',       [ReturnController::class, 'index']);
+    Route::post('/returns',       [ReturnController::class, 'store']);
+    Route::get ('/returns/{id}',  [ReturnController::class, 'show']);
 });
 
 /*
@@ -248,6 +256,17 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::get ('/notifications',           [AdminNotificationsController::class, 'index']);
         Route::post('/notifications/{id}/read', [AdminNotificationsController::class, 'markRead']);
         Route::post('/notifications/read-all',  [AdminNotificationsController::class, 'markAllRead']);
+
+        // Admin user management (admin role only).
+        Route::get   ('/users',      [AdminUserController::class, 'index']);
+        Route::post  ('/users',      [AdminUserController::class, 'store']);
+        Route::put   ('/users/{id}', [AdminUserController::class, 'update']);
+        Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
+
+        // Returns / RMA review.
+        Route::get   ('/returns',       [AdminReturnController::class, 'index']);
+        Route::get   ('/returns/{id}',  [AdminReturnController::class, 'show']);
+        Route::put   ('/returns/{id}',  [AdminReturnController::class, 'update']);
 
         // Reports + CSV exports.
         Route::get('/reports/sales',      [AdminReportsController::class, 'sales']);

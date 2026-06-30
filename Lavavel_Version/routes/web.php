@@ -1,6 +1,14 @@
 <?php
 
+use App\Http\Controllers\SeoController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Sitemap — dynamic XML over published products / headings / catalogues.
+|--------------------------------------------------------------------------
+*/
+Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])->name('sitemap');
 
 /*
 |--------------------------------------------------------------------------
@@ -16,12 +24,13 @@ Route::get('/admin/{any?}', fn () => view('admin'))
 /*
 |--------------------------------------------------------------------------
 | Storefront — catch-all for everything else (cart, shop, product detail,
-| account, checkout, etc.). Renders the storefront Blade which mounts the
-| storefront Vue SPA.
+| account, checkout, etc.). The controller pre-fills meta tags so OG/
+| Twitter crawlers see product titles, descriptions, images, and
+| JSON-LD without running JS. The SPA still does the page itself.
 |
 | The negative lookahead keeps /admin and /api from leaking in here.
 |--------------------------------------------------------------------------
 */
-Route::get('/{any?}', fn () => view('store'))
-    ->where('any', '^(?!admin|api).*$')
+Route::get('/{any?}', [SeoController::class, 'spa'])
+    ->where('any', '^(?!admin|api|sitemap\.xml).*$')
     ->name('store');
