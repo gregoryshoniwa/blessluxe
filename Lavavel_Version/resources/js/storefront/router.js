@@ -4,6 +4,7 @@ const routes = [
     { path: '/', name: 'home', component: () => import('./pages/Home.vue') },
     { path: '/shop', name: 'shop', component: () => import('./pages/Shop.vue') },
     { path: '/shop/packs', name: 'packs', component: () => import('./pages/Packs.vue') },
+    { path: '/shop/packs/:code', name: 'pack-campaign', component: () => import('./pages/PackCampaign.vue') },
     { path: '/shop/:handle', name: 'product', component: () => import('./pages/ProductDetail.vue') },
     { path: '/cart', name: 'cart', component: () => import('./pages/Cart.vue') },
     { path: '/wishlist', name: 'wishlist', component: () => import('./pages/Wishlist.vue') },
@@ -11,9 +12,13 @@ const routes = [
     { path: '/checkout/shipping', name: 'checkout-shipping', component: () => import('./pages/CheckoutShipping.vue') },
     { path: '/checkout/payment', name: 'checkout-payment', component: () => import('./pages/CheckoutPayment.vue') },
     { path: '/checkout/confirmation', name: 'checkout-confirmation', component: () => import('./pages/CheckoutConfirmation.vue') },
+    { path: '/checkout/paynow/return', name: 'paynow-return', component: () => import('./pages/PaynowReturn.vue') },
     { path: '/account', name: 'account', component: () => import('./pages/Account.vue') },
     { path: '/account/login', name: 'login', component: () => import('./pages/Login.vue') },
     { path: '/account/signup', name: 'signup', component: () => import('./pages/Signup.vue') },
+    { path: '/faq', name: 'faq', component: () => import('./pages/Faq.vue') },
+    { path: '/affiliate/shop/:code', name: 'affiliate-shop', component: () => import('./pages/AffiliateShop.vue') },
+    { path: '/affiliate/:code/dashboard', name: 'affiliate-dashboard', component: () => import('./pages/AffiliateDashboard.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./pages/NotFound.vue') },
 ];
 

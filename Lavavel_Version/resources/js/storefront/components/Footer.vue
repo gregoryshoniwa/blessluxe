@@ -18,6 +18,7 @@ export default {
                 {
                     title: 'Help',
                     links: [
+                        { label: 'FAQ', href: '/faq' },
                         { label: 'Shipping', href: '/help/shipping' },
                         { label: 'Returns', href: '/help/returns' },
                         { label: 'Size Guide', href: '/help/sizing' },

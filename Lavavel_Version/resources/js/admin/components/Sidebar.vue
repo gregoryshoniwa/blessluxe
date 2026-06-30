@@ -1,6 +1,9 @@
 <script>
+import { api } from '../../lib/api.js';
+
 export default {
     name: 'AdminSidebar',
+    props: { user: { type: Object, default: null } },
     data() {
         return {
             sections: [
@@ -25,11 +28,30 @@ export default {
                     title: 'Commerce',
                     items: [
                         { to: '/admin/affiliates', label: 'Affiliates' },
+                        { to: '/admin/blits',      label: 'Blits' },
+                        { to: '/admin/packs',      label: 'Packs' },
                         { to: '/admin/regions',    label: 'Regions' },
+                    ],
+                },
+                {
+                    title: 'Editorial',
+                    items: [
+                        { to: '/admin/content', label: 'Hero & Top Bar' },
+                        { to: '/admin/faqs',    label: 'FAQs' },
                     ],
                 },
             ],
         };
+    },
+    methods: {
+        async signOut() {
+            try {
+                await api.post('/api/admin/logout');
+            } catch {
+                /* swallow — we're leaving anyway */
+            }
+            window.dispatchEvent(new CustomEvent('blessluxe:admin-signed-out'));
+        },
     },
 };
 </script>
@@ -57,7 +79,8 @@ export default {
             </div>
         </nav>
         <div class="border-t border-white/10 px-5 py-4 text-xs text-white/55">
-            <router-link to="/admin/login" class="hover:text-gold">Sign out</router-link>
+            <p v-if="user" class="mb-2 text-white/70 truncate">{{ user.name || user.email }}</p>
+            <button @click="signOut" class="hover:text-gold transition-colors">Sign out</button>
         </div>
     </aside>
 </template>

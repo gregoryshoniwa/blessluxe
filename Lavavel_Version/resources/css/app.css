@@ -1,12 +1,11 @@
+/* @import directives must come before any other rule, so the bunny.net
+   font import sits at the very top — Tailwind's @import comes next. */
+@import url('https://fonts.bunny.net/css?family=cormorant-garamond:400,500,600,700|montserrat:300,400,500,600,700|niconne:400&display=swap');
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source './**/*.vue';
-
-/* Bunny-served brand fonts — pull all three weights/styles BlessLuxe uses
-   so the look-and-feel matches the Next.js storefront exactly. */
-@import url('https://fonts.bunny.net/css?family=cormorant-garamond:400,500,600,700|montserrat:300,400,500,600,700|niconne:400&display=swap');
 
 @theme {
     /* ─── Brand palette (mirrors packages/config/tailwind.config.ts) ─── */
@@ -21,13 +20,9 @@
     --font-display: 'Cormorant Garamond', ui-serif, Georgia, serif;
     --font-body: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
     --font-script: 'Niconne', 'Great Vibes', 'Pinyon Script', cursive;
-    /* Override Laravel's default sans so out-of-the-box utilities still feel
-       on-brand without having to opt into `font-body` everywhere. */
     --font-sans: var(--font-body);
 }
 
-/* Hover utility used by Next.js Header: `hover:bg-gold-dark`, etc. The
-   compiler auto-generates these from --color-gold-*; nothing more to add. */
 html, body {
     background: var(--color-cream);
     color: #000;

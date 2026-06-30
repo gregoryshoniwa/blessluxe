@@ -1,79 +1,153 @@
 <script>
+import { api } from '../../lib/api.js';
+
 export default {
     name: 'ProductDetailPage',
     data() {
         return {
-            selectedSize: 'M',
-            selectedColor: 'rose',
+            product: null,
+            loading: true,
+            notFound: false,
+            selectedVariantId: null,
             quantity: 1,
-            sizes: ['XS','S','M','L','XL'],
-            colors: [
-                { id: 'rose',  hex: '#D9536F', label: 'Rose Garden' },
-                { id: 'cream', hex: '#F5EDE3', label: 'Cream' },
-                { id: 'black', hex: '#111',    label: 'Onyx' },
-            ],
+            adding: false,
+            justAdded: false,
+            addError: '',
         };
     },
     computed: {
         handle() {
             return this.$route.params.handle;
         },
-        selectedColorLabel() {
-            return this.colors.find(c => c.id === this.selectedColor)?.label || '';
+        selectedVariant() {
+            if (!this.product) return null;
+            return this.product.variants.find((v) => v.id === this.selectedVariantId) || this.product.variants[0] || null;
+        },
+        priceLabel() {
+            const cents = this.selectedVariant?.price;
+            return cents != null ? '$' + (cents / 100).toFixed(2) : '—';
+        },
+        heroImage() {
+            if (!this.product) return null;
+            const primary = (this.product.media || []).find((m) => m.is_primary && m.media_type === 'image');
+            return primary?.media_url || this.product.images?.[0]?.url || this.product.thumbnail || null;
+        },
+        breadcrumb() {
+            if (!this.product?.catalogues?.length) return null;
+            const c = this.product.catalogues[0];
+            return c.heading
+                ? `${c.heading.name} · ${c.name}`
+                : c.name;
+        },
+        inStock() {
+            const v = this.selectedVariant;
+            if (!v) return false;
+            if (!v.manage_inventory) return true;
+            return (v.inventory_quantity || 0) > 0;
+        },
+    },
+    watch: {
+        handle: {
+            immediate: true,
+            handler() { this.fetchProduct(); },
         },
     },
     methods: {
-        addToCart() {
-            // Wired up in Milestone 5 (cart store + API)
-            alert(`Add ${this.handle} (${this.selectedColorLabel} / ${this.selectedSize}) × ${this.quantity} — to be implemented.`);
+        async fetchProduct() {
+            this.loading = true;
+            this.notFound = false;
+            try {
+                const res = await fetch(`/api/store/products/${encodeURIComponent(this.handle)}`);
+                if (res.status === 404) {
+                    this.notFound = true;
+                    return;
+                }
+                if (!res.ok) return;
+                const data = await res.json();
+                this.product = data.product;
+                this.selectedVariantId = this.product.variants?.[0]?.id || null;
+            } finally {
+                this.loading = false;
+            }
+        },
+        async addToCart() {
+            if (!this.selectedVariant) return;
+            this.adding = true;
+            this.addError = '';
+            this.justAdded = false;
+            try {
+                await api.post('/api/store/cart/line-items', {
+                    variant_id: this.selectedVariant.id,
+                    quantity:   this.quantity,
+                });
+                this.justAdded = true;
+                // Let the header refresh its cart-count badge.
+                window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
+                setTimeout(() => { this.justAdded = false; }, 1800);
+            } catch (e) {
+                this.addError = e.payload?.error || 'Could not add to bag.';
+            } finally {
+                this.adding = false;
+            }
         },
     },
 };
 </script>
 
 <template>
-    <div class="max-w-[1400px] mx-auto px-[5%] py-12">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <div class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush" />
+    <div class="max-w-[1400px] mx-auto px-[5%] py-12 min-h-[60vh]">
+        <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
+            <div class="space-y-4">
+                <div class="h-6 w-2/3 bg-cream-dark animate-pulse" />
+                <div class="h-4 w-1/3 bg-cream-dark animate-pulse" />
+                <div class="h-24 w-full bg-cream-dark animate-pulse mt-6" />
+            </div>
+        </div>
+
+        <div v-else-if="notFound" class="text-center py-24">
+            <p class="font-script text-3xl text-gold">404</p>
+            <h1 class="font-display text-3xl tracking-widest uppercase mb-2">Product not found</h1>
+            <p class="text-sm text-black/65 mb-6">We couldn't find a product with that handle.</p>
+            <router-link to="/shop" class="inline-block bg-gold text-white px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                Back to Shop
+            </router-link>
+        </div>
+
+        <div v-else-if="product" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div class="aspect-[3/4] bg-cream-dark overflow-hidden">
+                <img
+                    v-if="heroImage"
+                    :src="heroImage"
+                    :alt="product.title"
+                    class="w-full h-full object-cover object-top"
+                />
+            </div>
             <div>
-                <p class="text-xs tracking-widest uppercase text-black/55 mb-2">{{ handle }}</p>
-                <h1 class="font-display text-3xl md:text-4xl mb-3">Sample Product</h1>
-                <p class="text-2xl text-gold-dark mb-6">$349.00</p>
-                <p class="text-sm text-black/70 leading-relaxed mb-8">
-                    Lorem ipsum dolor sit amet. Product copy lands here once the catalogue read paths
-                    come online.
+                <p v-if="breadcrumb" class="text-[10px] tracking-widest uppercase text-black/55 mb-2">{{ breadcrumb }}</p>
+                <h1 class="font-display text-3xl md:text-4xl mb-2">{{ product.title }}</h1>
+                <p v-if="product.subtitle" class="text-sm text-black/55 mb-3">{{ product.subtitle }}</p>
+                <p class="text-2xl text-gold-dark mb-6">{{ priceLabel }}</p>
+
+                <p v-if="product.description" class="text-sm text-black/70 leading-relaxed mb-8">
+                    {{ product.description }}
                 </p>
 
-                <div class="mb-5">
-                    <p class="text-xs tracking-widest uppercase text-black/55 mb-2">Color · {{ selectedColorLabel }}</p>
-                    <div class="flex gap-2">
-                        <button
-                            v-for="c in colors"
-                            :key="c.id"
-                            :class="[
-                                'w-9 h-9 rounded-full border-2',
-                                selectedColor === c.id ? 'border-gold' : 'border-transparent',
-                            ]"
-                            :style="{ backgroundColor: c.hex }"
-                            @click="selectedColor = c.id"
-                            :aria-label="c.label"
-                        />
-                    </div>
-                </div>
-
-                <div class="mb-6">
-                    <p class="text-xs tracking-widest uppercase text-black/55 mb-2">Size</p>
+                <div v-if="product.variants.length" class="mb-6">
+                    <p class="text-xs tracking-widest uppercase text-black/55 mb-2">
+                        Size · {{ selectedVariant?.title || '—' }}
+                    </p>
                     <div class="flex flex-wrap gap-2">
                         <button
-                            v-for="s in sizes"
-                            :key="s"
+                            v-for="v in product.variants"
+                            :key="v.id"
+                            @click="selectedVariantId = v.id"
                             :class="[
                                 'border px-4 py-2 text-sm transition-colors',
-                                selectedSize === s ? 'border-gold text-gold' : 'border-black/15 hover:border-gold',
+                                selectedVariantId === v.id ? 'border-gold text-gold' : 'border-black/15 hover:border-gold',
                             ]"
-                            @click="selectedSize = s"
                         >
-                            {{ s }}
+                            {{ v.title }}
                         </button>
                     </div>
                 </div>
@@ -84,14 +158,20 @@ export default {
                         <span class="px-4 py-2 min-w-[40px] text-center">{{ quantity }}</span>
                         <button @click="quantity++" class="px-3 py-2 hover:bg-cream-dark">+</button>
                     </div>
+                    <p v-if="!inStock" class="text-sm text-red-600">Out of stock</p>
                 </div>
 
                 <button
                     @click="addToCart"
-                    class="w-full bg-gold text-white py-4 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors"
+                    :disabled="!inStock || adding"
+                    class="w-full bg-gold text-white py-4 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                    Add to Bag
+                    {{ adding ? 'Adding…' : justAdded ? 'Added to Bag ✓' : inStock ? 'Add to Bag' : 'Unavailable' }}
                 </button>
+                <p v-if="addError" class="text-sm text-red-600 mt-3">{{ addError }}</p>
+                <router-link v-if="justAdded" to="/cart" class="block text-center text-xs tracking-widest uppercase text-gold-dark hover:text-gold mt-3 underline">
+                    View cart →
+                </router-link>
             </div>
         </div>
     </div>
