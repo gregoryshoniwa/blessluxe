@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\PackController;
+use App\Mail\AffiliateSaleMail;
+use App\Mail\OrderReceiptMail;
 use App\Models\Affiliate;
 use App\Models\AffiliateSale;
 use App\Models\Cart;
@@ -13,11 +15,14 @@ use App\Models\OrderLineItem;
 use App\Models\PaymentSession;
 use App\Models\ProductVariant;
 use App\Services\Blits;
+use App\Services\Notifications;
 use App\Services\Paynow;
+use App\Services\Shipping;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class PaynowController extends Controller
@@ -318,7 +323,12 @@ class PaynowController extends Controller
         $items = $snap['items'] ?? [];
         if (empty($items)) return;
 
-        DB::transaction(function () use ($session, $snap, $items) {
+        // Captured by reference inside the transaction so we can fan out
+        // notifications AFTER it commits — sending mid-transaction would
+        // lose the message if anything rolls back.
+        $pendingAffiliateMails = [];
+
+        DB::transaction(function () use ($session, $snap, $items, &$pendingAffiliateMails) {
             $orderId    = 'order_' . Str::random(20);
             $orderNumber = (string) $session->reference;
             $subtotal   = (int) ($snap['subtotal'] ?? 0);
@@ -390,7 +400,7 @@ class PaynowController extends Controller
                 if (! $affiliate) continue;
                 $commission = (int) round($attributedTotal * ((float) $affiliate->commission_rate) / 100);
                 if ($commission <= 0) continue;
-                AffiliateSale::create([
+                $sale = AffiliateSale::create([
                     'id'                => 'asal_' . Str::random(20),
                     'affiliate_id'      => $affiliate->id,
                     'order_id'          => $orderId,
@@ -404,6 +414,7 @@ class PaynowController extends Controller
                     'total_earnings' => DB::raw('total_earnings + ' . $commission),
                     'updated_at'     => now(),
                 ]);
+                $pendingAffiliateMails[] = ['affiliate' => $affiliate->fresh(), 'sale' => $sale];
             }
 
             // ─── Pack slots: flip reserved → paid for any pack-attributed line. ─
@@ -427,6 +438,68 @@ class PaynowController extends Controller
                 Cart::where('id', $snap['cart_id'])->first()?->lineItems()->delete();
             }
         });
+
+        // ─── Package + receipt ────────────────────────────────────────
+        // Both done outside the transaction so an SMTP / package hiccup
+        // can't roll the order back. The admin BCC is set via
+        // MAIL_ADMIN_BCC in .env.
+        try {
+            $order = Order::find($session->fresh()->order_id);
+            if ($order) {
+                // Mint the package + initial event before sending the
+                // receipt so the email can include the tracking code.
+                Shipping::ensurePackageForOrder($order->load('lineItems'));
+                if ($order->email) {
+                    Mail::to($order->email)->send(new OrderReceiptMail($order->fresh()));
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('[order package/receipt] '.$e->getMessage());
+        }
+
+        // ─── Affiliate sale notifications ─────────────────────────────
+        foreach ($pendingAffiliateMails as $pair) {
+            try {
+                if ($pair['affiliate']->email) {
+                    Mail::to($pair['affiliate']->email)
+                        ->send(new AffiliateSaleMail($pair['affiliate'], $pair['sale']));
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[affiliate sale mail] '.$e->getMessage());
+            }
+            // Drop an in-app notification on the matching customer account,
+            // if there is one (affiliate email == a customer email).
+            $cust = \App\Models\Customer::where('email', strtolower((string) $pair['affiliate']->email))->first();
+            if ($cust) {
+                Notifications::forCustomer(
+                    $cust,
+                    kind: 'affiliate_sale',
+                    title: '+$' . number_format($pair['sale']->commission_amount / 100, 2) . ' affiliate commission',
+                    body: 'A customer ordered through your link ' . $pair['affiliate']->code . '.',
+                    actionUrl: '/affiliate/' . $pair['affiliate']->code . '/dashboard',
+                );
+            }
+        }
+
+        // ─── Customer + admin notifications for the order itself ──────
+        $orderForNotify = Order::find($session->fresh()->order_id);
+        if ($orderForNotify) {
+            if ($orderForNotify->customer_id) {
+                Notifications::forCustomer(
+                    $orderForNotify->customer_id,
+                    kind: 'order_paid',
+                    title: 'Order ' . $orderForNotify->order_number . ' confirmed',
+                    body: 'We received your payment of $' . number_format($orderForNotify->total / 100, 2) . '.',
+                    actionUrl: '/account?tab=transactions',
+                );
+            }
+            Notifications::forAllAdmins(
+                kind: 'new_order',
+                title: 'New order ' . $orderForNotify->order_number,
+                body: '$' . number_format($orderForNotify->total / 100, 2) . ' · ' . ($orderForNotify->email ?: 'guest'),
+                actionUrl: '/admin/orders/' . $orderForNotify->id,
+            );
+        }
     }
 
     /** Short, sortable, human-friendly reference. Matches Node app shape. */

@@ -71,7 +71,7 @@ export default {
                         <tr v-if="!recentOrders.length">
                             <td colspan="5" class="px-5 py-8 text-center text-zinc-400">No orders yet.</td>
                         </tr>
-                        <tr v-for="o in recentOrders" :key="o.id" class="border-t border-zinc-100">
+                        <tr v-for="o in recentOrders" :key="o.id" class="border-t border-zinc-100 hover:bg-zinc-50/50 cursor-pointer" @click="$router.push(`/admin/orders/${o.id}`)">
                             <td class="px-5 py-3 font-mono text-xs">{{ o.order_number }}</td>
                             <td class="px-5 py-3">{{ o.email }}</td>
                             <td class="px-5 py-3">{{ o.total_label }}</td>

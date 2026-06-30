@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WelcomeMail;
 use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Package;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Laravel\Socialite\Facades\Socialite;
@@ -55,6 +60,14 @@ class AccountController extends Controller
         Auth::guard('customer')->login($customer, remember: true);
         $request->session()->regenerate();
 
+        // Send the welcome email outside the response cycle so transient
+        // SMTP failures don't 500 the signup. Log + swallow.
+        try {
+            Mail::to($customer->email)->send(new WelcomeMail($customer));
+        } catch (\Throwable $e) {
+            Log::warning('[welcome mail] '.$e->getMessage());
+        }
+
         return [
             'customer' => $this->shape($customer->fresh()),
         ];
@@ -87,6 +100,39 @@ class AccountController extends Controller
 
         return [
             'customer' => $this->shape(Auth::guard('customer')->user()->fresh()),
+        ];
+    }
+
+    /**
+     * GET /api/account/orders
+     *
+     * Customer's order history with the tracking code for each, so the
+     * Transactions tab can deep-link straight into /track/{code}.
+     */
+    public function orders()
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) return ['orders' => null];
+
+        $orders = Order::query()
+            ->where('customer_id', $customer->id)
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get(['id', 'order_number', 'total', 'currency_code', 'status', 'payment_status', 'created_at']);
+
+        $packageCodes = Package::query()
+            ->whereIn('order_id', $orders->pluck('id'))
+            ->pluck('package_code', 'order_id');
+
+        return [
+            'orders' => $orders->map(fn ($o) => [
+                'order_number'   => $o->order_number,
+                'total_label'    => '$' . number_format($o->total / 100, 2),
+                'status'         => $o->status,
+                'payment_status' => $o->payment_status,
+                'tracking_code'  => $packageCodes->get($o->id),
+                'created_at'     => $o->created_at?->toIso8601String(),
+            ]),
         ];
     }
 

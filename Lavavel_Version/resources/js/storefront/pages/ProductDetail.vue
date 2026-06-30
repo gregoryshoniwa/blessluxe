@@ -1,8 +1,11 @@
 <script>
 import { api } from '../../lib/api.js';
+import ProductStrip from '../components/ProductStrip.vue';
+import { recentlyViewed } from '../recently-viewed.js';
 
 export default {
     name: 'ProductDetailPage',
+    components: { ProductStrip },
     data() {
         return {
             product: null,
@@ -13,6 +16,8 @@ export default {
             adding: false,
             justAdded: false,
             addError: '',
+            // Expose the module so the template can read `recentlyViewed.ids(...)`.
+            recentlyViewed,
         };
     },
     computed: {
@@ -66,6 +71,8 @@ export default {
                 const data = await res.json();
                 this.product = data.product;
                 this.selectedVariantId = this.product.variants?.[0]?.id || null;
+                // Stamp this view onto the recently-viewed list.
+                recentlyViewed.record(this.product.id);
             } finally {
                 this.loading = false;
             }
@@ -96,12 +103,18 @@ export default {
 
 <template>
     <div class="max-w-[1400px] mx-auto px-[5%] py-12 min-h-[60vh]">
-        <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <div class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
+        <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-pulse">
+            <div class="aspect-[3/4] bg-cream-dark" />
             <div class="space-y-4">
-                <div class="h-6 w-2/3 bg-cream-dark animate-pulse" />
-                <div class="h-4 w-1/3 bg-cream-dark animate-pulse" />
-                <div class="h-24 w-full bg-cream-dark animate-pulse mt-6" />
+                <div class="h-3 w-1/4 bg-cream-dark" />
+                <div class="h-8 w-3/4 bg-cream-dark" />
+                <div class="h-4 w-1/3 bg-cream-dark" />
+                <div class="h-7 w-1/4 bg-cream-dark mt-4" />
+                <div class="h-16 w-full bg-cream-dark mt-6" />
+                <div class="grid grid-cols-5 gap-2 mt-8">
+                    <div v-for="n in 5" :key="n" class="h-10 bg-cream-dark" />
+                </div>
+                <div class="h-12 w-full bg-cream-dark mt-8" />
             </div>
         </div>
 
@@ -174,5 +187,24 @@ export default {
                 </router-link>
             </div>
         </div>
+
+        <!-- Related products: same catalogue with fallback to heading. -->
+        <ProductStrip
+            v-if="product && !notFound"
+            title="You may also love"
+            script="Curated"
+            :endpoint="`/api/store/products/${encodeURIComponent(product.handle)}/related`"
+            :limit="6"
+        />
+
+        <!-- Recently viewed strip — excludes the current product so the
+             customer doesn't see what they're already looking at. -->
+        <ProductStrip
+            v-if="product"
+            title="Recently viewed"
+            script="Your edit"
+            :ids="recentlyViewed.ids(product.id)"
+            :limit="6"
+        />
     </div>
 </template>

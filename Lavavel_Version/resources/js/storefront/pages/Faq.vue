@@ -25,7 +25,7 @@ export default {
         <div v-if="loading" class="text-center py-16 text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Loading help articles…</div>
 
         <div v-else-if="!groups.length" class="text-center py-16">
-            <p class="text-sm text-black/65 mb-4">No FAQs yet — reach out to <a href="mailto:hello@blessluxe.com" class="underline text-gold">hello@blessluxe.com</a> and our concierge will answer.</p>
+            <p class="text-sm text-black/65 mb-4">No FAQs yet — reach out to <a href="mailto:info@blessluxe.com" class="underline text-gold">info@blessluxe.com</a> and our concierge will answer.</p>
         </div>
 
         <div v-else class="space-y-10">

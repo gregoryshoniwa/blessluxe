@@ -71,6 +71,97 @@ class ProductController extends Controller
     }
 
     /**
+     * POST /api/store/products/batch  { ids: ["prod_xxx", ...] }
+     *
+     * Resolve a small list of products by id — used by the guest wishlist
+     * to render saved items it tracks in localStorage. Preserves the
+     * caller's input order and silently drops unknown ids.
+     */
+    public function batch(Request $request)
+    {
+        $data = $request->validate([
+            'ids'   => ['required', 'array', 'min:1', 'max:60'],
+            'ids.*' => ['string'],
+        ]);
+        $byId = Product::query()
+            ->where('status', 'published')
+            ->whereIn('id', $data['ids'])
+            ->with([
+                'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
+                'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
+                'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+            ])
+            ->get()
+            ->keyBy('id');
+
+        $products = collect($data['ids'])
+            ->map(function ($id) use ($byId) {
+                $p = $byId->get($id);
+                if (! $p) return null;
+                return $this->summarise($p);
+            })
+            ->filter()
+            ->values();
+
+        return ['products' => $products];
+    }
+
+    /**
+     * GET /api/store/products/{handle}/related?limit=6
+     *
+     * Picks products that share at least one catalogue with the seed.
+     * Falls back to "newest in same heading" if the catalogue has nothing
+     * else. Excludes the seed itself.
+     */
+    public function related(Request $request, string $handle)
+    {
+        $seed = Product::query()
+            ->where('handle', $handle)
+            ->where('status', 'published')
+            ->with('catalogues:id,heading_id')
+            ->first();
+        if (! $seed) return ['products' => []];
+
+        $limit = (int) min(12, max(2, (int) $request->query('limit', 6)));
+        $catIds = $seed->catalogues->pluck('id')->all();
+        $headingIds = $seed->catalogues->pluck('heading_id')->filter()->unique()->all();
+
+        $query = Product::query()
+            ->where('status', 'published')
+            ->where('id', '!=', $seed->id)
+            ->when(! empty($catIds), function ($q) use ($catIds) {
+                $q->whereHas('catalogues', fn ($qc) => $qc->whereIn('catalogues.id', $catIds));
+            })
+            ->with([
+                'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
+                'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
+                'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+            ])
+            ->latest()
+            ->limit($limit);
+
+        $results = $query->get();
+
+        // Fallback to same heading if catalogue-match returned nothing.
+        if ($results->isEmpty() && ! empty($headingIds)) {
+            $results = Product::query()
+                ->where('status', 'published')
+                ->where('id', '!=', $seed->id)
+                ->whereHas('catalogues', fn ($q) => $q->whereIn('heading_id', $headingIds))
+                ->with([
+                    'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
+                    'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
+                    'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+                ])
+                ->latest()
+                ->limit($limit)
+                ->get();
+        }
+
+        return ['products' => $results->map(fn ($p) => $this->summarise($p))];
+    }
+
+    /**
      * GET /api/store/products/{handle}
      */
     public function show(string $handle)

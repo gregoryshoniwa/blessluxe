@@ -19,6 +19,7 @@ export default {
                     title: 'Help',
                     links: [
                         { label: 'FAQ', href: '/faq' },
+                        { label: 'Track an order', href: '/track' },
                         { label: 'Shipping', href: '/help/shipping' },
                         { label: 'Returns', href: '/help/returns' },
                         { label: 'Size Guide', href: '/help/sizing' },
@@ -32,6 +33,7 @@ export default {
                         { label: 'Sustainability', href: '/sustainability' },
                         { label: 'Careers', href: '/careers' },
                         { label: 'Press', href: '/press' },
+                        { label: 'Affiliate programme', href: '/affiliate' },
                     ],
                 },
             ],

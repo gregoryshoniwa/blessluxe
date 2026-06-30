@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { wishlist } from '../wishlist-store.js';
 
 export default {
     name: 'LoginPage',
@@ -30,6 +31,9 @@ export default {
                     password: this.password,
                     remember: this.remember,
                 });
+                // Re-detect auth so any guest wishlist items get merged into
+                // the customer's account before we navigate away.
+                try { await wishlist.boot(); } catch { /* don't block login */ }
                 this.$router.push(this.nextPath);
             } catch (e) {
                 this.error = e.payload?.error

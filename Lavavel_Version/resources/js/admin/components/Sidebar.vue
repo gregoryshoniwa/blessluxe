@@ -1,8 +1,10 @@
 <script>
 import { api } from '../../lib/api.js';
+import NotificationsBell from './NotificationsBell.vue';
 
 export default {
     name: 'AdminSidebar',
+    components: { NotificationsBell },
     props: { user: { type: Object, default: null } },
     data() {
         return {
@@ -15,6 +17,13 @@ export default {
                         { to: '/admin/inventory',  label: 'Inventory' },
                         { to: '/admin/headings',   label: 'Headings' },
                         { to: '/admin/catalogues', label: 'Catalogues' },
+                    ],
+                },
+                {
+                    title: 'Fulfilment',
+                    items: [
+                        { to: '/admin/orders',   label: 'Orders' },
+                        { to: '/admin/packages', label: 'Packages' },
                     ],
                 },
                 {
@@ -40,6 +49,12 @@ export default {
                         { to: '/admin/faqs',    label: 'FAQs' },
                     ],
                 },
+                {
+                    title: 'Insights',
+                    items: [
+                        { to: '/admin/reports', label: 'Reports & Exports' },
+                    ],
+                },
             ],
         };
     },
@@ -58,9 +73,12 @@ export default {
 
 <template>
     <aside class="w-60 bg-black text-white flex flex-col">
-        <div class="px-5 py-6 border-b border-white/10">
-            <img src="/logo.png" alt="BLESSLUXE" class="h-8 w-auto brightness-0 invert" />
-            <p class="text-[10px] tracking-[0.3em] uppercase text-gold mt-2">Admin</p>
+        <div class="px-5 py-6 border-b border-white/10 flex items-start justify-between">
+            <div>
+                <img src="/logo.png" alt="BLESSLUXE" class="h-8 w-auto brightness-0 invert" />
+                <p class="text-[10px] tracking-[0.3em] uppercase text-gold mt-2">Admin</p>
+            </div>
+            <NotificationsBell />
         </div>
         <nav class="flex-1 overflow-y-auto py-4">
             <div v-for="section in sections" :key="section.title" class="mb-6">

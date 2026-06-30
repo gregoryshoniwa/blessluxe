@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { wishlist } from '../wishlist-store.js';
 
 export default {
     name: 'SignupPage',
@@ -31,6 +32,7 @@ export default {
                     password:   this.password,
                     marketing_consent: this.marketing_consent,
                 });
+                try { await wishlist.boot(); } catch { /* don't block signup */ }
                 this.$router.push(this.nextPath);
             } catch (e) {
                 this.error = e.payload?.error

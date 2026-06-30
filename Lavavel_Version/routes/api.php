@@ -5,12 +5,18 @@ use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
 use App\Http\Controllers\Api\BlitsController;
 use App\Http\Controllers\Api\ContentController;
+use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\PackController;
+use App\Http\Controllers\Api\TrackingController;
+use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Admin\AdminAffiliateController;
 use App\Http\Controllers\Api\Admin\AdminAnnouncementController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
 use App\Http\Controllers\Api\Admin\AdminBlitsController;
 use App\Http\Controllers\Api\Admin\AdminFaqController;
+use App\Http\Controllers\Api\Admin\AdminNotificationsController;
+use App\Http\Controllers\Api\Admin\AdminOrderController;
+use App\Http\Controllers\Api\Admin\AdminPackageController;
 use App\Http\Controllers\Api\Admin\AdminCatalogueController;
 use App\Http\Controllers\Api\Admin\AdminCustomerController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
@@ -18,6 +24,7 @@ use App\Http\Controllers\Api\Admin\AdminHeadingController;
 use App\Http\Controllers\Api\Admin\AdminInventoryController;
 use App\Http\Controllers\Api\Admin\AdminProductController;
 use App\Http\Controllers\Api\Admin\AdminRegionController;
+use App\Http\Controllers\Api\Admin\AdminReportsController;
 use App\Http\Controllers\Api\Admin\AdminReviewController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CatalogueController;
@@ -38,12 +45,17 @@ Route::prefix('store')->group(function () {
     Route::get('/headings',                [HeadingController::class,   'index']);
     Route::get('/catalogues',              [CatalogueController::class, 'index']);
     Route::get('/catalogues/{idOrHandle}', [CatalogueController::class, 'show']);
-    Route::get('/products',                [ProductController::class,   'index']);
-    Route::get('/products/{handle}',       [ProductController::class,   'show']);
+    Route::get ('/products',                [ProductController::class, 'index']);
+    Route::post('/products/batch',          [ProductController::class, 'batch']);
+    Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
+    Route::get ('/products/{handle}',       [ProductController::class, 'show']);
 
     // Public content (no session needed).
     Route::get('/announcements', [ContentController::class, 'announcements']);
     Route::get('/faqs',          [ContentController::class, 'faqs']);
+
+    // Public tracking — the Luhn-checked code itself is the bearer.
+    Route::get('/track/{code}',  [TrackingController::class, 'show']);
 
     // Cart + checkout — session-backed, so they need the `web` middleware
     // group for cookies + CSRF.
@@ -61,6 +73,7 @@ Route::prefix('store')->group(function () {
         Route::get  ('/affiliate/active',           [AffiliateController::class, 'active']);
         Route::post ('/affiliate/clear',            [AffiliateController::class, 'clear']);
         Route::get  ('/affiliate/dashboard/{code}', [AffiliateController::class, 'dashboard']);
+        Route::post ('/affiliate/apply',            [AffiliateController::class, 'apply']);
 
         // Pack campaigns (group buy). Reservation needs a logged-in customer,
         // enforced inside the controller so we can return 401 with the
@@ -90,6 +103,7 @@ Route::prefix('store')->group(function () {
 */
 Route::middleware('web')->prefix('account')->group(function () {
     Route::get('/me',     [AccountController::class, 'me']);
+    Route::get('/orders', [AccountController::class, 'orders']);
     Route::post('/signup', [AccountController::class, 'signup']);
     Route::post('/login',  [AccountController::class, 'login']);
     Route::post('/logout', [AccountController::class, 'logout']);
@@ -100,6 +114,20 @@ Route::middleware('web')->prefix('account')->group(function () {
     // Blits loyalty (per signed-in customer; guests get a polite null).
     Route::get ('/blits',         [BlitsController::class, 'index']);
     Route::post('/blits/preview', [BlitsController::class, 'preview']);
+
+    // Wishlist (signed-in customers only).
+    Route::get   ('/wishlist',              [WishlistController::class, 'index']);
+    Route::post  ('/wishlist',              [WishlistController::class, 'add']);
+    Route::delete('/wishlist/{productId}',  [WishlistController::class, 'remove']);
+    Route::post  ('/wishlist/merge',        [WishlistController::class, 'merge']);
+
+    // Notifications inbox.
+    Route::get ('/notifications',           [NotificationsController::class, 'index']);
+    Route::post('/notifications/{id}/read', [NotificationsController::class, 'markRead']);
+    Route::post('/notifications/read-all',  [NotificationsController::class, 'markAllRead']);
+
+    // Affiliate (per signed-in customer).
+    Route::get ('/affiliate',               [AffiliateController::class, 'mine']);
 });
 
 /*
@@ -188,5 +216,29 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/faqs',       [AdminFaqController::class, 'store']);
         Route::put   ('/faqs/{id}',  [AdminFaqController::class, 'update']);
         Route::delete('/faqs/{id}',  [AdminFaqController::class, 'destroy']);
+
+        // Packages (shipping & tracking).
+        Route::get ('/packages',                [AdminPackageController::class, 'index']);
+        Route::get ('/packages/{id}',           [AdminPackageController::class, 'show']);
+        Route::put ('/packages/{id}',           [AdminPackageController::class, 'update']);
+        Route::post('/packages/{id}/events',    [AdminPackageController::class, 'appendEvent']);
+
+        // Orders + refund flow.
+        Route::get ('/orders',                  [AdminOrderController::class, 'index']);
+        Route::get ('/orders/{id}',             [AdminOrderController::class, 'show']);
+        Route::post('/orders/{id}/refund',      [AdminOrderController::class, 'refund']);
+
+        // Notifications inbox (per-admin).
+        Route::get ('/notifications',           [AdminNotificationsController::class, 'index']);
+        Route::post('/notifications/{id}/read', [AdminNotificationsController::class, 'markRead']);
+        Route::post('/notifications/read-all',  [AdminNotificationsController::class, 'markAllRead']);
+
+        // Reports + CSV exports.
+        Route::get('/reports/sales',      [AdminReportsController::class, 'sales']);
+        Route::get('/reports/customers',  [AdminReportsController::class, 'customers']);
+        Route::get('/reports/affiliates', [AdminReportsController::class, 'affiliates']);
+        Route::get('/exports/orders',     [AdminReportsController::class, 'exportOrders']);
+        Route::get('/exports/customers',  [AdminReportsController::class, 'exportCustomers']);
+        Route::get('/exports/products',   [AdminReportsController::class, 'exportProducts']);
     });
 });

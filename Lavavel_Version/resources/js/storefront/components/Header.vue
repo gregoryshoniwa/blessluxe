@@ -1,13 +1,21 @@
 <script>
+import SearchOverlay from './SearchOverlay.vue';
+import MobileNavDrawer from './MobileNavDrawer.vue';
+import NotificationsBell from './NotificationsBell.vue';
+
 export default {
     name: 'StoreHeader',
+    components: { SearchOverlay, MobileNavDrawer, NotificationsBell },
     data() {
         return {
             scrolled: false,
             activeMenu: null,
             headings: [],
             cartCount: 0,
+            wishCount: 0,
             affiliate: null,
+            searchOpen: false,
+            mobileNavOpen: false,
         };
     },
     computed: {
@@ -29,15 +37,28 @@ export default {
         window.addEventListener('scroll', this.handleScroll, { passive: true });
         window.addEventListener('blessluxe:cart-updated', this.fetchCartCount);
         window.addEventListener('blessluxe:affiliate-changed', this.fetchAffiliate);
+        window.addEventListener('blessluxe:wishlist-updated', this.syncWishCount);
+        window.addEventListener('blessluxe:search-open', this.openSearch);
         this.handleScroll();
         this.fetchHeadings();
         this.fetchCartCount();
         this.fetchAffiliate();
+        this.syncWishCount();
     },
     beforeUnmount() {
         window.removeEventListener('scroll', this.handleScroll);
         window.removeEventListener('blessluxe:cart-updated', this.fetchCartCount);
         window.removeEventListener('blessluxe:affiliate-changed', this.fetchAffiliate);
+        window.removeEventListener('blessluxe:wishlist-updated', this.syncWishCount);
+        window.removeEventListener('blessluxe:search-open', this.openSearch);
+    },
+    watch: {
+        '$route'() {
+            // Close any open drawers when navigating.
+            this.mobileNavOpen = false;
+            this.searchOpen = false;
+            this.activeMenu = null;
+        },
     },
     methods: {
         handleScroll() {
@@ -73,6 +94,16 @@ export default {
                 this.affiliate = null;
             }
         },
+        syncWishCount() {
+            // Lazy require so we don't pull the store before boot.
+            import('../wishlist-store.js').then(({ wishlist }) => {
+                this.wishCount = wishlist.count();
+            });
+        },
+        openSearch() { this.searchOpen = true; },
+        closeSearch() { this.searchOpen = false; },
+        openMobileNav() { this.mobileNavOpen = true; },
+        closeMobileNav() { this.mobileNavOpen = false; },
         async clearAffiliate() {
             try {
                 await fetch('/api/store/affiliate/clear', {
@@ -92,6 +123,9 @@ export default {
 </script>
 
 <template>
+    <SearchOverlay :open="searchOpen" @close="closeSearch" />
+    <MobileNavDrawer :open="mobileNavOpen" :nav-links="navLinks" @close="closeMobileNav" @open-search="openSearch" />
+
     <header
         :class="[
             'sticky top-0 z-40 transition-all duration-300 border-b border-gold/10',
@@ -111,7 +145,7 @@ export default {
 
         <div class="max-w-[1600px] mx-auto px-[5%]">
             <div class="flex items-center justify-between py-4">
-                <button class="lg:hidden p-2 -ml-2 hover:text-gold transition-colors" aria-label="Open menu">
+                <button @click="openMobileNav" class="lg:hidden p-2 -ml-2 hover:text-gold transition-colors" aria-label="Open menu">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
                     </svg>
@@ -176,20 +210,27 @@ export default {
                 </nav>
 
                 <div class="flex items-center gap-1.5">
-                    <button class="p-2 hover:text-gold transition-colors" aria-label="Search">
+                    <button @click="openSearch" class="p-2 hover:text-gold transition-colors" aria-label="Search">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                     </button>
+                    <NotificationsBell />
                     <router-link to="/account" class="p-2 hover:text-gold transition-colors" aria-label="Account">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                         </svg>
                     </router-link>
-                    <router-link to="/wishlist" class="p-2 hover:text-gold transition-colors" aria-label="Wishlist">
+                    <router-link to="/wishlist" class="p-2 hover:text-gold transition-colors relative" aria-label="Wishlist">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
                         </svg>
+                        <span
+                            v-if="wishCount > 0"
+                            class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-black text-white text-[10px] font-semibold rounded-full flex items-center justify-center"
+                        >
+                            {{ wishCount > 99 ? '99+' : wishCount }}
+                        </span>
                     </router-link>
                     <router-link to="/cart" class="p-2 hover:text-gold transition-colors relative" aria-label="Cart">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">

@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\AffiliateApprovedMail;
+use App\Mail\AffiliatePayoutMail;
 use App\Models\Affiliate;
 use App\Models\AffiliatePayout;
 use App\Models\AffiliateSale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -67,7 +71,33 @@ class AdminAffiliateController extends Controller
             'first_name'      => ['sometimes', 'nullable', 'string', 'max:120'],
             'last_name'       => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+        $wasPending = $a->status === 'pending';
         $a->update($data);
+
+        // Approval pipeline: pending → active means the admin approved this
+        // application. Send the welcome email + drop a customer-side
+        // notification if a matching account exists.
+        if ($wasPending && ($data['status'] ?? null) === 'active') {
+            if ($a->email) {
+                try {
+                    \Illuminate\Support\Facades\Mail::to($a->email)
+                        ->send(new AffiliateApprovedMail($a->fresh()));
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('[affiliate approved mail] '.$e->getMessage());
+                }
+                $matchedCustomer = \App\Models\Customer::where('email', strtolower($a->email))->first();
+                if ($matchedCustomer) {
+                    \App\Services\Notifications::forCustomer(
+                        $matchedCustomer,
+                        kind:      'affiliate_approved',
+                        title:     'You are now a BLESSLUXE affiliate',
+                        body:      "Share code {$a->code} and earn {$a->commission_rate}% on every order.",
+                        actionUrl: "/affiliate/{$a->code}/dashboard",
+                    );
+                }
+            }
+        }
+
         return ['affiliate' => $this->shape($a->fresh())];
     }
 
@@ -152,8 +182,9 @@ class AdminAffiliateController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($affiliate, $data) {
-            AffiliatePayout::create([
+        $payout = null;
+        DB::transaction(function () use ($affiliate, $data, &$payout) {
+            $payout = AffiliatePayout::create([
                 'id'            => 'apo_' . Str::random(16),
                 'affiliate_id'  => $affiliate->id,
                 'amount'        => (int) $data['amount'],
@@ -182,6 +213,27 @@ class AdminAffiliateController extends Controller
                 $sale->update(['status' => 'paid']);
             }
         });
+
+        // Email the affiliate — outside the transaction so SMTP failure
+        // doesn't roll back the payout the admin just recorded.
+        if ($payout && $affiliate->email) {
+            try {
+                Mail::to($affiliate->email)->send(new AffiliatePayoutMail($affiliate->fresh(), $payout));
+            } catch (\Throwable $e) {
+                Log::warning('[affiliate payout mail] '.$e->getMessage());
+            }
+            // In-app notification on the matching customer account, if any.
+            $cust = \App\Models\Customer::where('email', strtolower((string) $affiliate->email))->first();
+            if ($cust) {
+                \App\Services\Notifications::forCustomer(
+                    $cust,
+                    kind: 'affiliate_payout',
+                    title: 'Payout sent · $' . number_format($payout->amount / 100, 2),
+                    body: 'We just settled a payout for you via ' . ucwords(str_replace('_', ' ', (string) $payout->method)) . '.',
+                    actionUrl: '/affiliate/' . $affiliate->code . '/dashboard',
+                );
+            }
+        }
 
         return ['ok' => true];
     }

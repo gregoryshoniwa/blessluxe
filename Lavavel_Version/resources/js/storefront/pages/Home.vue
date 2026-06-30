@@ -1,9 +1,14 @@
 <script>
 import ProductCard from '../components/ProductCard.vue';
+import ProductStrip from '../components/ProductStrip.vue';
+import { recentlyViewed } from '../recently-viewed.js';
 
 export default {
     name: 'HomePage',
-    components: { ProductCard },
+    components: { ProductCard, ProductStrip },
+    computed: {
+        recentlyViewedIds() { return recentlyViewed.ids(); },
+    },
     data() {
         return {
             // Default slide — used when no active hero announcement exists.
@@ -144,6 +149,16 @@ export default {
                     View All
                 </router-link>
             </div>
+        </section>
+
+        <!-- Recently viewed strip — only renders if there's at least one. -->
+        <section v-if="recentlyViewedIds.length" class="max-w-[1400px] mx-auto px-[5%]">
+            <ProductStrip
+                title="Pick up where you left off"
+                script="Just for you"
+                :ids="recentlyViewedIds"
+                :limit="6"
+            />
         </section>
     </div>
 </template>

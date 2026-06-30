@@ -15,8 +15,12 @@ const routes = [
     { path: '/admin/regions',    name: 'admin-regions',   component: () => import('./pages/Regions.vue') },
     { path: '/admin/blits',      name: 'admin-blits',     component: () => import('./pages/Blits.vue') },
     { path: '/admin/packs',      name: 'admin-packs',     component: () => import('./pages/Packs.vue') },
+    { path: '/admin/packages',   name: 'admin-packages',  component: () => import('./pages/Packages.vue') },
+    { path: '/admin/orders',     name: 'admin-orders',         component: () => import('./pages/Orders.vue') },
+    { path: '/admin/orders/:id', name: 'admin-order-detail',   component: () => import('./pages/OrderDetail.vue') },
     { path: '/admin/content',    name: 'admin-content',   component: () => import('./pages/Content.vue') },
     { path: '/admin/faqs',       name: 'admin-faqs',      component: () => import('./pages/Faqs.vue') },
+    { path: '/admin/reports',    name: 'admin-reports',   component: () => import('./pages/Reports.vue') },
     { path: '/admin/:pathMatch(.*)*', name: 'admin-404', component: () => import('./pages/NotFound.vue') },
 ];
 

@@ -86,9 +86,27 @@ export default {
                 </h1>
             </div>
 
-            <!-- Loading -->
-            <div v-if="loading" class="flex justify-center py-16">
-                <p class="text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Preparing your bag</p>
+            <!-- Loading: a skeleton mirroring rows + summary rail. -->
+            <div v-if="loading" class="lg:grid lg:grid-cols-12 lg:gap-12 animate-pulse">
+                <div class="lg:col-span-7 space-y-6">
+                    <div v-for="n in 2" :key="n" class="flex gap-4 pb-6 border-b border-gold/10">
+                        <div class="w-24 h-32 bg-cream-dark" />
+                        <div class="flex-1 space-y-3 pt-1">
+                            <div class="h-4 w-3/4 bg-cream-dark" />
+                            <div class="h-3 w-1/3 bg-cream-dark" />
+                            <div class="h-8 w-32 bg-cream-dark mt-6" />
+                        </div>
+                    </div>
+                </div>
+                <aside class="lg:col-span-5 mt-12 lg:mt-0">
+                    <div class="bg-cream-dark/40 p-6 space-y-3">
+                        <div class="h-5 w-2/5 bg-cream-dark" />
+                        <div class="h-10 w-full bg-cream-dark mt-4" />
+                        <div class="h-3 w-3/4 bg-cream-dark" />
+                        <div class="h-3 w-1/2 bg-cream-dark" />
+                        <div class="h-12 w-full bg-cream-dark mt-4" />
+                    </div>
+                </aside>
             </div>
 
             <!-- Empty -->

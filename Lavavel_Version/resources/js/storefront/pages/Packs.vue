@@ -1,10 +1,10 @@
 <script>
 import { api } from '../../lib/api.js';
-import { Sparkles, ArrowRight, Users } from 'lucide-vue-next';
+import { Sparkles, Users } from 'lucide-vue-next';
 
 export default {
     name: 'PacksPage',
-    components: { Sparkles, ArrowRight, Users },
+    components: { Sparkles, Users },
     data() {
         return { packs: [], loading: true };
     },
@@ -40,10 +40,10 @@ export default {
             </p>
         </header>
 
-        <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="n in 3" :key="n" class="border border-gold/15 bg-white p-6">
-                <div class="aspect-[4/5] bg-cream-dark animate-pulse mb-4" />
-                <div class="h-4 bg-cream-dark animate-pulse w-2/3 mb-2" />
+        <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div v-for="n in 8" :key="n">
+                <div class="aspect-[3/4] bg-cream-dark animate-pulse mb-2" />
+                <div class="h-3 bg-cream-dark animate-pulse w-2/3 mb-1" />
                 <div class="h-3 bg-cream-dark animate-pulse w-1/2" />
             </div>
         </div>
@@ -55,43 +55,32 @@ export default {
             </router-link>
         </div>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             <router-link
                 v-for="p in packs"
                 :key="p.public_code"
                 :to="`/shop/packs/${p.public_code}`"
-                class="group border border-gold/15 bg-white overflow-hidden hover:border-gold transition-colors"
+                class="block group relative"
             >
-                <div class="aspect-[4/5] bg-cream-dark overflow-hidden">
+                <span v-if="p.expires_at" class="absolute top-2 right-2 z-10 text-[9px] tracking-widest uppercase bg-amber-100 text-amber-700 px-2 py-0.5">
+                    ends {{ fmtExpires(p.expires_at) }}
+                </span>
+                <div class="aspect-[3/4] bg-cream-dark mb-2 overflow-hidden group-hover:opacity-90 transition-opacity">
                     <img
                         v-if="p.thumbnail"
                         :src="p.thumbnail"
                         :alt="p.title"
-                        class="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-500"
+                        class="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                     />
                 </div>
-                <div class="p-5">
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="font-display text-lg tracking-wider uppercase line-clamp-1">{{ p.title }}</p>
-                        <span v-if="p.expires_at" class="text-[10px] tracking-widest uppercase bg-amber-100 text-amber-700 px-2 py-0.5">
-                            ends {{ fmtExpires(p.expires_at) }}
-                        </span>
-                    </div>
-                    <p v-if="p.description" class="text-xs text-black/65 line-clamp-2 mb-3">{{ p.description }}</p>
-
-                    <!-- Fill bar -->
-                    <div class="bg-cream-dark/40 h-1 overflow-hidden mb-2">
-                        <div class="bg-gold h-full" :style="{ width: fillPct(p) + '%' }"></div>
-                    </div>
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-black/60 inline-flex items-center gap-1">
-                            <Users class="w-3 h-3" /> {{ p.slots_paid }} of {{ p.slots_total }} claimed
-                        </span>
-                        <span class="text-gold-dark font-mono">{{ p.public_code }}</span>
-                    </div>
-                    <p class="mt-4 text-xs tracking-widest uppercase text-gold-dark group-hover:text-gold inline-flex items-center gap-1">
-                        View pack <ArrowRight class="w-3 h-3" />
-                    </p>
+                <p class="font-display text-sm leading-tight line-clamp-1 group-hover:text-gold transition-colors">
+                    {{ p.title }}
+                </p>
+                <p class="text-[10px] text-black/55 line-clamp-1 inline-flex items-center gap-1">
+                    <Users class="w-3 h-3" /> {{ p.slots_paid }}/{{ p.slots_total }} claimed
+                </p>
+                <div class="bg-cream-dark/40 h-1 overflow-hidden mt-1">
+                    <div class="bg-gold h-full" :style="{ width: fillPct(p) + '%' }"></div>
                 </div>
             </router-link>
         </div>

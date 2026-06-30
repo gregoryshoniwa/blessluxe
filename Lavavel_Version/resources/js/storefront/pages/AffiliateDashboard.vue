@@ -6,7 +6,7 @@ export default {
     name: 'AffiliateDashboard',
     components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag },
     data() {
-        return { data: null, loading: true, error: '', copied: false };
+        return { data: null, loading: true, error: '', copied: false, needsLogin: false };
     },
     computed: {
         code() { return (this.$route.params.code || '').toUpperCase(); },
@@ -21,6 +21,7 @@ export default {
             this.data = res;
         } catch (e) {
             this.error = e.payload?.error || 'Affiliate code not found.';
+            if (e.status === 401) this.needsLogin = true;
         } finally {
             this.loading = false;
         }
@@ -42,6 +43,15 @@ export default {
     <div class="max-w-[1200px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <div v-if="loading" class="text-center py-24">
             <p class="text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Loading dashboard</p>
+        </div>
+
+        <div v-else-if="needsLogin" class="text-center py-24 max-w-md mx-auto">
+            <p class="font-script text-3xl text-gold">Hi there</p>
+            <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Sign in to view this dashboard</h1>
+            <p class="text-sm text-black/65 mb-6">{{ error }}</p>
+            <router-link :to="`/account/login?next=/affiliate/${code}/dashboard`" class="inline-block bg-gold text-white px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                Sign in
+            </router-link>
         </div>
 
         <div v-else-if="error" class="text-center py-24">
