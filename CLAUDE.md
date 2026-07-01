@@ -4,162 +4,107 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BLESSLUXE is a luxury women's fashion e-commerce project structured as a **Turborepo monorepo** using pnpm workspaces. It has Next.js frontend apps (storefront + admin) and a single custom Express.js backend (`@blessluxe/shop-backend`) that handles catalogue, cart, customer, review, and affiliate concerns.
+**BLESSLUXE** is a luxury women's fashion e-commerce app: Laravel 13 + Vue 3 + MySQL, single-repo. The Vue SPAs (storefront + admin) live under `resources/js/` and are compiled by Vite. Everything else is standard Laravel.
 
 ## Commands
 
 ```bash
-pnpm install              # Install all dependencies
-pnpm dev                  # Run all apps in dev mode (storefront :3000, admin :3001, shop :9001)
-pnpm build                # Build all packages and apps via Turbo
-pnpm lint                 # Lint all packages and apps
-pnpm format               # Format all files with Prettier
-pnpm format:check         # Check formatting without writing
-pnpm type-check           # TypeScript type checking across all packages
-pnpm clean                # Remove all build artifacts and node_modules
+composer install               # PHP deps
+npm install                    # JS deps
 
-# Run a single app
-pnpm --filter @blessluxe/storefront dev
-pnpm --filter @blessluxe/admin dev
-pnpm --filter @blessluxe/shop-backend dev
+php artisan serve              # Laravel dev server (port 8000)
+npm run dev                    # Vite dev server (HMR)
+npm run build                  # Production Vite bundle
 
-# Shop backend
-pnpm shop:dev              # Start backend on :9001
-pnpm shop:migrate          # Create shop_* tables in Postgres
-pnpm shop:seed             # Seed regions, headings, catalogues, products, variants
-
-# Infrastructure
-docker compose up -d          # Start everything (postgres + shop + storefront + admin)
-docker compose down           # Stop services
+php artisan migrate            # Apply migrations
+php artisan migrate:fresh --seed  # Reset DB + seed
+php artisan tinker             # REPL
+php artisan route:list         # All routes
 ```
 
-## Monorepo Structure
+## Layout
 
 ```
-apps/
-  storefront/        Next.js 14 (App Router) — customer-facing store, port 3000
-  admin/             Next.js 14 (App Router) — admin dashboard, port 3001
-backend/
-  shop/              Express.js commerce backend, port 9001
-packages/
-  ui/                Shared React components (Button, Card) with Tailwind classes
-  config/            Shared tailwind.config.ts and tsconfig bases
-  types/             Shared TypeScript types (Product, User, Cart, Order)
-  eslint-config/     Shared ESLint config (base + Next.js variant)
-  prettier-config/   Shared Prettier config
-mock_website/        Original static HTML prototype (standalone, no build)
-docker-compose.yml   PostgreSQL 16 + shop + storefront + admin
+app/
+  Http/
+    Controllers/Api/           # Storefront + customer APIs
+    Controllers/Api/Admin/     # Admin APIs (auth:web)
+  Mail/                        # Mailables (welcome, order receipt, LUXE digest, ...)
+  Models/                      # Eloquent models
+  Services/                    # Domain services
+    AI/                        # LUXE shopping agent (Gemini)
+      Tools/                   # 12 tool handlers
+      ShoppingAgent.php        # Tool-use loop
+      GeminiService.php        # REST API wrapper
+      AiConfig.php             # LUXE prompts + config
+    Blits/                     # Loyalty
+    Shipping/                  # Tracking / packages
+    Notifications.php          # Polymorphic customer/admin notifications
+    Paynow/                    # Payment provider
+database/migrations/           # All migrations (numeric-prefixed)
+resources/
+  js/
+    storefront/                # Vue SPA — /shop, /account, /checkout, LUXE widget
+    admin/                     # Vue SPA — /admin
+    lib/api.js                 # Shared fetch wrapper (CSRF-aware)
+  views/
+    store.blade.php            # Storefront shell (SEO meta injected)
+    admin.blade.php            # Admin shell
+    mail/                      # Blade email templates
+routes/
+  api.php                      # /api/store, /api/account, /api/admin
+  web.php                      # SPA catch-all + sitemap.xml
+public/
+  logo.png, icon.png, robots.txt
+  ai/                          # Nano Banana output (generated images)
+  uploads/                     # Admin-uploaded product images
 ```
 
-## Architecture
+## Key architecture
 
-### Storefront ↔ Backend wiring
+### Storefront ↔ Admin ↔ API
 
-The storefront talks to the shop backend via the Medusa JS SDK (used purely as an HTTP client because the shop backend exposes Medusa-shaped `/store/*` endpoints). The base URL is configured via `NEXT_PUBLIC_COMMERCE_BACKEND` (preferred) or `NEXT_PUBLIC_MEDUSA_BACKEND_URL` (legacy alias). Both default to `http://localhost:9001`.
+- **Two SPAs** compiled by Vite: `resources/js/storefront/` and `resources/js/admin/`. Each has its own Vue Router.
+- **All APIs under `routes/api.php`** with three groupings:
+  - `/api/store/*` — public + session-backed storefront (headings, catalogues, products, cart, checkout, agent, payments)
+  - `/api/account/*` — signed-in customer surfaces (orders, wishlist, addresses, notifications, returns, agent)
+  - `/api/admin/*` — signed-in admin (`auth:web` guard)
+- **`web.php`** hosts the SPA catch-all via [SeoController::spa](app/Http/Controllers/SeoController.php), which fills OG/Twitter/JSON-LD tags server-side before the SPA hydrates.
 
-The toggle logic lives in [apps/storefront/src/lib/medusa.ts](apps/storefront/src/lib/medusa.ts).
+### Auth
 
-### Navigation hierarchy (Headings → Catalogues → Products → Variants)
+- Two guards: `customer` (Sanctum-style session, storefront) and `web` (admin).
+- Admin users have `role` (admin/staff) and `is_active` columns.
+- Customer email verification via signed URLs; password reset via [customer_password_reset_tokens](database/migrations/2026_01_01_000091_create_customer_password_reset_tokens.php) with 60-minute hashed tokens.
 
-The storefront menu is configured in the admin (port 3001) via:
-- **Headings** — top-level menu items ("Women", "Men", "Sale"). Configurable order, active flag, sale flag.
-- **Catalogues** — nested under headings ("Dresses", "Tops", "Bags"). Products are attached to one or more catalogues.
-- **Products** — admin selects which catalogues each product appears in.
-- **Variants** — size/color/etc. options per product.
+### Payments
 
-Schema:
-- `shop_heading` — top-level menu items
-- `shop_catalogue` — has `heading_id` FK
-- `shop_product_catalogue_map` — many-to-many product↔catalogue
-- Legacy `shop_product_category` and `shop_product_category_map` are kept for backward compat but the storefront navigation is driven by headings.
+- Paynow web integration in [PaynowController](app/Http/Controllers/Api/PaynowController.php). SHA512 hash signing, IPN + return URL flow, session-backed cart, Blits loyalty accrual on paid orders.
 
-Storefront navigation hook: [apps/storefront/src/hooks/useNavigation.ts](apps/storefront/src/hooks/useNavigation.ts) calls `useHeadings()` which reads `/store/headings` from the shop backend.
+### AI (LUXE)
 
-### Admin app
+- **Gemini 2.5 Flash** for text + tool use. **Gemini Live** (WebSocket) for real-time voice. **Nano Banana** for image generation.
+- Prompts + model config in [AiConfig](app/Services/AI/AiConfig.php). Same `LUXE_BASE_PROMPT` powers text and voice.
+- 12 tools in [app/Services/AI/Tools/](app/Services/AI/Tools/): search/view/inventory, cart/wishlist, order/discount, recommendations, browse, create-order handoff, email digest, reminder subscriptions.
+- Chat + voice widget: [ChatWidget.vue](resources/js/storefront/components/ChatWidget.vue) + [gemini-live.js](resources/js/storefront/lib/gemini-live.js). Voice tool calls forwarded to Laravel via `POST /api/store/agent/execute-tool` (no JS tool duplication).
+- Admin: LUXE advisor on `/admin/reports`, "✨ LUXE write" description button on ProductEditor, full `/admin/ai` studio (prompt suggest → Nano Banana render).
+- Env: `GOOGLE_AI_API_KEY`, `GEMINI_MODEL`, `GEMINI_LIVE_MODEL`.
 
-[apps/admin/](apps/admin/) is a Next.js admin dashboard that talks directly to the shop backend admin API:
-- `/login` — JWT auth via `/auth/login`
-- `/` — dashboard
-- `/headings` — manage navigation headings
-- `/catalogues` — manage catalogues + assign to headings
-- `/products` — product CRUD + multi-catalogue assignment
-- `/inventory` — variant stock adjustments
-- `/customers` — customer list, loyalty point adjustments
-- `/reviews` — moderate (approve/reject) and respond to reviews
-- `/affiliates` — affiliate codes, commission rates, payouts
-- `/regions` — currency/region setup
+### Notifications
 
-### Package Dependencies
+- Polymorphic [notifications](database/migrations/2026_01_01_000080_create_notifications.php) table (`recipient_type` = customer|admin). Fires on order paid, refund, affiliate sale, affiliate payout, low stock, return status, admin application. Bells poll every 45–60s.
 
-Apps (`storefront`, `admin`) depend on `@blessluxe/ui`, `@blessluxe/types`, and `@blessluxe/config`. The `ui` package exports React components that use Tailwind utility classes referencing the shared theme. Both apps use `transpilePackages: ["@blessluxe/ui"]` in their Next.js config.
+### Returns / RMA
 
-### TypeScript Configuration
+- 30-day return window from paid orders. Customer files via Account → Returns tab; admin reviews at `/admin/returns` with a side-drawer decision form. Full refund flips the source order to `refunded`.
 
-Three tsconfig presets in `packages/config`: `tsconfig.base.json` (shared compiler options), `tsconfig.nextjs.json` (extends base, adds Next.js plugin and JSX preserve), `tsconfig.react-library.json` (extends base, react-jsx transform). Apps and packages extend these via `@blessluxe/config/tsconfig/*`.
+## Default admin
 
-### Path Aliases
+Email: `admin@blessluxe.com` · Password: `admin123` (via `php artisan db:seed`). **Change immediately in non-local deploys.**
 
-Both Next.js apps use `@/*` mapped to `./src/*`.
+## Notes
 
-### Tailwind Theme
-
-Shared theme in `packages/config/tailwind.config.ts` defines brand colors (`gold`, `cream`, `blush`) and font families (`font-display`, `font-body`, `font-script`). Each app's `tailwind.config.ts` spreads the shared config and adds its own content globs.
-
-### Shared Types
-
-`@blessluxe/types` exports e-commerce domain types: `Product`, `ProductVariant`, `ProductImage`, `User`, `Address`, `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatus`. Import from `@blessluxe/types` in any app or package.
-
-### Turbo Pipeline
-
-`build` depends on `^build` (builds packages before apps). `dev` and `clean` are not cached. `lint` and `type-check` depend on `^build`. Build outputs are `.next/**` and `dist/**`.
-
-## Shop backend (`backend/shop/`)
-
-Express.js, runs on Node 22+ with native TypeScript execution (no build step). Uses PostgreSQL for storage. All tables prefixed `shop_`.
-
-### Source layout
-
-```
-backend/shop/src/
-  index.ts                 Express app + route registration
-  db/
-    schema.sql             Full schema (idempotent CREATE IF NOT EXISTS)
-    pool.ts                pg Pool + query/queryOne/execute helpers
-    seed.ts                Default admin user, regions, headings, catalogues, products, variants
-    migrate.ts             Apply schema.sql
-  middleware/
-    cors.ts                Store CORS
-    auth.ts                Optional API key check for /store/*
-    admin-auth.ts          JWT bearer auth for /admin/*
-  routes/
-    regions.ts             GET /store/regions
-    products.ts            GET /store/products, /store/products/:id (filters: handle, q, category_id[], catalogue_id[], heading_id, heading_handle)
-    categories.ts          GET /store/product-categories  (legacy)
-    headings.ts            GET /store/headings, /store/headings/:idOrHandle
-    catalogues.ts          GET /store/catalogues, /store/catalogues/:idOrHandle
-    variants.ts            GET /store/product-variants/:id
-    reviews.ts             GET/POST /store/reviews, POST /store/reviews/:id/helpful
-    carts.ts               POST/GET /store/carts, line-item CRUD
-    auth.ts                /auth/login, /auth/me, /auth/logout, /auth/users
-    admin.ts               JWT-protected /admin/* — products, images, variants, inventory, regions
-    admin-hierarchy.ts     /admin/headings, /admin/catalogues (CRUD + reorder), product↔catalogue assignment
-    admin-reviews.ts       /admin/reviews list/update/delete
-    admin-customers.ts     /admin/customers list/CRUD + /admin/customers/:id/loyalty (delta adjust)
-    admin-affiliates.ts    /admin/affiliates CRUD + payouts
-```
-
-### Required Environment Variables
-
-See [backend/shop/.env.template](backend/shop/.env.template):
-`DATABASE_URL`, `PORT`, `STORE_CORS`, `ADMIN_CORS`, `PUBLISHABLE_API_KEY`, `JWT_SECRET`, `UPLOAD_DIR`.
-
-### Docker
-
-The shop backend has its own Dockerfile (`backend/shop/Dockerfile`) using Node 22 Alpine. It runs on port 9001 by default. The admin has its own Dockerfile at `apps/admin/Dockerfile` and runs on port 3001.
-
-## Default admin login
-
-Email: `admin@blessluxe.com`
-Password: `admin123` (created by `pnpm shop:seed`)
-
-Change this immediately in any non-local deployment via the `/admin/users` endpoints or the admin UI.
+- **MySQL** — not Postgres. `ai_customer_memories` uses `FULLTEXT` (not pgvector) for memory recall.
+- **Session-scoped carts** — the `carts` table has no `customer_id`; carts are keyed by `session()->get('cart_id')` (matches [CartController](app/Http/Controllers/Api/CartController.php)).
+- **Storefront affiliate landing** — `/affiliate` (marketing), `/affiliate/apply` (application form), `/affiliate/shop/:code` (attribution deep-link), `/affiliate/:code/dashboard` (signed-in owner only).
+- **Sitemap** — `/sitemap.xml` (dynamic, all published products + headings + catalogues), `/public/robots.txt` blocks admin/api/checkout.

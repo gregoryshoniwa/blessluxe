@@ -1,36 +1,22 @@
 {
-  "name": "blessluxe",
-  "private": true,
-  "engines": {
-    "node": ">=20.0.0 <23.0.0"
-  },
-  "scripts": {
-    "build": "turbo build --concurrency=1",
-    "start": "pnpm --filter @blessluxe/shop-backend start",
-    "dev": "turbo dev",
-    "push": "git push && docker compose up -d --build && echo '✓ master pushed + local docker rebuilt'",
-    "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "type-check": "turbo type-check",
-    "clean": "turbo clean && rm -rf node_modules",
-    "shop:dev": "pnpm --filter @blessluxe/shop-backend dev",
-    "shop:seed": "pnpm --filter @blessluxe/shop-backend seed",
-    "shop:migrate": "pnpm --filter @blessluxe/shop-backend migrate",
-    "admin:dev": "pnpm --filter @blessluxe/admin dev",
-    "storefront:dev": "pnpm --filter @blessluxe/storefront dev"
-  },
-  "devDependencies": {
-    "@blessluxe/eslint-config": "workspace:*",
-    "@blessluxe/prettier-config": "workspace:*",
-    "prettier": "^3.2.5",
-    "turbo": "^2.1.3"
-  },
-  "packageManager": "pnpm@9.12.3",
-  "prettier": "@blessluxe/prettier-config",
-  "pnpm": {
-    "overrides": {
-      "zod": "3.25.76"
+    "$schema": "https://www.schemastore.org/package.json",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.3.2",
+        "concurrently": "^9.0.1",
+        "laravel-vite-plugin": "^3.1",
+        "tailwindcss": "^4.3.2",
+        "vite": "^8.0.0"
+    },
+    "dependencies": {
+        "@vitejs/plugin-vue": "^6.0.7",
+        "lucide-vue-next": "^1.0.0",
+        "vue": "^3.5.39",
+        "vue-router": "^5.1.0"
     }
-  }
 }
