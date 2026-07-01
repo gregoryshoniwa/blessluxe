@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
+use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\CustomerAddressController;
 use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Api\PackController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Admin\AdminAffiliateController;
+use App\Http\Controllers\Api\Admin\AdminAiController;
 use App\Http\Controllers\Api\Admin\AdminAnnouncementController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
 use App\Http\Controllers\Api\Admin\AdminBlitsController;
@@ -93,6 +95,22 @@ Route::prefix('store')->group(function () {
             ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
         Route::get('/payments/paynow/return',    [PaynowController::class, 'return']);
         Route::get('/payments/paynow/status/{reference}', [PaynowController::class, 'status']);
+
+        // ─── LUXE shopping agent ──────────────────────────────────────
+        // Session-backed because guest carts + history live on the session.
+        Route::get ('/agent/config',          [AgentController::class, 'config']);
+        Route::get ('/agent/live-setup',      [AgentController::class, 'liveSetup']);
+        Route::post('/agent',                 [AgentController::class, 'send']);
+        Route::post('/agent/opening',         [AgentController::class, 'opening']);
+        Route::post('/agent/reset',           [AgentController::class, 'reset']);
+        Route::get ('/agent/history',         [AgentController::class, 'history']);
+        Route::post('/agent/execute-tool',    [AgentController::class, 'executeTool']);
+        Route::post('/agent/interactions',    [AgentController::class, 'interactions']);
+        Route::post('/agent/memory',          [AgentController::class, 'storeMemory']);
+        Route::get ('/agent/memory',          [AgentController::class, 'recallMemory']);
+        Route::get ('/agent/preferences',     [AgentController::class, 'preferences']);
+        Route::post('/agent/preferences',     [AgentController::class, 'setPreferences']);
+        Route::get ('/agent/conversations',   [AgentController::class, 'conversations']);
     });
 });
 
@@ -267,6 +285,12 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::get   ('/returns',       [AdminReturnController::class, 'index']);
         Route::get   ('/returns/{id}',  [AdminReturnController::class, 'show']);
         Route::put   ('/returns/{id}',  [AdminReturnController::class, 'update']);
+
+        // ─── Admin AI ─────────────────────────────────────────────────
+        Route::post('/ai/advise',           [AdminAiController::class, 'advise']);
+        Route::post('/ai/suggest-prompt',   [AdminAiController::class, 'suggestPrompt']);
+        Route::post('/ai/generate-image',   [AdminAiController::class, 'generateImage']);
+        Route::post('/ai/describe-product', [AdminAiController::class, 'describeProduct']);
 
         // Reports + CSV exports.
         Route::get('/reports/sales',      [AdminReportsController::class, 'sales']);

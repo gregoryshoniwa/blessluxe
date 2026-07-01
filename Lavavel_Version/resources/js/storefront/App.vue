@@ -2,10 +2,11 @@
 import Header from './components/Header.vue';
 import Footer from './components/Footer.vue';
 import AnnouncementBar from './components/AnnouncementBar.vue';
+import ChatWidget from './components/ChatWidget.vue';
 
 export default {
     name: 'StorefrontApp',
-    components: { Header, Footer, AnnouncementBar },
+    components: { Header, Footer, AnnouncementBar, ChatWidget },
 };
 </script>
 
@@ -17,5 +18,6 @@ export default {
             <router-view />
         </main>
         <Footer />
+        <ChatWidget />
     </div>
 </template>

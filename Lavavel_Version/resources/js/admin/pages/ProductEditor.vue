@@ -22,6 +22,9 @@ export default {
             // Image upload
             uploading: false,
             uploadError: '',
+            // AI
+            aiBusy: false,
+            aiError: '',
         };
     },
     computed: {
@@ -33,6 +36,26 @@ export default {
     methods: {
         emptyVariant() {
             return { title: '', sku: '', manage_inventory: true, inventory_quantity: 0, price: 0 };
+        },
+        async generateDescription() {
+            if (!this.form.title) {
+                this.aiError = 'Add a title first.';
+                return;
+            }
+            this.aiBusy = true;
+            this.aiError = '';
+            try {
+                const r = await api.post('/api/admin/ai/describe-product', {
+                    title: this.form.title,
+                    subtitle: this.form.subtitle,
+                    bullets: this.form.description ? this.form.description.split('\n').filter(Boolean) : [],
+                });
+                this.form.description = r.description;
+            } catch (e) {
+                this.aiError = e.payload?.error || 'AI could not write a description.';
+            } finally {
+                this.aiBusy = false;
+            }
         },
         async fetchAll() {
             this.loading = true;
@@ -168,7 +191,13 @@ export default {
                     <input v-model="form.title" placeholder="Title" class="border border-zinc-300 px-3 py-2" />
                     <input v-model="form.handle" placeholder="Handle" class="border border-zinc-300 px-3 py-2 font-mono" />
                     <input v-model="form.subtitle" placeholder="Subtitle" class="border border-zinc-300 px-3 py-2 col-span-2" />
-                    <textarea v-model="form.description" placeholder="Description" rows="4" class="border border-zinc-300 px-3 py-2 col-span-2"></textarea>
+                    <div class="col-span-2 relative">
+                        <textarea v-model="form.description" placeholder="Description" rows="4" class="border border-zinc-300 px-3 py-2 w-full"></textarea>
+                        <button type="button" @click="generateDescription" :disabled="aiBusy" class="absolute top-2 right-2 text-[10px] tracking-widest uppercase bg-gradient-to-r from-amber-500 to-amber-700 text-white px-3 py-1 disabled:opacity-50">
+                            {{ aiBusy ? '…' : '✨ LUXE write' }}
+                        </button>
+                        <p v-if="aiError" class="mt-1 text-xs text-red-600">{{ aiError }}</p>
+                    </div>
                     <select v-model="form.status" class="border border-zinc-300 px-3 py-2">
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>

@@ -15,6 +15,10 @@ export default {
             affiliates: null,
             loading: false,
             error: '',
+            adviceTopic: 'inventory',
+            adviceText: '',
+            adviceLoading: false,
+            adviceError: '',
         };
     },
     computed: {
@@ -51,6 +55,26 @@ export default {
         download(kind) {
             const url = `/api/admin/exports/${kind}?${this.rangeQuery}`;
             window.open(url, '_blank');
+        },
+        async getAdvice() {
+            this.adviceLoading = true;
+            this.adviceError = '';
+            try {
+                const context = {
+                    range: this.rangeQuery,
+                    sales: this.sales?.summary || {},
+                    daily: this.sales?.daily || [],
+                    top_products: this.sales?.top_products || [],
+                    customers: this.customers?.summary || {},
+                    top_affiliates: this.affiliates?.top || [],
+                };
+                const r = await api.post('/api/admin/ai/advise', { topic: this.adviceTopic, context });
+                this.adviceText = r.text || '';
+            } catch (e) {
+                this.adviceError = e.payload?.error || 'Could not get advice.';
+            } finally {
+                this.adviceLoading = false;
+            }
         },
     },
 };
@@ -170,6 +194,27 @@ export default {
                 </table>
                 <p v-else class="text-sm text-zinc-500">No affiliate sales in this range.</p>
             </div>
+        </section>
+
+        <!-- AI advisor -->
+        <section class="border border-zinc-200 p-6 mb-6 bg-gradient-to-br from-amber-50 to-white">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h2 class="text-sm tracking-widest uppercase font-semibold">LUXE advisor</h2>
+                <div class="flex items-center gap-2">
+                    <select v-model="adviceTopic" class="border border-zinc-300 px-3 py-1.5 text-sm bg-white">
+                        <option value="inventory">Inventory</option>
+                        <option value="finance">Finance</option>
+                        <option value="campaign">Campaign</option>
+                        <option value="general">General</option>
+                    </select>
+                    <button @click="getAdvice" :disabled="adviceLoading || !sales" class="bg-black text-white px-4 py-2 text-xs tracking-widest uppercase hover:bg-gold transition-colors disabled:opacity-50">
+                        {{ adviceLoading ? 'Thinking…' : 'Get advice' }}
+                    </button>
+                </div>
+            </div>
+            <p v-if="adviceError" class="mt-3 text-sm text-red-600">{{ adviceError }}</p>
+            <pre v-if="adviceText" class="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-800 font-sans">{{ adviceText }}</pre>
+            <p v-else class="text-xs text-zinc-500">Pick a topic and let LUXE analyse the current numbers.</p>
         </section>
 
         <!-- CSV exports -->
