@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Heading;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -25,7 +26,13 @@ class AdminHeadingController extends Controller
             'rank'      => ['nullable', 'integer'],
             'is_active' => ['nullable', 'boolean'],
             'is_sale'   => ['nullable', 'boolean'],
+            'image_url'  => ['nullable', 'string', 'max:1024'],
+            'image_file' => ['nullable', 'image', 'max:10240'],
         ]);
+        if ($request->hasFile('image_file')) {
+            $path = $request->file('image_file')->store('headings', 'public');
+            $data['image_url'] = Storage::url($path);
+        }
         $heading = Heading::create([
             'id'        => 'head_' . Str::random(12),
             'name'      => $data['name'],
@@ -33,6 +40,7 @@ class AdminHeadingController extends Controller
             'rank'      => (int) ($data['rank'] ?? Heading::max('rank') + 1),
             'is_active' => (bool) ($data['is_active'] ?? true),
             'is_sale'   => (bool) ($data['is_sale']   ?? false),
+            'image_url' => $data['image_url'] ?? null,
         ]);
         return ['heading' => $this->shape($heading->loadCount('catalogues'))];
     }
@@ -46,8 +54,18 @@ class AdminHeadingController extends Controller
             'rank'      => ['sometimes', 'integer'],
             'is_active' => ['sometimes', 'boolean'],
             'is_sale'   => ['sometimes', 'boolean'],
+            'image_url'    => ['sometimes', 'nullable', 'string', 'max:1024'],
+            'image_file'   => ['nullable', 'image', 'max:10240'],
+            'remove_image' => ['nullable', 'boolean'],
         ]);
         if (isset($data['handle'])) $data['handle'] = strtolower($data['handle']);
+        if ($request->hasFile('image_file')) {
+            $path = $request->file('image_file')->store('headings', 'public');
+            $data['image_url'] = Storage::url($path);
+        } elseif ($request->boolean('remove_image')) {
+            $data['image_url'] = null;
+        }
+        unset($data['image_file'], $data['remove_image']);
         $heading->update($data);
         return ['heading' => $this->shape($heading->loadCount('catalogues'))];
     }
@@ -67,6 +85,7 @@ class AdminHeadingController extends Controller
             'rank'            => $h->rank,
             'is_active'       => (bool) $h->is_active,
             'is_sale'         => (bool) $h->is_sale,
+            'image_url'       => $h->image_url,
             'catalogues_count' => $h->catalogues_count ?? null,
         ];
     }

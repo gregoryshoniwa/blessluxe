@@ -15,12 +15,22 @@ export default {
             showForm: false,
             editingId: null,
             form: this.emptyForm(),
+            file: null,
+            removeImage: false,
         };
     },
     mounted() { this.fetchAll(); },
+    computed: {
+        // What the card will look like: freshly picked file > existing image.
+        imagePreview() {
+            if (this.file) return URL.createObjectURL(this.file);
+            if (this.removeImage) return null;
+            return this.form.image_url || null;
+        },
+    },
     methods: {
         emptyForm() {
-            return { name: '', handle: '', rank: 0, is_active: true, is_sale: false };
+            return { name: '', handle: '', rank: 0, is_active: true, is_sale: false, image_url: null };
         },
         async fetchAll() {
             this.loading = true;
@@ -35,25 +45,44 @@ export default {
             this.editingId = null;
             this.form = this.emptyForm();
             this.form.rank = (this.headings.at(-1)?.rank ?? 0) + 1;
+            this.file = null;
+            this.removeImage = false;
             this.showForm = true;
             this.error = '';
         },
         startEdit(h) {
             this.editingId = h.id;
-            this.form = { name: h.name, handle: h.handle, rank: h.rank, is_active: h.is_active, is_sale: h.is_sale };
+            this.form = { name: h.name, handle: h.handle, rank: h.rank, is_active: h.is_active, is_sale: h.is_sale, image_url: h.image_url };
+            this.file = null;
+            this.removeImage = false;
             this.showForm = true;
             this.error = '';
+        },
+        onFilePick(e) {
+            this.file = e.target.files?.[0] || null;
+            if (this.file) this.removeImage = false;
+        },
+        clearImage() {
+            this.file = null;
+            this.removeImage = true;
         },
         cancel() { this.showForm = false; this.editingId = null; this.error = ''; },
         async save() {
             this.saving = true;
             this.error = '';
             try {
-                if (this.editingId) {
-                    await api.put(`/api/admin/headings/${this.editingId}`, this.form);
-                } else {
-                    await api.post('/api/admin/headings', this.form);
+                const fd = new FormData();
+                for (const k of ['name', 'handle', 'rank', 'is_active', 'is_sale']) {
+                    const v = this.form[k];
+                    if (v === null || v === undefined || v === '') continue;
+                    fd.append(k, typeof v === 'boolean' ? (v ? '1' : '0') : v);
                 }
+                if (this.file) fd.append('image_file', this.file);
+                if (this.removeImage) fd.append('remove_image', '1');
+                // Laravel doesn't honour FormData for PUT — use POST + _method override.
+                if (this.editingId) fd.append('_method', 'PUT');
+                const path = this.editingId ? `/api/admin/headings/${this.editingId}` : '/api/admin/headings';
+                await api.post(path, fd);
                 this.cancel();
                 await this.fetchAll();
             } catch (e) {
@@ -98,6 +127,23 @@ export default {
                     <label class="flex items-center gap-1 text-sm"><input type="checkbox" v-model="form.is_sale"   /> Sale</label>
                 </div>
             </div>
+            <!-- Card image — shown on the storefront "Shop By Category" tile -->
+            <div class="mt-3 flex items-center gap-4">
+                <div class="w-20 h-[6.5rem] shrink-0 border border-zinc-200 bg-zinc-50 overflow-hidden flex items-center justify-center">
+                    <img v-if="imagePreview" :src="imagePreview" alt="Card image preview" class="w-full h-full object-cover" />
+                    <span v-else class="text-[10px] text-zinc-400 text-center px-1">No card image</span>
+                </div>
+                <div class="text-sm">
+                    <p class="text-xs tracking-widest uppercase text-zinc-500 mb-1">Category card image</p>
+                    <input type="file" accept="image/*" @change="onFilePick" class="text-xs" />
+                    <button
+                        v-if="imagePreview"
+                        type="button"
+                        @click="clearImage"
+                        class="block mt-1 text-xs text-red-600 hover:underline"
+                    >Remove image</button>
+                </div>
+            </div>
             <p v-if="error" class="text-sm text-red-600 mt-3">{{ error }}</p>
             <div class="flex justify-end gap-2 mt-4">
                 <button @click="cancel" class="px-4 py-2 text-xs tracking-widest uppercase text-zinc-600 hover:text-black">Cancel</button>
@@ -111,6 +157,7 @@ export default {
             <table class="w-full text-sm">
                 <thead class="bg-zinc-50 text-xs tracking-widest uppercase text-zinc-500">
                     <tr>
+                        <th class="px-5 py-3 text-left">Image</th>
                         <th class="px-5 py-3 text-left">Heading</th>
                         <th class="px-5 py-3 text-left">Handle</th>
                         <th class="px-5 py-3 text-left">Catalogues</th>
@@ -121,9 +168,13 @@ export default {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="loading"><td colspan="7" class="px-5 py-8 text-center text-zinc-400">Loading…</td></tr>
-                    <tr v-else-if="!headings.length"><td colspan="7" class="px-5 py-8 text-center text-zinc-400">No headings yet.</td></tr>
+                    <tr v-if="loading"><td colspan="8" class="px-5 py-8 text-center text-zinc-400">Loading…</td></tr>
+                    <tr v-else-if="!headings.length"><td colspan="8" class="px-5 py-8 text-center text-zinc-400">No headings yet.</td></tr>
                     <tr v-for="h in headings" :key="h.id" class="border-t border-zinc-100">
+                        <td class="px-5 py-3">
+                            <img v-if="h.image_url" :src="h.image_url" :alt="h.name" class="w-10 h-12 object-cover border border-zinc-200" />
+                            <span v-else class="text-zinc-300">—</span>
+                        </td>
                         <td class="px-5 py-3 font-medium">{{ h.name }}</td>
                         <td class="px-5 py-3 font-mono text-xs">{{ h.handle }}</td>
                         <td class="px-5 py-3">{{ h.catalogues_count }}</td>

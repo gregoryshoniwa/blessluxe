@@ -200,14 +200,13 @@ class PaynowController extends Controller
     {
         try {
             $reference = (string) $request->query('reference', '');
-            $fallback  = rtrim(config('app.url', '/'), '/');
             if ($reference === '') {
-                return redirect($fallback . '/cart');
+                return redirect('/cart');
             }
 
             $session = PaymentSession::where('reference', $reference)->first();
             if (! $session) {
-                return redirect($fallback . '/cart');
+                return redirect('/cart');
             }
 
             // Poll once for a fresh status (IPN can lag a few seconds).
@@ -226,9 +225,11 @@ class PaynowController extends Controller
             $fresh = PaymentSession::where('reference', $reference)->first();
             if ($fresh?->status === 'paid' && $fresh->order_id) {
                 $order = Order::find($fresh->order_id);
-                return redirect($fallback . '/checkout/confirmation?order=' . urlencode($order?->order_number ?? $reference));
+                // Relative redirect — resolves against whatever host:port served
+                // this request, so it works regardless of APP_URL.
+                return redirect('/checkout/confirmation?order=' . urlencode($order?->order_number ?? $reference));
             }
-            return redirect($fallback . '/checkout/paynow/return?reference=' . urlencode($reference));
+            return redirect('/checkout/paynow/return?reference=' . urlencode($reference));
         } catch (\Throwable $e) {
             Log::error('[paynow return] '.$e->getMessage(), ['exception' => $e]);
             return redirect('/');

@@ -24,20 +24,32 @@ export default {
             headings: [],
             featured: [],
             loadingFeatured: true,
+            // Cover image for the "Packs" category card — the newest open
+            // pack campaign's thumbnail (falls back to a gradient).
+            packThumb: null,
         };
     },
     mounted() {
         this.fetchHeadings();
         this.fetchFeatured();
         this.fetchHero();
+        this.fetchPackThumb();
     },
     methods: {
         async fetchHeadings() {
             const res = await fetch('/api/store/headings');
             if (!res.ok) return;
             const data = await res.json();
-            // Keep first 4 non-sale headings as the "Shop By Category" cards.
-            this.headings = (data.headings || []).filter((h) => !h.is_sale).slice(0, 4);
+            // First 3 non-sale headings + the Packs card fill the 4-col grid.
+            this.headings = (data.headings || []).filter((h) => !h.is_sale).slice(0, 3);
+        },
+        async fetchPackThumb() {
+            try {
+                const res = await fetch('/api/store/packs');
+                if (!res.ok) return;
+                const data = await res.json();
+                this.packThumb = (data.packs || []).find((p) => p.thumbnail)?.thumbnail || null;
+            } catch { /* gradient fallback stays */ }
         },
         async fetchFeatured() {
             this.loadingFeatured = true;
@@ -108,17 +120,37 @@ export default {
                 <h2 class="font-display text-3xl md:text-4xl tracking-widest uppercase">Shop By Category</h2>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Packs — group-buy drops at /shop/packs (always leads the grid) -->
+                <router-link
+                    to="/shop/packs"
+                    class="group relative aspect-[3/4] overflow-hidden cursor-pointer bg-gradient-to-br from-amber-200/40 to-rose-200/30"
+                >
+                    <template v-if="packThumb">
+                        <img :src="packThumb" alt="Packs" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent"></div>
+                    </template>
+                    <div class="absolute inset-0 flex items-end justify-center pb-10">
+                        <span :class="['font-display text-2xl tracking-widest uppercase transition-colors group-hover:text-gold', packThumb ? 'text-white' : 'text-black']">
+                            Packs
+                        </span>
+                    </div>
+                </router-link>
+
                 <router-link
                     v-for="(h, i) in headings"
                     :key="h.handle"
                     :to="`/shop?heading=${h.handle}`"
                     :class="[
                         'group relative aspect-[3/4] overflow-hidden cursor-pointer bg-gradient-to-br',
-                        i % 2 === 0 ? 'from-amber-200/40 to-rose-200/30' : 'from-pink-200/40 to-amber-100/40',
+                        i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30',
                     ]"
                 >
+                    <template v-if="h.image_url">
+                        <img :src="h.image_url" :alt="h.name" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent"></div>
+                    </template>
                     <div class="absolute inset-0 flex items-end justify-center pb-10">
-                        <span class="font-display text-2xl tracking-widest uppercase text-black group-hover:text-gold transition-colors">
+                        <span :class="['font-display text-2xl tracking-widest uppercase transition-colors group-hover:text-gold', h.image_url ? 'text-white' : 'text-black']">
                             {{ h.name }}
                         </span>
                     </div>

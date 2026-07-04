@@ -25,7 +25,7 @@ class HeadingController extends Controller
                     ->select('id', 'heading_id', 'name', 'handle', 'rank'),
             ])
             ->orderBy('rank')
-            ->get(['id', 'name', 'handle', 'rank', 'is_sale']);
+            ->get(['id', 'name', 'handle', 'rank', 'is_sale', 'image_url']);
 
         return [
             'headings' => $headings->map(fn ($h) => [
@@ -34,6 +34,7 @@ class HeadingController extends Controller
                 'handle'  => $h->handle,
                 'rank'    => $h->rank,
                 'is_sale' => (bool) $h->is_sale,
+                'image_url' => $h->image_url,
                 'catalogues' => $h->catalogues->map(fn ($c) => [
                     'id'     => $c->id,
                     'name'   => $c->name,
