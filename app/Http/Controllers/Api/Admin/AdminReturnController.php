@@ -18,13 +18,21 @@ class AdminReturnController extends Controller
     public function index(Request $request)
     {
         $status = $request->query('status');
-        $rows = ReturnRequest::query()
+        $paginator = ReturnRequest::query()
             ->when($status, fn ($q) => $q->where('status', $status))
             ->orderByDesc('created_at')
-            ->limit(200)
             ->with('items')
-            ->get();
-        return ['returns' => $rows->map(fn ($r) => $this->shape($r))];
+            ->paginate((int) min(100, max(10, (int) $request->query('limit', 25))));
+
+        return [
+            'returns' => collect($paginator->items())->map(fn ($r) => $this->shape($r)),
+            'pagination' => [
+                'page'      => $paginator->currentPage(),
+                'per_page'  => $paginator->perPage(),
+                'total'     => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ],
+        ];
     }
 
     public function show(string $id)

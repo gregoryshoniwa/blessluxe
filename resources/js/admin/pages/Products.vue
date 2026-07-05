@@ -115,7 +115,7 @@ export default {
             <table class="w-full text-sm">
                 <thead class="bg-zinc-50 text-xs tracking-widest uppercase text-zinc-500">
                     <tr>
-                        <th class="px-5 py-3 text-left">Title</th>
+                        <th class="px-5 py-3 text-left" colspan="2">Title</th>
                         <th class="px-5 py-3 text-left">Catalogues</th>
                         <th class="px-5 py-3 text-left">Variants</th>
                         <th class="px-5 py-3 text-left">Status</th>
@@ -124,9 +124,17 @@ export default {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="loading"><td colspan="6" class="px-5 py-8 text-center text-zinc-400">Loading…</td></tr>
-                    <tr v-else-if="!products.length"><td colspan="6" class="px-5 py-8 text-center text-zinc-400">No products.</td></tr>
+                    <tr v-if="loading"><td colspan="7" class="px-5 py-8 text-center text-zinc-400">Loading…</td></tr>
+                    <tr v-else-if="!products.length"><td colspan="7" class="px-5 py-8 text-center text-zinc-400">No products.</td></tr>
                     <tr v-for="p in products" :key="p.id" class="border-t border-zinc-100">
+                        <td class="pl-5 pr-0 py-2 w-14">
+                            <router-link :to="`/admin/products/${p.id}`">
+                                <img v-if="p.thumbnail" :src="p.thumbnail" :alt="p.title" class="w-10 h-12 object-cover object-top border border-zinc-200 bg-zinc-50" />
+                                <span v-else class="w-10 h-12 flex items-center justify-center border border-dashed border-zinc-300 bg-zinc-50 text-zinc-300">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Z" /></svg>
+                                </span>
+                            </router-link>
+                        </td>
                         <td class="px-5 py-3 font-medium">
                             <router-link :to="`/admin/products/${p.id}`" class="hover:text-gold transition-colors">
                                 {{ p.title }}

@@ -85,7 +85,10 @@ class AdminReportsController extends Controller
         [$from, $to] = $this->resolveRange($request);
         $signups = (int) DB::table('customers')->whereBetween('created_at', [$from, $to])->count();
         $totalCustomers = (int) DB::table('customers')->count();
+        // select the grouped column explicitly — `select *` with GROUP BY
+        // violates MySQL's only_full_group_by mode.
         $repeat = (int) DB::table('orders')
+            ->select('customer_id')
             ->where('payment_status', 'paid')
             ->whereNotNull('customer_id')
             ->whereBetween('created_at', [$from, $to])

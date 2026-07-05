@@ -21,7 +21,7 @@ class AdminProductController extends Controller
     {
         $q = Product::query()
             ->withCount('variants')
-            ->with(['catalogues:id,name,handle'])
+            ->with(['catalogues:id,name,handle', 'images' => fn ($qq) => $qq->orderBy('rank')->limit(1)])
             ->when($request->query('q'), function ($q, $term) {
                 $q->where(function ($qq) use ($term) {
                     $qq->where('title', 'like', "%{$term}%")
@@ -37,6 +37,7 @@ class AdminProductController extends Controller
                 'id'         => $p->id,
                 'title'      => $p->title,
                 'handle'     => $p->handle,
+                'thumbnail'  => $p->thumbnail ?: optional($p->images->first())->url,
                 'status'     => $p->status,
                 'variants_count' => $p->variants_count,
                 'catalogues' => $p->catalogues->pluck('name'),

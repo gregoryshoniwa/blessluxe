@@ -6,6 +6,8 @@ export default {
     data() {
         return {
             returns: [],
+            pagination: null,
+            page: 1,
             loading: true,
             filter: '',
             selected: null,
@@ -19,8 +21,11 @@ export default {
         async load() {
             this.loading = true;
             try {
-                const r = await api.get(`/api/admin/returns${this.filter ? '?status=' + this.filter : ''}`);
+                const params = new URLSearchParams({ page: this.page, limit: 25 });
+                if (this.filter) params.set('status', this.filter);
+                const r = await api.get(`/api/admin/returns?${params}`);
                 this.returns = r.returns || [];
+                this.pagination = r.pagination || null;
             } finally { this.loading = false; }
         },
         async open(r) {
@@ -67,7 +72,7 @@ export default {
                 <p class="text-sm text-zinc-500 mt-1">Review customer-initiated return requests.</p>
             </div>
             <div class="flex items-center gap-2">
-                <select v-model="filter" @change="load" class="border border-zinc-300 px-3 py-1.5 text-sm bg-white">
+                <select v-model="filter" @change="page = 1; load()" class="border border-zinc-300 px-3 py-1.5 text-sm bg-white">
                     <option value="">All</option>
                     <option value="requested">Requested</option>
                     <option value="approved">Approved</option>
@@ -103,6 +108,14 @@ export default {
                 </tr>
             </tbody>
         </table>
+
+        <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-between mt-4 text-sm">
+            <p class="text-zinc-500">Page {{ pagination.page }} of {{ pagination.last_page }} · {{ pagination.total }} returns</p>
+            <div class="flex gap-2">
+                <button :disabled="pagination.page <= 1" @click="page--; load()" class="border border-zinc-300 px-3 py-1 disabled:opacity-40">Prev</button>
+                <button :disabled="pagination.page >= pagination.last_page" @click="page++; load()" class="border border-zinc-300 px-3 py-1 disabled:opacity-40">Next</button>
+            </div>
+        </div>
 
         <!-- Detail drawer / modal -->
         <div v-if="selected" class="fixed inset-0 z-50 flex" @click.self="close">
