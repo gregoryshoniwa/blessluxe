@@ -22,6 +22,10 @@ export default {
             // Image upload
             uploading: false,
             uploadError: '',
+            // Video (upload or YouTube link)
+            videoBusy: false,
+            videoError: '',
+            youtubeUrl: '',
             // AI
             aiBusy: false,
             aiError: '',
@@ -156,6 +160,43 @@ export default {
             await api.put(`/api/admin/products/${this.id}`, { thumbnail: image.url });
             await this.fetchAll();
         },
+        async uploadVideo(file) {
+            if (!file) return;
+            this.videoBusy = true; this.videoError = '';
+            const fd = new FormData();
+            fd.append('video', file);
+            try {
+                await api.post(`/api/admin/products/${this.id}/video`, fd);
+                await this.fetchAll();
+            } catch (e) {
+                this.videoError = e.payload?.error
+                    || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0])
+                    || 'Video upload failed.';
+            } finally {
+                this.videoBusy = false;
+                this.$refs.videoInput.value = '';
+            }
+        },
+        async saveYoutube() {
+            if (!this.youtubeUrl.trim()) return;
+            this.videoBusy = true; this.videoError = '';
+            try {
+                await api.post(`/api/admin/products/${this.id}/video`, { youtube_url: this.youtubeUrl.trim() });
+                this.youtubeUrl = '';
+                await this.fetchAll();
+            } catch (e) {
+                this.videoError = e.payload?.error
+                    || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0])
+                    || 'Could not save the YouTube link.';
+            } finally {
+                this.videoBusy = false;
+            }
+        },
+        async removeVideo() {
+            if (!confirm('Remove this product video?')) return;
+            await api.del(`/api/admin/products/${this.id}/video`);
+            await this.fetchAll();
+        },
         money(cents) { return cents != null ? `$${(cents / 100).toFixed(2)}` : '—'; },
     },
 };
@@ -252,6 +293,45 @@ export default {
                         </div>
                     </div>
                 </div>
+            </section>
+
+            <!-- Video -->
+            <section class="bg-white border border-zinc-200 p-5 mb-6">
+                <header class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold">Video</h2>
+                    <label class="bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark cursor-pointer inline-flex items-center gap-2">
+                        <Upload class="w-4 h-4" />
+                        {{ videoBusy ? 'Working…' : 'Upload video' }}
+                        <input ref="videoInput" type="file" accept="video/mp4,video/webm,video/quicktime" class="hidden" @change="uploadVideo($event.target.files[0])" :disabled="videoBusy" />
+                    </label>
+                </header>
+                <p class="text-xs text-zinc-500 mb-3">Plays on the storefront product card (hover) and product page. Upload an MP4/WebM (max 100 MB) or paste a YouTube link — one video per product.</p>
+
+                <div class="flex gap-2 mb-4">
+                    <input
+                        v-model="youtubeUrl"
+                        @keyup.enter="saveYoutube"
+                        placeholder="https://www.youtube.com/watch?v=…"
+                        class="flex-1 border border-zinc-300 px-3 py-2 text-sm"
+                    />
+                    <button @click="saveYoutube" :disabled="videoBusy || !youtubeUrl.trim()" class="border border-gold text-gold px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold hover:text-white disabled:opacity-50">
+                        Use YouTube link
+                    </button>
+                </div>
+                <p v-if="videoError" class="text-sm text-red-600 mb-3">{{ videoError }}</p>
+
+                <div v-if="product.video" class="flex items-start gap-4">
+                    <div class="w-64 bg-black">
+                        <video v-if="product.video.kind === 'upload'" :src="product.video.url" controls preload="metadata" class="w-full aspect-video object-contain" />
+                        <iframe v-else-if="product.video.embed_url" :src="product.video.embed_url" class="w-full aspect-video" frameborder="0" allowfullscreen title="Product video" />
+                    </div>
+                    <div class="text-sm">
+                        <p class="font-medium">{{ product.video.kind === 'youtube' ? 'YouTube link' : 'Uploaded file' }}</p>
+                        <p class="text-xs text-zinc-500 break-all mt-1 max-w-md">{{ product.video.url }}</p>
+                        <button @click="removeVideo" class="mt-3 text-xs tracking-widest uppercase text-red-600 hover:underline">Remove video</button>
+                    </div>
+                </div>
+                <p v-else class="text-sm text-zinc-400 py-3 text-center">No video yet.</p>
             </section>
 
             <!-- Variants -->

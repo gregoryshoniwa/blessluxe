@@ -37,7 +37,12 @@ class AgentController extends Controller
         private GeminiService $gemini,
         private ToolRegistry $tools,
         private MemoryManager $memory,
-    ) {}
+    ) {
+        GeminiService::$usageContext = [
+            'surface'     => 'luxe-agent',
+            'customer_id' => \Illuminate\Support\Facades\Auth::guard('customer')->id(),
+        ];
+    }
 
     public function send(Request $request)
     {

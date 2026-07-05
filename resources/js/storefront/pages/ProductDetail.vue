@@ -16,6 +16,7 @@ export default {
             adding: false,
             justAdded: false,
             addError: '',
+            heroHovering: false,
             // Expose the module so the template can read `recentlyViewed.ids(...)`.
             recentlyViewed,
         };
@@ -36,6 +37,13 @@ export default {
             if (!this.product) return null;
             const primary = (this.product.media || []).find((m) => m.is_primary && m.media_type === 'image');
             return primary?.media_url || this.product.images?.[0]?.url || this.product.thumbnail || null;
+        },
+        // Muted, looping, chrome-less YouTube embed for the hero hover.
+        youtubeHoverSrc() {
+            const embed = this.product?.video?.embed_url;
+            if (!embed) return null;
+            const id = embed.split('/').pop();
+            return `${embed}?autoplay=1&mute=1&controls=0&loop=1&playlist=${id}&playsinline=1&rel=0&modestbranding=1`;
         },
         breadcrumb() {
             if (!this.product?.catalogues?.length) return null;
@@ -128,13 +136,47 @@ export default {
         </div>
 
         <div v-else-if="product" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <div class="aspect-[3/4] bg-cream-dark overflow-hidden">
+            <div
+                class="relative aspect-[3/4] bg-cream-dark overflow-hidden"
+                @mouseenter="heroHovering = true"
+                @mouseleave="heroHovering = false"
+            >
                 <img
                     v-if="heroImage"
                     :src="heroImage"
                     :alt="product.title"
                     class="w-full h-full object-cover object-top"
                 />
+
+                <!-- Video plays over the hero image on hover, same as the shop card. -->
+                <template v-if="product.video && heroHovering">
+                    <video
+                        v-if="product.video.kind === 'upload'"
+                        :src="product.video.url"
+                        autoplay
+                        muted
+                        loop
+                        playsinline
+                        class="absolute inset-0 w-full h-full object-cover object-top"
+                    />
+                    <iframe
+                        v-else-if="youtubeHoverSrc"
+                        :src="youtubeHoverSrc"
+                        class="absolute inset-0 w-full h-full pointer-events-none"
+                        frameborder="0"
+                        allow="autoplay; encrypted-media"
+                        title="Product video"
+                    />
+                </template>
+
+                <!-- Video badge -->
+                <span
+                    v-if="product.video"
+                    class="absolute bottom-3 left-3 z-10 w-8 h-8 rounded-full bg-black/55 backdrop-blur flex items-center justify-center"
+                    title="Hover to play video"
+                >
+                    <svg class="w-3.5 h-3.5 text-white fill-white" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                </span>
             </div>
             <div>
                 <p v-if="breadcrumb" class="text-[10px] tracking-widest uppercase text-black/55 mb-2">{{ breadcrumb }}</p>

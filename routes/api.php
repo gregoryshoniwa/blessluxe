@@ -3,7 +3,12 @@
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\AgentController;
+use App\Http\Controllers\Api\AvatarController;
+use App\Http\Controllers\Api\GenerationController;
+use App\Http\Controllers\Api\LogoController;
+use App\Http\Controllers\Api\StudioController;
 use App\Http\Controllers\Api\CustomerAddressController;
+use App\Http\Controllers\Api\CustomerProductController;
 use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
 use App\Http\Controllers\Api\BlitsController;
@@ -14,6 +19,7 @@ use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\Admin\AdminAffiliateController;
 use App\Http\Controllers\Api\Admin\AdminAiController;
+use App\Http\Controllers\Api\Admin\AdminAiUsageController;
 use App\Http\Controllers\Api\Admin\AdminAnnouncementController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
 use App\Http\Controllers\Api\Admin\AdminBlitsController;
@@ -170,6 +176,40 @@ Route::middleware('web')->prefix('account')->group(function () {
     Route::get ('/returns',       [ReturnController::class, 'index']);
     Route::post('/returns',       [ReturnController::class, 'store']);
     Route::get ('/returns/{id}',  [ReturnController::class, 'show']);
+
+    // Show Room avatars (signed-in customers; create/edit hit Nano Banana,
+    // so they're capped at 30 renders per customer per day).
+    Route::get   ('/avatars',      [AvatarController::class, 'index']);
+    Route::post  ('/avatars',      [AvatarController::class, 'store'])->middleware('throttle:30,1440');
+    Route::put   ('/avatars/{id}', [AvatarController::class, 'update'])->middleware('throttle:30,1440');
+    Route::delete('/avatars/{id}', [AvatarController::class, 'destroy']);
+
+    // Show Room logos (embroidery / logo design studio; same daily cap).
+    Route::get   ('/logos',      [LogoController::class, 'index']);
+    Route::post  ('/logos',      [LogoController::class, 'store'])->middleware('throttle:30,1440');
+    Route::put   ('/logos/{id}', [LogoController::class, 'update'])->middleware('throttle:30,1440');
+    Route::delete('/logos/{id}', [LogoController::class, 'destroy']);
+
+    // Show Room "My Products" (digitise the customer's own merch; same cap).
+    Route::get   ('/my-products',      [CustomerProductController::class, 'index']);
+    Route::post  ('/my-products',      [CustomerProductController::class, 'store'])->middleware('throttle:30,1440');
+    Route::put   ('/my-products/{id}', [CustomerProductController::class, 'update'])->middleware('throttle:30,1440');
+    Route::delete('/my-products/{id}', [CustomerProductController::class, 'destroy']);
+
+    // Show Room studio (logo × product → mockups / worn shots / angle sheets /
+    // adverts, optional Omni video, PDF proposal export).
+    Route::get   ('/studio',          [StudioController::class, 'index']);
+    Route::post  ('/studio',          [StudioController::class, 'store'])->middleware('throttle:30,1440');
+    Route::post  ('/studio/proposal', [StudioController::class, 'proposal'])->middleware('throttle:20,1440');
+    Route::get   ('/studio/{id}',     [StudioController::class, 'show']);
+    Route::delete('/studio/{id}',     [StudioController::class, 'destroy']);
+
+    // Show Room generations (avatar + products + environment → image/video).
+    // Video runs through Omni Flash (~$1/clip), so creation is capped tighter.
+    Route::get   ('/generations',      [GenerationController::class, 'index']);
+    Route::post  ('/generations',      [GenerationController::class, 'store'])->middleware('throttle:20,1440');
+    Route::get   ('/generations/{id}', [GenerationController::class, 'show']);
+    Route::delete('/generations/{id}', [GenerationController::class, 'destroy']);
 });
 
 /*
@@ -212,6 +252,8 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/products/{id}/images',                     [AdminProductController::class, 'uploadImage']);
         Route::post  ('/products/{id}/images/reorder',             [AdminProductController::class, 'reorderImages']);
         Route::delete('/products/{id}/images/{imageId}',           [AdminProductController::class, 'destroyImage']);
+        Route::post  ('/products/{id}/video',                      [AdminProductController::class, 'setVideo']);
+        Route::delete('/products/{id}/video',                      [AdminProductController::class, 'destroyVideo']);
 
         Route::get ('/inventory',                  [AdminInventoryController::class, 'index']);
         Route::post('/inventory/{variant}/adjust', [AdminInventoryController::class, 'adjust']);
@@ -291,6 +333,7 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post('/ai/suggest-prompt',   [AdminAiController::class, 'suggestPrompt']);
         Route::post('/ai/generate-image',   [AdminAiController::class, 'generateImage']);
         Route::post('/ai/describe-product', [AdminAiController::class, 'describeProduct']);
+        Route::get ('/ai-usage',            [AdminAiUsageController::class, 'index']);
 
         // Reports + CSV exports.
         Route::get('/reports/sales',      [AdminReportsController::class, 'sales']);

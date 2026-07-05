@@ -28,9 +28,11 @@ Route::get('/admin/{any?}', fn () => view('admin'))
 | Twitter crawlers see product titles, descriptions, images, and
 | JSON-LD without running JS. The SPA still does the page itself.
 |
-| The negative lookahead keeps /admin and /api from leaking in here.
+| The negative lookahead keeps /admin, /api and /storage from leaking in
+| here — a missing /storage file should 404, not render the SPA (which
+| makes broken images look like "successful" HTML responses).
 |--------------------------------------------------------------------------
 */
 Route::get('/{any?}', [SeoController::class, 'spa'])
-    ->where('any', '^(?!admin|api|sitemap\.xml).*$')
+    ->where('any', '^(?!admin|api|storage|sitemap\.xml).*$')
     ->name('store');

@@ -19,7 +19,10 @@ use Illuminate\Validation\Rule;
  */
 class AdminAiController extends Controller
 {
-    public function __construct(private GeminiService $gemini) {}
+    public function __construct(private GeminiService $gemini)
+    {
+        GeminiService::$usageContext = ['surface' => 'admin-ai'];
+    }
 
     public function advise(Request $request)
     {

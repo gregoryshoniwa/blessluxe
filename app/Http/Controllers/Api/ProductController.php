@@ -47,6 +47,7 @@ class ProductController extends Controller
                 'variants' => fn ($q) => $q->orderBy('created_at'),
                 'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
                 'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+                'media'  => fn ($q) => $q->where('media_type', 'video')->orderBy('position'),
             ]);
 
         match ($sort) {
@@ -90,6 +91,7 @@ class ProductController extends Controller
                 'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
                 'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
                 'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+                'media'  => fn ($q) => $q->where('media_type', 'video')->orderBy('position'),
             ])
             ->get()
             ->keyBy('id');
@@ -136,6 +138,7 @@ class ProductController extends Controller
                 'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
                 'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
                 'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+                'media'  => fn ($q) => $q->where('media_type', 'video')->orderBy('position'),
             ])
             ->latest()
             ->limit($limit);
@@ -152,6 +155,7 @@ class ProductController extends Controller
                     'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
                     'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
                     'images' => fn ($q) => $q->orderBy('rank')->limit(1),
+                    'media'  => fn ($q) => $q->where('media_type', 'video')->orderBy('position'),
                 ])
                 ->latest()
                 ->limit($limit)
@@ -203,6 +207,26 @@ class ProductController extends Controller
             'thumbnail' => $p->thumbnail ?? optional($p->images->first())->url,
             'price'     => $price,
             'price_label' => $price !== null ? '$' . number_format($price / 100, 2) : null,
+            'video'     => $this->videoShape($p),
+        ];
+    }
+
+    /**
+     * Admin-managed product video (uploaded file or YouTube link) for cards
+     * and the detail gallery. Null when the product has none.
+     */
+    private function videoShape(Product $p): ?array
+    {
+        $m = $p->relationLoaded('media')
+            ? $p->media->first(fn ($x) => $x->media_type === 'video' && $x->status === 'ready')
+            : null;
+        if (! $m) return null;
+        $ytId = $m->generation_meta['youtube_id'] ?? null;
+        return [
+            'kind'      => $m->source_kind === 'youtube' ? 'youtube' : 'upload',
+            'url'       => $m->media_url,
+            'thumbnail' => $m->thumbnail_url,
+            'embed_url' => $ytId ? "https://www.youtube-nocookie.com/embed/{$ytId}" : null,
         ];
     }
 
@@ -219,6 +243,7 @@ class ProductController extends Controller
             'description' => $p->description,
             'thumbnail'   => $p->thumbnail,
             'images'      => $p->images->map(fn ($i) => ['url' => $i->url, 'rank' => $i->rank]),
+            'video'       => $this->videoShape($p),
             'media'       => $p->media->map(fn ($m) => [
                 'media_type'    => $m->media_type,
                 'media_url'     => $m->media_url,

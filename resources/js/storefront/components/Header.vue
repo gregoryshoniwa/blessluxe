@@ -16,6 +16,13 @@ export default {
             affiliate: null,
             searchOpen: false,
             mobileNavOpen: false,
+            showroomMenu: [
+                { label: 'Avatars',     href: '/showroom/avatars' },
+                { label: 'Logos',       href: '/showroom/logos' },
+                { label: 'My Products', href: '/showroom/my-products' },
+                { label: 'Studio',      href: '/showroom/studio' },
+                { label: 'Generations', href: '/showroom/generations' },
+            ],
         };
     },
     computed: {
@@ -198,6 +205,41 @@ export default {
                             <div class="bg-white shadow-xl border border-gold/10 min-w-[220px] py-3">
                                 <router-link
                                     v-for="sub in link.submenu"
+                                    :key="sub.href"
+                                    :to="sub.href"
+                                    class="block px-5 py-2 text-sm text-black/80 hover:text-gold hover:bg-cream-dark transition-colors"
+                                >
+                                    {{ sub.label }}
+                                </router-link>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Show Room -->
+                    <div
+                        class="relative"
+                        @mouseenter="activeMenu = 'showroom'"
+                        @mouseleave="activeMenu = null"
+                    >
+                        <router-link
+                            to="/showroom"
+                            :class="[
+                                'relative flex items-center gap-1.5 font-body text-sm font-medium tracking-widest uppercase py-3 transition-colors text-black hover:text-gold',
+                                activeMenu === 'showroom' && 'text-gold',
+                            ]"
+                        >
+                            Show Room
+                            <svg
+                                :class="['w-3.5 h-3.5 transition-transform', activeMenu === 'showroom' ? 'rotate-180' : '']"
+                                fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                            >
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </router-link>
+                        <div v-if="activeMenu === 'showroom'" class="absolute left-0 top-full pt-3 z-30">
+                            <div class="bg-white shadow-xl border border-gold/10 min-w-[220px] py-3">
+                                <router-link
+                                    v-for="sub in showroomMenu"
                                     :key="sub.href"
                                     :to="sub.href"
                                     class="block px-5 py-2 text-sm text-black/80 hover:text-gold hover:bg-cream-dark transition-colors"

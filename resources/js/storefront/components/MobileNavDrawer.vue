@@ -11,7 +11,17 @@ export default {
     },
     emits: ['close', 'open-search'],
     data() {
-        return { expanded: null, customer: null };
+        return {
+            expanded: null,
+            customer: null,
+            showroomMenu: [
+                { label: 'Avatars',     href: '/showroom/avatars' },
+                { label: 'Logos',       href: '/showroom/logos' },
+                { label: 'My Products', href: '/showroom/my-products' },
+                { label: 'Studio',      href: '/showroom/studio' },
+                { label: 'Generations', href: '/showroom/generations' },
+            ],
+        };
     },
     watch: {
         async open(v) {
@@ -77,6 +87,28 @@ export default {
                             <div v-if="link.submenu.length && expanded === link.handle" class="bg-cream-dark/30">
                                 <router-link
                                     v-for="sub in link.submenu"
+                                    :key="sub.href"
+                                    :to="sub.href"
+                                    @click="close"
+                                    class="block pl-10 pr-5 py-2.5 text-sm text-black/70 hover:text-gold transition-colors"
+                                >
+                                    {{ sub.label }}
+                                </router-link>
+                            </div>
+                        </div>
+
+                        <!-- Show Room -->
+                        <div>
+                            <button
+                                @click="toggle('showroom')"
+                                class="w-full text-left px-5 py-3 text-sm font-body tracking-widest uppercase flex items-center justify-between hover:text-gold transition-colors"
+                            >
+                                <span>Show Room</span>
+                                <ChevronRight :class="['w-4 h-4 transition-transform', expanded === 'showroom' ? 'rotate-90' : '']" />
+                            </button>
+                            <div v-if="expanded === 'showroom'" class="bg-cream-dark/30">
+                                <router-link
+                                    v-for="sub in showroomMenu"
                                     :key="sub.href"
                                     :to="sub.href"
                                     @click="close"

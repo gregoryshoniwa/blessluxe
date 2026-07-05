@@ -24,6 +24,14 @@ class GeminiService
 {
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
+    /**
+     * Cost-ledger context. Feature controllers set this before calling so
+     * every Google AI request lands in ai_usage_logs attributed to the right
+     * surface + customer (the basis for charging customers later).
+     * e.g. GeminiService::$usageContext = ['surface' => 'avatars', 'customer_id' => $c->id];
+     */
+    public static array $usageContext = [];
+
     public function __construct(private ?string $apiKey = null)
     {
         $this->apiKey = $this->apiKey ?: AiConfig::apiKey();
@@ -54,6 +62,7 @@ class GeminiService
             Log::warning('[gemini chat] '.$res->status().' '.Str::limit($res->body(), 500));
             throw new RuntimeException('Gemini API error: '.$res->status());
         }
+        $this->logUsage('text', $model, 1, (float) env('AI_COST_TEXT_CALL', 0.002));
         $data = $res->json();
 
         if (! empty($data['error']['message'])) {
@@ -108,6 +117,7 @@ class GeminiService
             Log::warning('[gemini text] '.$res->status().' '.Str::limit($res->body(), 500));
             throw new RuntimeException('Gemini API error: '.$res->status());
         }
+        $this->logUsage('text', $model, 1, (float) env('AI_COST_TEXT_CALL', 0.002));
         $data = $res->json();
         if (! empty($data['error']['message'])) throw new RuntimeException($data['error']['message']);
         $parts = $data['candidates'][0]['content']['parts'] ?? [];
@@ -125,7 +135,12 @@ class GeminiService
     public function generateImage(string $prompt, array $referenceImages = []): ?array
     {
         $this->requireKey();
-        $model = env('GOOGLE_NANO_BANANA_MODEL', 'gemini-2.5-flash-image-preview');
+        // Image renders with several reference photos routinely outlast PHP's
+        // default 30s max_execution_time — give the request room to finish.
+        set_time_limit(180);
+        // Nano Banana 2 — supports up to 14 reference images with character
+        // consistency (the 2.5 preview model is now marked legacy by Google).
+        $model = env('GOOGLE_NANO_BANANA_MODEL', 'gemini-3.1-flash-image');
         $parts = [['text' => $prompt]];
         foreach ($referenceImages as $ref) {
             if (! empty($ref['base64']) && ! empty($ref['mime'])) {
@@ -144,6 +159,7 @@ class GeminiService
             Log::warning('[gemini image] '.$res->status().' '.Str::limit($res->body(), 500));
             throw new RuntimeException('Gemini image API error: '.$res->status());
         }
+        $this->logUsage('image', $model, 1, (float) env('AI_COST_IMAGE', 0.067));
         $data = $res->json();
         $candidates = $data['candidates'] ?? [];
         foreach ($candidates as $c) {
@@ -158,6 +174,106 @@ class GeminiService
             }
         }
         return null;
+    }
+
+    /**
+     * Start a Gemini Omni Flash image→video interaction. Returns the raw
+     * interaction JSON ({id, status, steps, ...}). Omni is asynchronous:
+     * the response may come back already `completed` with the video, or
+     * `processing` — in which case poll getInteraction() until done.
+     */
+    public function startVideoInteraction(array $image, string $prompt, string $aspectRatio = '9:16'): array
+    {
+        $this->requireKey();
+        set_time_limit(300);
+        $model = env('GEMINI_OMNI_MODEL', 'gemini-omni-flash-preview');
+        $payload = [
+            'model' => $model,
+            'input' => [
+                ['type' => 'image', 'data' => $image['base64'], 'mime_type' => $image['mime']],
+                ['type' => 'text',  'text' => $prompt],
+            ],
+            // uri delivery: videos routinely exceed the 4MB inline cap.
+            'response_format'   => ['type' => 'video', 'aspect_ratio' => $aspectRatio, 'delivery' => 'uri'],
+            'generation_config' => ['video_config' => ['task' => 'image_to_video']],
+        ];
+        $res = Http::timeout(300)->post(self::API_BASE . "/interactions?key={$this->apiKey}", $payload);
+        if (! $res->ok()) {
+            Log::warning('[gemini omni start] '.$res->status().' '.Str::limit($res->body(), 500));
+            throw new RuntimeException('Gemini Omni API error: '.$res->status());
+        }
+        // Omni bills per output second; clips are currently ~10s.
+        $seconds = (float) env('AI_VIDEO_EST_SECONDS', 10);
+        $this->logUsage('video', $model, $seconds, $seconds * (float) env('AI_COST_VIDEO_PER_SEC', 0.10));
+        return $res->json() ?? [];
+    }
+
+    /** Poll a previously started interaction. */
+    public function getInteraction(string $id): array
+    {
+        $this->requireKey();
+        $res = Http::timeout(30)->get(self::API_BASE . "/interactions/{$id}", ['key' => $this->apiKey]);
+        if (! $res->ok()) {
+            Log::warning('[gemini omni poll] '.$res->status().' '.Str::limit($res->body(), 500));
+            throw new RuntimeException('Gemini Omni poll error: '.$res->status());
+        }
+        return $res->json() ?? [];
+    }
+
+    /**
+     * Pull the video part out of an interaction response.
+     * @return array{uri: ?string, data: ?string, mime: string}|null
+     */
+    public function extractVideoPart(array $interaction): ?array
+    {
+        foreach (($interaction['steps'] ?? []) as $step) {
+            if (($step['type'] ?? '') !== 'model_output') continue;
+            foreach (($step['content'] ?? []) as $c) {
+                if (($c['type'] ?? '') === 'video') {
+                    return [
+                        'uri'  => $c['uri']  ?? null,
+                        'data' => $c['data'] ?? null,
+                        'mime' => $c['mime_type'] ?? 'video/mp4',
+                    ];
+                }
+            }
+        }
+        if (! empty($interaction['output_video'])) {
+            $v = $interaction['output_video'];
+            return ['uri' => $v['uri'] ?? null, 'data' => $v['data'] ?? null, 'mime' => $v['mime_type'] ?? 'video/mp4'];
+        }
+        return null;
+    }
+
+    /** Download a Google-hosted file (Omni uri delivery). */
+    public function downloadFile(string $uri): ?array
+    {
+        $this->requireKey();
+        set_time_limit(180);
+        $sep = str_contains($uri, '?') ? '&' : '?';
+        $res = Http::timeout(150)->get($uri . $sep . 'key=' . $this->apiKey);
+        if (! $res->ok()) {
+            Log::warning('[gemini file download] '.$res->status().' '.Str::limit($res->body(), 300));
+            return null;
+        }
+        return ['bytes' => $res->body(), 'mime' => $res->header('Content-Type') ?: 'video/mp4'];
+    }
+
+    /** Append a row to the ai_usage_logs cost ledger. Never blocks the call. */
+    private function logUsage(string $kind, ?string $model, float $units, float $cost): void
+    {
+        try {
+            \App\Models\AiUsageLog::create([
+                'customer_id' => self::$usageContext['customer_id'] ?? null,
+                'surface'     => self::$usageContext['surface'] ?? 'other',
+                'kind'        => $kind,
+                'model'       => $model,
+                'units'       => $units,
+                'cost'        => $cost,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('[ai usage log] '.$e->getMessage());
+        }
     }
 
     private function requireKey(): void

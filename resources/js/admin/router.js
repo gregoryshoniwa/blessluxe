@@ -24,6 +24,7 @@ const routes = [
     { path: '/admin/users',      name: 'admin-users',     component: () => import('./pages/Users.vue') },
     { path: '/admin/returns',    name: 'admin-returns',   component: () => import('./pages/Returns.vue') },
     { path: '/admin/ai',         name: 'admin-ai-studio', component: () => import('./pages/AiStudio.vue') },
+    { path: '/admin/ai-usage',   name: 'admin-ai-usage',  component: () => import('./pages/AiUsage.vue') },
     { path: '/admin/:pathMatch(.*)*', name: 'admin-404', component: () => import('./pages/NotFound.vue') },
 ];
 

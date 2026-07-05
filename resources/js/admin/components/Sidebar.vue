@@ -53,8 +53,9 @@ export default {
                 {
                     title: 'Insights',
                     items: [
-                        { to: '/admin/reports', label: 'Reports & Exports' },
-                        { to: '/admin/ai',      label: 'AI Studio' },
+                        { to: '/admin/reports',  label: 'Reports & Exports' },
+                        { to: '/admin/ai',       label: 'AI Studio' },
+                        { to: '/admin/ai-usage', label: 'AI Usage & Costs' },
                     ],
                 },
                 {

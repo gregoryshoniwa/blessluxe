@@ -19,6 +19,7 @@ const routes = [
     { path: '/account/forgot', name: 'forgot-password', component: () => import('./pages/ForgotPassword.vue') },
     { path: '/account/reset/:token', name: 'reset-password', component: () => import('./pages/ResetPassword.vue') },
     { path: '/account/orders/:number', name: 'order-detail', component: () => import('./pages/OrderDetail.vue') },
+    { path: '/showroom/:tab?', name: 'showroom', component: () => import('./pages/ShowRoom.vue') },
     { path: '/faq', name: 'faq', component: () => import('./pages/Faq.vue') },
     { path: '/track', name: 'track', component: () => import('./pages/Track.vue') },
     { path: '/track/:code', name: 'track-code', component: () => import('./pages/Track.vue') },

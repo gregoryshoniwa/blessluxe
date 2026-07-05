@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\ProductMedia;
 use App\Models\ProductVariant;
 use App\Models\VariantPrice;
 use Illuminate\Http\Request;
@@ -52,7 +53,7 @@ class AdminProductController extends Controller
 
     public function show(string $id)
     {
-        $product = Product::with(['variants.prices', 'images', 'options.values', 'catalogues:id,name,handle'])
+        $product = Product::with(['variants.prices', 'images', 'media', 'options.values', 'catalogues:id,name,handle'])
             ->findOrFail($id);
 
         return ['product' => [
@@ -74,6 +75,7 @@ class AdminProductController extends Controller
                 'price'              => optional($v->prices->firstWhere('currency_code', 'usd'))->amount,
             ]),
             'images' => $product->images->map(fn ($i) => ['id' => $i->id, 'url' => $i->url, 'rank' => $i->rank]),
+            'video'  => ($v = $product->media->firstWhere('media_type', 'video')) ? $this->videoShape($v) : null,
         ]];
     }
 
@@ -308,5 +310,89 @@ class AdminProductController extends Controller
                 ->update(['rank' => $i]);
         }
         return ['ok' => true];
+    }
+
+    /**
+     * POST /api/admin/products/{id}/video
+     * Either a `video` file upload or a `youtube_url`. One video per product —
+     * setting a new one replaces the old (and deletes the old uploaded file).
+     */
+    public function setVideo(Request $request, string $id)
+    {
+        $product = Product::findOrFail($id);
+        $data = $request->validate([
+            'video'       => ['required_without:youtube_url', 'nullable', 'file', 'mimetypes:video/mp4,video/webm,video/quicktime', 'max:102400'], // 100 MB
+            'youtube_url' => ['required_without:video', 'nullable', 'string', 'max:500'],
+        ]);
+
+        if ($request->hasFile('video')) {
+            $path       = $request->file('video')->store('products/videos', 'public');
+            $mediaUrl   = Storage::url($path);
+            $sourceKind = 'upload';
+            $meta       = null;
+            $thumb      = null;
+        } else {
+            $ytId = $this->youtubeId((string) $data['youtube_url']);
+            if (! $ytId) {
+                return response()->json(['error' => "That doesn't look like a valid YouTube link."], 422);
+            }
+            $mediaUrl   = $data['youtube_url'];
+            $sourceKind = 'youtube';
+            $meta       = ['youtube_id' => $ytId];
+            $thumb      = "https://img.youtube.com/vi/{$ytId}/hqdefault.jpg";
+        }
+
+        $this->removeVideoMedia($product->id);
+
+        $media = ProductMedia::create([
+            'id'              => 'pmed_' . Str::random(16),
+            'product_id'      => $product->id,
+            'media_type'      => 'video',
+            'media_url'       => $mediaUrl,
+            'thumbnail_url'   => $thumb,
+            'source_kind'     => $sourceKind,
+            'generation_meta' => $meta,
+            'status'          => 'ready',
+            'position'        => 0,
+        ]);
+
+        return ['video' => $this->videoShape($media)];
+    }
+
+    /** DELETE /api/admin/products/{id}/video */
+    public function destroyVideo(string $id)
+    {
+        $this->removeVideoMedia($id);
+        return ['ok' => true];
+    }
+
+    private function removeVideoMedia(string $productId): void
+    {
+        foreach (ProductMedia::where('product_id', $productId)->where('media_type', 'video')->get() as $m) {
+            if ($m->source_kind === 'upload' && str_starts_with($m->media_url, '/storage/')) {
+                Storage::disk('public')->delete(substr($m->media_url, strlen('/storage/')));
+            }
+            $m->delete();
+        }
+    }
+
+    /** Accepts watch?v=, youtu.be/, shorts/ and embed/ URL forms. */
+    private function youtubeId(string $url): ?string
+    {
+        return preg_match('~(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/)|youtu\.be/)([A-Za-z0-9_-]{6,20})~', $url, $m)
+            ? $m[1]
+            : null;
+    }
+
+    private function videoShape(ProductMedia $m): array
+    {
+        $ytId = $m->generation_meta['youtube_id'] ?? null;
+        return [
+            'kind'       => $m->source_kind === 'youtube' ? 'youtube' : 'upload',
+            'url'        => $m->media_url,
+            'thumbnail'  => $m->thumbnail_url,
+            'youtube_id' => $ytId,
+            'embed_url'  => $ytId ? "https://www.youtube-nocookie.com/embed/{$ytId}" : null,
+        ];
     }
 }
