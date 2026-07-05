@@ -19,7 +19,7 @@ const routes = [
     { path: '/account/forgot', name: 'forgot-password', component: () => import('./pages/ForgotPassword.vue') },
     { path: '/account/reset/:token', name: 'reset-password', component: () => import('./pages/ResetPassword.vue') },
     { path: '/account/orders/:number', name: 'order-detail', component: () => import('./pages/OrderDetail.vue') },
-    { path: '/showroom/:tab?', name: 'showroom', component: () => import('./pages/ShowRoom.vue') },
+    { path: '/showroom/:tab?', name: 'showroom', component: () => import('./pages/ShowRoom.vue'), meta: { requiresAuth: true } },
     { path: '/faq', name: 'faq', component: () => import('./pages/Faq.vue') },
     { path: '/track', name: 'track', component: () => import('./pages/Track.vue') },
     { path: '/track/:code', name: 'track-code', component: () => import('./pages/Track.vue') },
@@ -48,6 +48,32 @@ const router = createRouter({
         if (to.hash) return { el: to.hash, behavior: 'smooth' };
         return { top: 0 };
     },
+});
+
+/**
+ * Auth gate for members-only surfaces (Show Room). The check is cached for
+ * 30s so switching tabs inside /showroom doesn't refetch on every hop;
+ * signing out flips the session cookie, so the short TTL keeps it honest.
+ */
+let authCache = { signedIn: false, at: 0 };
+async function isSignedIn() {
+    // Only positive results are cached — a cached "signed out" would bounce
+    // freshly logged-in users straight back to the login page.
+    if (authCache.signedIn && Date.now() - authCache.at < 30_000) return true;
+    try {
+        const res = await fetch('/api/account/me', { credentials: 'include', headers: { Accept: 'application/json' } });
+        const data = res.ok ? await res.json() : null;
+        authCache = { signedIn: !!data?.customer, at: Date.now() };
+    } catch {
+        authCache = { signedIn: false, at: Date.now() };
+    }
+    return authCache.signedIn;
+}
+
+router.beforeEach(async (to) => {
+    if (!to.meta.requiresAuth) return true;
+    if (await isSignedIn()) return true;
+    return { path: '/account/login', query: { next: to.fullPath } };
 });
 
 export default router;
