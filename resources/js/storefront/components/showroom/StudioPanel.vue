@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../../lib/api.js';
+import { confirmDialog, toast } from '../../../lib/dialog.js';
 
 /**
  * Show Room → Studio.
@@ -153,13 +154,13 @@ export default {
             }
         },
         async remove(it) {
-            if (!confirm('Delete this concept?')) return;
+            if (!await confirmDialog({ title: 'Delete this concept?', confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/studio/${it.id}`);
                 this.items = this.items.filter((x) => x.id !== it.id);
                 this.selectedIds = this.selectedIds.filter((id) => id !== it.id);
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete.');
+                toast(e.payload?.error || 'Could not delete.', { tone: 'error' });
             }
         },
         toggleSelect(it) {

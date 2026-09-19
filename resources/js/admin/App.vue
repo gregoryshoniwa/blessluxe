@@ -1,11 +1,12 @@
 <script>
 import Sidebar from './components/Sidebar.vue';
 import Login from './pages/Login.vue';
+import DialogHost from '../components/DialogHost.vue';
 import { api } from '../lib/api.js';
 
 export default {
     name: 'AdminApp',
-    components: { Sidebar, Login },
+    components: { Sidebar, Login, DialogHost },
     data() {
         return {
             user: null,
@@ -50,4 +51,5 @@ export default {
             <router-view />
         </main>
     </div>
+    <DialogHost theme="admin" />
 </template>

@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2, Plus } from 'lucide-vue-next';
 
@@ -73,7 +74,7 @@ export default {
             } finally { this.saving = false; }
         },
         async remove(f) {
-            if (!confirm('Delete this FAQ?')) return;
+            if (!await confirmDialog({ title: 'Delete this FAQ?', confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/faqs/${f.id}`);
             await this.fetchAll();
         },

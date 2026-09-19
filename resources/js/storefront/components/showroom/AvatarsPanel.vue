@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../../lib/api.js';
+import { confirmDialog, toast } from '../../../lib/dialog.js';
 
 /**
  * Show Room → Avatars.
@@ -121,13 +122,13 @@ export default {
             }
         },
         async remove(a) {
-            if (!confirm(`Delete "${a.name || 'this avatar'}"? This cannot be undone.`)) return;
+            if (!await confirmDialog({ title: `Delete "${a.name || 'this avatar'}"? This cannot be undone.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/avatars/${a.id}`);
                 this.avatars = this.avatars.filter((x) => x.id !== a.id);
                 if (this.editing?.id === a.id) this.closeEdit();
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete the avatar.');
+                toast(e.payload?.error || 'Could not delete the avatar.', { tone: 'error' });
             }
         },
         hasRenderChange() {

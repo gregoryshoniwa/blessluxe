@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../../lib/api.js';
+import { confirmDialog, toast } from '../../../lib/dialog.js';
 
 /**
  * Show Room → Generations.
@@ -131,12 +132,12 @@ export default {
             }
         },
         async remove(g) {
-            if (!confirm('Delete this generation?')) return;
+            if (!await confirmDialog({ title: 'Delete this generation?', confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/generations/${g.id}`);
                 this.generations = this.generations.filter((x) => x.id !== g.id);
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete.');
+                toast(e.payload?.error || 'Could not delete.', { tone: 'error' });
             }
         },
         mediaUrl(g) { return g.video_url || g.image_url; },

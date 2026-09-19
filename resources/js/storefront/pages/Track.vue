@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { statusLabel, progressIndex, isFailure, PROGRESS_STEPS } from '../../lib/shipping.js';
 import { Package, Truck, CheckCircle2, Search, MapPin, Clock, XCircle } from 'lucide-vue-next';
 
 export default {
@@ -16,27 +17,16 @@ export default {
     computed: {
         // The code can come from /track/CODE or be typed into the input.
         urlCode() { return this.$route.params.code; },
-        statusLabel() {
-            const s = this.data?.package?.status;
-            return ({
-                created:         'Order received',
-                picked:          'Picked',
-                packed:          'Packed',
-                shipped:         'Shipped',
-                in_transit:      'In transit',
-                out_for_delivery:'Out for delivery',
-                delivered:       'Delivered',
-                returned:        'Returned',
-                cancelled:       'Cancelled',
-            })[s] || s || '—';
-        },
-        progressIndex() {
-            // Maps status onto a 0–4 progress bar.
-            return ({
-                created: 0, picked: 1, packed: 1, shipped: 2,
-                in_transit: 2, out_for_delivery: 3, delivered: 4,
-                returned: 4, cancelled: 4,
-            })[this.data?.package?.status] ?? 0;
+        // Status vocabulary lives in lib/shipping.js, mirrored from the PHP enum
+        // under a parity test. It used to be duplicated by hand in four files.
+        steps() { return PROGRESS_STEPS; },
+        statusLabel() { return statusLabel(this.data?.package?.status); },
+        // null for returned/cancelled — a failed parcel must not paint a full bar.
+        progressIndex() { return progressIndex(this.data?.package?.status); },
+        isFailure() { return isFailure(this.data?.package?.status); },
+        progressPercent() {
+            if (this.isFailure || this.progressIndex === null) return 100;
+            return (this.progressIndex / (PROGRESS_STEPS.length - 1)) * 100;
         },
     },
     mounted() {
@@ -123,18 +113,18 @@ export default {
                     </div>
                 </div>
 
-                <!-- Progress bar -->
+                <!-- Progress bar. A failed parcel gets a full RED bar, never a full gold
+                     one — the old map sent returned/cancelled to the last step, which
+                     read as "delivered" for a parcel that never arrived. -->
                 <div class="mt-6">
-                    <div class="flex justify-between text-[10px] tracking-widest uppercase text-black/55 mb-2">
-                        <span :class="progressIndex >= 0 ? 'text-gold-dark' : ''">Received</span>
-                        <span :class="progressIndex >= 1 ? 'text-gold-dark' : ''">Packed</span>
-                        <span :class="progressIndex >= 2 ? 'text-gold-dark' : ''">Shipped</span>
-                        <span :class="progressIndex >= 3 ? 'text-gold-dark' : ''">Out for delivery</span>
-                        <span :class="progressIndex >= 4 ? 'text-gold-dark' : ''">Delivered</span>
+                    <div v-if="!isFailure" class="flex justify-between text-[10px] tracking-widest uppercase text-black/55 mb-2">
+                        <span v-for="(step, i) in steps" :key="step" :class="progressIndex >= i ? 'text-gold-dark' : ''">{{ step }}</span>
                     </div>
+                    <p v-else class="text-[10px] tracking-widest uppercase text-red-600 mb-2">{{ statusLabel }} — this parcel did not complete its journey</p>
                     <div class="h-1 bg-cream-dark relative overflow-hidden">
-                        <div class="absolute inset-y-0 left-0 bg-gold transition-all duration-500"
-                             :style="{ width: ((progressIndex / 4) * 100) + '%' }"></div>
+                        <div class="absolute inset-y-0 left-0 transition-all duration-500"
+                             :class="isFailure ? 'bg-red-500' : 'bg-gold'"
+                             :style="{ width: progressPercent + '%' }"></div>
                     </div>
                 </div>
 

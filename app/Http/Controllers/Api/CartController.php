@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\CartLineItem;
 use App\Models\ProductVariant;
+use App\Services\Couriers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -185,10 +186,19 @@ class CartController extends Controller
                 'quantity'     => $line->quantity,
                 'unit_price'   => $line->unit_price,
                 'line_total'   => $line->unit_price * $line->quantity,
+                // Local stock is already in Zimbabwe and is never charged courier
+                // shipping; imported stock is carried in by a courier the buyer picks.
+                'sourcing'     => $product?->sourcing ?? 'local',
+                'needs_shipping' => ($product?->sourcing ?? 'local') === Couriers::IMPORT,
             ];
         });
 
         $subtotal = (int) $items->sum('line_total');
+
+        // Only imported lines attract a courier fee. A basket of local stock gets an
+        // empty options list, which tells the UI to show no shipping section at all
+        // rather than a "$0.00 shipping" row that invites "why is it free?".
+        $importCount = (int) $items->where('needs_shipping', true)->sum('quantity');
 
         return [
             'id'         => $cart->id,
@@ -196,6 +206,12 @@ class CartController extends Controller
             'item_count' => (int) $items->sum('quantity'),
             'subtotal'   => $subtotal,
             'currency_code' => 'usd',
+            'shipping'   => [
+                'needs_shipping'  => $importCount > 0,
+                'import_count'    => $importCount,
+                'local_count'     => (int) $items->where('needs_shipping', false)->sum('quantity'),
+                'courier_options' => Couriers::optionsFor($importCount),
+            ],
         ];
     }
 }

@@ -1,11 +1,12 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
-import { Pencil, Trash2 } from 'lucide-vue-next';
+import { Pencil, Trash2, Check, LoaderCircle } from 'lucide-vue-next';
 
 export default {
     name: 'AdminAffiliates',
-    components: { IconButton, Pencil, Trash2 },
+    components: { IconButton, Pencil, Trash2, Check, LoaderCircle },
     data() {
         return {
             affiliates: [], pagination: null, loading: true,
@@ -13,12 +14,40 @@ export default {
             showForm: false, editingId: null,
             form: this.emptyForm(),
             saving: false, error: '',
+            approvingId: null,
+            notice: '',
         };
     },
     mounted() { this.fetchAll(); },
     methods: {
         emptyForm() {
             return { code: '', email: '', first_name: '', last_name: '', commission_rate: 10, status: 'pending' };
+        },
+        /**
+         * Approve: flips to active, which is what assigns the share code and
+         * sends the welcome email and in-app notification. One action rather
+         * than editing a status dropdown and hoping the side effects fire.
+         */
+        async approve(a) {
+            const name = [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email;
+            if (!await confirmDialog({
+                title: `Approve ${name}?`,
+                body: "They'll be assigned a share code and emailed straight away.",
+                confirmLabel: 'Approve',
+            })) return;
+
+            this.approvingId = a.id;
+            this.error = ''; this.notice = '';
+            try {
+                const d = await api.put(`/api/admin/affiliates/${a.id}`, { status: 'active' });
+                await this.fetchAll();
+                const code = d.affiliate?.code;
+                this.notice = code
+                    ? `${name} approved — their code is ${code}.`
+                    : `${name} approved.`;
+            } catch (e) {
+                this.error = e.payload?.error || 'Could not approve that affiliate.';
+            } finally { this.approvingId = null; }
         },
         async fetchAll() {
             this.loading = true;
@@ -58,11 +87,19 @@ export default {
             } finally { this.saving = false; }
         },
         async remove(a) {
-            if (!confirm(`Delete affiliate ${a.code}? Their sales history stays in place.`)) return;
+            // A pending applicant has no code, so name them instead of showing
+            // "Delete affiliate undefined?".
+            const who = a.code || [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email;
+            if (!await confirmDialog({
+                title: `Delete affiliate ${who}?`,
+                body: 'Their sales history stays in place. This cannot be undone.',
+                confirmLabel: 'Delete',
+                tone: 'danger',
+            })) return;
             try {
                 await api.del(`/api/admin/affiliates/${a.id}`);
                 await this.fetchAll();
-            } catch (e) { alert(e.payload?.error || 'Could not delete.'); }
+            } catch (e) { toast(e.payload?.error || 'Could not delete.', { tone: 'error' }); }
         },
     },
 };
@@ -77,6 +114,10 @@ export default {
             </div>
             <button @click="startNew" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">New Affiliate</button>
         </header>
+
+        <!-- Approval mints a code and emails the affiliate, so confirm what happened. -->
+        <p v-if="notice" class="bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 p-3 mb-4">{{ notice }}</p>
+        <p v-if="error && !showForm" class="bg-red-50 border border-red-200 text-sm text-red-700 p-3 mb-4">{{ error }}</p>
 
         <div class="mb-4 flex gap-2">
             <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code or email…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
@@ -129,7 +170,13 @@ export default {
                     <tr v-else-if="!affiliates.length"><td colspan="6" class="px-5 py-8 text-center text-zinc-400">No affiliates yet.</td></tr>
                     <tr v-for="a in affiliates" :key="a.id" class="border-t border-zinc-100">
                         <td class="px-5 py-3 font-mono">
-                            <router-link :to="`/admin/affiliates/${a.id}`" class="hover:text-gold">{{ a.code }}</router-link>
+                            <router-link :to="`/admin/affiliates/${a.id}`" class="hover:text-gold">
+                                <!-- Pending applicants have no code yet; a blank
+                                     cell reads as missing data rather than "not
+                                     assigned until you approve". -->
+                                <span v-if="a.code">{{ a.code }}</span>
+                                <span v-else class="text-zinc-400 font-sans text-xs tracking-widest uppercase">Not assigned</span>
+                            </router-link>
                         </td>
                         <td class="px-5 py-3">{{ [a.first_name, a.last_name].filter(Boolean).join(' ') || a.email }}</td>
                         <td class="px-5 py-3">{{ a.commission_rate }}%</td>
@@ -143,6 +190,18 @@ export default {
                         </td>
                         <td class="px-5 py-3 text-right">
                             <div class="inline-flex items-center gap-1">
+                                <!-- Only meaningful while pending; approving is what
+                                     mints the code and notifies them. -->
+                                <IconButton
+                                    v-if="a.status === 'pending'"
+                                    tone="positive"
+                                    label="Approve — assigns their code and emails them"
+                                    :disabled="approvingId === a.id"
+                                    @click="approve(a)"
+                                >
+                                    <LoaderCircle v-if="approvingId === a.id" class="w-4 h-4 animate-spin" />
+                                    <Check v-else class="w-4 h-4" />
+                                </IconButton>
                                 <IconButton label="Edit affiliate" @click="startEdit(a)">
                                     <Pencil class="w-4 h-4" />
                                 </IconButton>

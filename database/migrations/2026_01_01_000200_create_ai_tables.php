@@ -71,7 +71,14 @@ return new class extends Migration
         });
         // FULLTEXT for keyword recall. Raw SQL because Schema builder doesn't
         // expose FULLTEXT directly on MySQL prior to a separate DB::statement.
-        DB::statement('ALTER TABLE ai_customer_memories ADD FULLTEXT memory_content_ft (content)');
+        //
+        // MySQL only: the test suite runs on sqlite, which cannot parse this and
+        // would fail every migration — which is why no Feature test could run
+        // before this guard existed. Memory recall degrades to LIKE on sqlite,
+        // which is fine for tests; production is MySQL.
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE ai_customer_memories ADD FULLTEXT memory_content_ft (content)');
+        }
 
         Schema::create('ai_customer_interactions', function (Blueprint $table) {
             $table->string('id')->primary();

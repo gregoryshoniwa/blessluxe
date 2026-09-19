@@ -30,7 +30,7 @@ class OrderReceiptMail extends Mailable
     public function content(): Content
     {
         $lines = $this->order->lineItems()->get(['title', 'variant_title', 'quantity', 'unit_price']);
-        $package = \App\Models\Package::where('order_id', $this->order->id)->first();
+        $package = \App\Services\Shipping::packagesForOrder($this->order)->first();
         $base = rtrim(config('app.url', '/'), '/');
         return new Content(
             view: 'mail.order-receipt',

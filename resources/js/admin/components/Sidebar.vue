@@ -24,6 +24,7 @@ export default {
                     items: [
                         { to: '/admin/orders',   label: 'Orders' },
                         { to: '/admin/packages', label: 'Packages' },
+                        { to: '/admin/couriers', label: 'Couriers' },
                         { to: '/admin/returns',  label: 'Returns' },
                     ],
                 },

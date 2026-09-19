@@ -1,8 +1,18 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
+import { wishlist } from '../wishlist-store.js';
+import {
+    LayoutGrid, Package, Sparkles, RotateCcw, TrendingUp, MapPin, Heart,
+    ArrowRight, ExternalLink, ChevronRight, ShoppingBag,
+} from 'lucide-vue-next';
 
 export default {
     name: 'AccountPage',
+    components: {
+        LayoutGrid, Package, Sparkles, RotateCcw, TrendingUp, MapPin, Heart,
+        ArrowRight, ExternalLink, ChevronRight, ShoppingBag,
+    },
     data() {
         return {
             loading: true,
@@ -27,14 +37,15 @@ export default {
             verifyState: '',
             activeTab: 'overview',
             tabs: [
-                { id: 'overview',     label: 'Overview' },
-                { id: 'blits',        label: 'Blits' },
-                { id: 'transactions', label: 'Transactions' },
-                { id: 'returns',      label: 'Returns' },
-                { id: 'affiliate',    label: 'Affiliate' },
-                { id: 'addresses',    label: 'Addresses' },
-                { id: 'wishlist',     label: 'Wishlist' },
+                { id: 'overview',     label: 'Overview',     icon: 'LayoutGrid' },
+                { id: 'transactions', label: 'Orders',       icon: 'Package' },
+                { id: 'blits',        label: 'Blits',        icon: 'Sparkles' },
+                { id: 'returns',      label: 'Returns',      icon: 'RotateCcw' },
+                { id: 'affiliate',    label: 'Affiliate',    icon: 'TrendingUp' },
+                { id: 'addresses',    label: 'Addresses',    icon: 'MapPin' },
+                { id: 'wishlist',     label: 'Wishlist',     icon: 'Heart' },
             ],
+            wishlistItems: null,
             returns: [],
             returnsLoaded: false,
             returnForm: { order_number: '', reason: '', items: [] },
@@ -50,6 +61,47 @@ export default {
             const first = this.customer.first_name;
             const last  = this.customer.last_name;
             return [first, last].filter(Boolean).join(' ') || this.customer.email;
+        },
+        // ─── Dashboard figures ────────────────────────────────────────
+        // The overview was a bare list of account fields; these turn it into
+        // something worth landing on.
+        orderCount() { return this.orders?.length || 0; },
+        openOrders() {
+            // Anything not yet in the customer's hands.
+            return (this.orders || []).filter(
+                (o) => !['delivered', 'collected', 'returned', 'cancelled'].includes(o.fulfillment_status),
+            );
+        },
+        recentOrders() { return (this.orders || []).slice(0, 4); },
+        isAffiliate() { return this.affiliate?.status === 'active'; },
+        // Counts shown against the nav so a tab's weight is visible before opening it.
+        tabCounts() {
+            return {
+                transactions: this.orderCount || null,
+                blits: this.blits?.balance || null,
+                returns: this.returns?.length || null,
+                addresses: this.addresses?.length || null,
+            };
+        },
+        greeting() {
+            const h = new Date().getHours();
+            if (h < 12) return 'Good morning';
+            if (h < 18) return 'Good afternoon';
+            return 'Good evening';
+        },
+        // Where we actually ship. Zimbabwe first since it's the home market.
+        countryOptions() {
+            return [
+                { code: 'ZW', name: 'Zimbabwe' },
+                { code: 'ZA', name: 'South Africa' },
+                { code: 'BW', name: 'Botswana' },
+                { code: 'ZM', name: 'Zambia' },
+                { code: 'MZ', name: 'Mozambique' },
+                { code: 'NA', name: 'Namibia' },
+                { code: 'MW', name: 'Malawi' },
+                { code: 'GB', name: 'United Kingdom' },
+                { code: 'US', name: 'United States' },
+            ];
         },
     },
     async mounted() {
@@ -91,6 +143,8 @@ export default {
                     const o = await api.get('/api/account/orders');
                     this.orders = o.orders;
                 } catch { /* leave null */ }
+                // Wishlist — drives the overview count and the saved-items tab.
+                try { this.wishlistItems = await wishlist.list(); } catch { this.wishlistItems = []; }
                 // Affiliate — null if they haven't applied yet.
                 try {
                     const a = await api.get('/api/account/affiliate');
@@ -200,8 +254,14 @@ export default {
             }
         },
         blankAddressForm() {
+            // Prefill the recipient from the account. A courier needs a name and a
+            // phone on the label, but making someone retype what we already hold is
+            // pure friction — they stay editable for delivering to someone else.
             return {
-                label: '', first_name: '', last_name: '', phone: '',
+                label: '',
+                first_name: this.customer?.first_name || '',
+                last_name: this.customer?.last_name || '',
+                phone: this.customer?.phone || '',
                 line1: '', line2: '', city: '', region: '', postal_code: '', country: 'ZW',
                 is_default_shipping: false, is_default_billing: false,
             };
@@ -245,12 +305,12 @@ export default {
             }
         },
         async deleteAddress(a) {
-            if (!confirm('Delete this address?')) return;
+            if (!await confirmDialog({ title: 'Delete this address?', confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/addresses/${a.id}`);
                 this.addresses = this.addresses.filter((x) => x.id !== a.id);
             } catch {
-                alert('Could not delete that address.');
+                toast('Could not delete that address.', { tone: 'error' });
             }
         },
         async signOut() {
@@ -306,32 +366,178 @@ export default {
             <div v-else-if="verifyState" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 mb-6">{{ verifyState }}</div>
 
             <div class="grid grid-cols-12 gap-8">
-                <aside class="col-span-12 md:col-span-3 space-y-1">
-                    <button
-                        v-for="t in tabs"
-                        :key="t.id"
-                        @click="activeTab = t.id; t.id === 'returns' && loadReturns()"
-                        :class="[
-                            'w-full text-left px-4 py-3 text-sm tracking-widest uppercase',
-                            activeTab === t.id ? 'bg-gold text-white' : 'text-black/70 hover:bg-cream-dark',
-                        ]"
-                    >
-                        {{ t.label }}
-                    </button>
+                <aside class="col-span-12 md:col-span-3">
+                    <nav class="space-y-0.5 md:sticky md:top-6">
+                        <button
+                            v-for="t in tabs"
+                            :key="t.id"
+                            @click="activeTab = t.id; t.id === 'returns' && loadReturns()"
+                            :class="[
+                                'w-full text-left px-4 py-3 text-xs tracking-widest uppercase flex items-center gap-3 transition-colors',
+                                activeTab === t.id ? 'bg-gold text-white' : 'text-black/70 hover:bg-cream-dark',
+                            ]"
+                        >
+                            <component :is="t.icon" class="w-4 h-4 flex-shrink-0" />
+                            <span class="flex-1 min-w-0">{{ t.label }}</span>
+
+                            <!-- Weight of each section, visible before opening it. -->
+                            <span
+                                v-if="tabCounts[t.id]"
+                                :class="[
+                                    'text-[10px] px-1.5 py-0.5 rounded-full font-sans tracking-normal',
+                                    activeTab === t.id ? 'bg-white/25' : 'bg-black/5 text-black/50',
+                                ]"
+                            >{{ tabCounts[t.id] }}</span>
+                            <span
+                                v-else-if="t.id === 'affiliate' && isAffiliate"
+                                :class="['w-1.5 h-1.5 rounded-full', activeTab === t.id ? 'bg-white' : 'bg-emerald-500']"
+                                title="Active affiliate"
+                            ></span>
+                        </button>
+
+                        <!-- The affiliate dashboard had no way in from here; an
+                             approved affiliate had to know the URL. -->
+                        <router-link
+                            v-if="isAffiliate"
+                            :to="`/affiliate/${affiliate.code}/dashboard`"
+                            class="w-full text-left px-4 py-3 text-xs tracking-widest uppercase flex items-center gap-3 text-gold-dark hover:bg-cream-dark transition-colors border-t border-gold/10 mt-2 pt-4"
+                        >
+                            <ExternalLink class="w-4 h-4 flex-shrink-0" />
+                            <span class="flex-1">Affiliate dashboard</span>
+                            <ChevronRight class="w-3.5 h-3.5" />
+                        </router-link>
+                    </nav>
                 </aside>
                 <section class="col-span-12 md:col-span-9 bg-white border border-gold/10 p-6">
                     <div v-if="activeTab === 'overview'">
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-4">Overview</h2>
-                        <dl class="text-sm space-y-2">
-                            <div class="flex justify-between"><dt class="text-black/55">Loyalty tier</dt><dd>{{ customer.loyalty_tier }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-black/55">Loyalty points</dt><dd>{{ customer.loyalty_points }}</dd></div>
-                            <div class="flex justify-between"><dt class="text-black/55">Email verified</dt><dd>{{ customer.email_verified_at ? 'Yes' : 'No' }}</dd></div>
-                            <div v-if="customer.oauth_provider" class="flex justify-between">
-                                <dt class="text-black/55">Sign-in via</dt>
-                                <dd class="capitalize">{{ customer.oauth_provider }}</dd>
+                        <header class="mb-6">
+                            <p class="font-script text-2xl text-gold">{{ greeting }}</p>
+                            <h2 class="font-display text-xl tracking-widest uppercase">Overview</h2>
+                        </header>
+
+                        <!-- What's actually happening on the account, rather than
+                             a list of database fields. -->
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                            <button
+                                @click="activeTab = 'transactions'"
+                                class="text-left bg-cream-dark/40 border border-gold/15 p-4 hover:border-gold/40 transition-colors"
+                            >
+                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Orders</p>
+                                <p class="font-display text-2xl">{{ orderCount }}</p>
+                                <p v-if="openOrders.length" class="text-[10px] tracking-widest uppercase text-gold-dark mt-1">
+                                    {{ openOrders.length }} in progress
+                                </p>
+                            </button>
+
+                            <button
+                                @click="activeTab = 'blits'"
+                                class="text-left bg-cream-dark/40 border border-gold/15 p-4 hover:border-gold/40 transition-colors"
+                            >
+                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Blits</p>
+                                <p class="font-display text-2xl">{{ blits?.balance ?? '—' }}</p>
+                                <p v-if="blits && blitsSettings" class="text-[10px] tracking-widest uppercase text-black/45 mt-1">
+                                    ≈ ${{ (blits.balance / blitsSettings.per_usd).toFixed(2) }}
+                                </p>
+                            </button>
+
+                            <div class="bg-cream-dark/40 border border-gold/15 p-4">
+                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Tier</p>
+                                <p class="font-display text-2xl capitalize">{{ customer.loyalty_tier || '—' }}</p>
                             </div>
-                            <div class="flex justify-between"><dt class="text-black/55">Last login</dt><dd>{{ customer.last_login_at || '—' }}</dd></div>
-                        </dl>
+
+                            <button
+                                @click="activeTab = 'wishlist'"
+                                class="text-left bg-cream-dark/40 border border-gold/15 p-4 hover:border-gold/40 transition-colors"
+                            >
+                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Saved</p>
+                                <p class="font-display text-2xl">{{ wishlistItems === null ? '—' : wishlistItems.length }}</p>
+                            </button>
+                        </div>
+
+                        <!-- Recent orders: the thing most people come here for. -->
+                        <section class="mb-8">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="font-display text-sm tracking-widest uppercase text-gold">Recent orders</h3>
+                                <button
+                                    v-if="orderCount > recentOrders.length"
+                                    @click="activeTab = 'transactions'"
+                                    class="text-[10px] tracking-widest uppercase text-black/55 hover:text-gold"
+                                >View all</button>
+                            </div>
+
+                            <ul v-if="recentOrders.length" class="divide-y divide-gold/10 border-y border-gold/10">
+                                <li v-for="o in recentOrders" :key="o.order_number">
+                                    <router-link
+                                        :to="`/account/orders/${o.order_number}`"
+                                        class="flex items-center gap-3 py-3 hover:bg-cream-dark/30 transition-colors px-1"
+                                    >
+                                        <span class="w-9 h-9 bg-cream-dark flex items-center justify-center flex-shrink-0">
+                                            <Package class="w-4 h-4 text-gold-dark" />
+                                        </span>
+                                        <span class="flex-1 min-w-0">
+                                            <span class="block font-mono text-xs">{{ o.order_number }}</span>
+                                            <span class="block text-[10px] tracking-widest uppercase text-black/45">{{ fmtDate(o.created_at) }}</span>
+                                        </span>
+                                        <span class="text-right flex-shrink-0">
+                                            <span class="block text-sm">{{ o.total_label }}</span>
+                                            <span v-if="o.fulfillment_label" class="block text-[10px] tracking-widest uppercase text-gold-dark">
+                                                {{ o.fulfillment_label }}
+                                            </span>
+                                        </span>
+                                        <ChevronRight class="w-4 h-4 text-black/25 flex-shrink-0" />
+                                    </router-link>
+                                </li>
+                            </ul>
+
+                            <!-- An empty state that offers a way forward. -->
+                            <div v-else class="border border-dashed border-gold/25 p-8 text-center">
+                                <ShoppingBag class="w-8 h-8 mx-auto text-gold/40 mb-3" />
+                                <p class="text-sm text-black/60 mb-4">No orders yet.</p>
+                                <router-link to="/shop" class="inline-block bg-gold text-white px-6 py-2.5 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                                    Start shopping
+                                </router-link>
+                            </div>
+                        </section>
+
+                        <!-- Nudges, shown only when there's something to act on. -->
+                        <section v-if="!customer.email_verified_at || !addresses.length || !affiliate" class="mb-8">
+                            <h3 class="font-display text-sm tracking-widest uppercase text-gold mb-3">Finish setting up</h3>
+                            <ul class="space-y-2">
+                                <li v-if="!addresses.length">
+                                    <button @click="activeTab = 'addresses'" class="w-full text-left flex items-center gap-3 border border-gold/15 p-3 hover:border-gold/40 transition-colors">
+                                        <MapPin class="w-4 h-4 text-gold-dark flex-shrink-0" />
+                                        <span class="flex-1 text-sm">Add a delivery address</span>
+                                        <ArrowRight class="w-4 h-4 text-black/30" />
+                                    </button>
+                                </li>
+                                <li v-if="!affiliate">
+                                    <router-link to="/affiliate/apply" class="w-full text-left flex items-center gap-3 border border-gold/15 p-3 hover:border-gold/40 transition-colors">
+                                        <TrendingUp class="w-4 h-4 text-gold-dark flex-shrink-0" />
+                                        <span class="flex-1 text-sm">Become an affiliate and earn {{ 10 }}% on every sale</span>
+                                        <ArrowRight class="w-4 h-4 text-black/30" />
+                                    </router-link>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <!-- Account details, demoted to where they belong. -->
+                        <section>
+                            <h3 class="font-display text-sm tracking-widest uppercase text-gold mb-3">Account</h3>
+                            <dl class="text-sm divide-y divide-gold/5 border-y border-gold/5">
+                                <div class="flex justify-between py-2"><dt class="text-black/55">Email</dt><dd>{{ customer.email }}</dd></div>
+                                <div class="flex justify-between py-2">
+                                    <dt class="text-black/55">Email verified</dt>
+                                    <dd :class="customer.email_verified_at ? 'text-emerald-700' : 'text-amber-700'">
+                                        {{ customer.email_verified_at ? 'Yes' : 'Not yet' }}
+                                    </dd>
+                                </div>
+                                <div v-if="customer.oauth_provider" class="flex justify-between py-2">
+                                    <dt class="text-black/55">Sign-in via</dt>
+                                    <dd class="capitalize">{{ customer.oauth_provider }}</dd>
+                                </div>
+                                <div class="flex justify-between py-2"><dt class="text-black/55">Last login</dt><dd>{{ customer.last_login_at || '—' }}</dd></div>
+                            </dl>
+                        </section>
                     </div>
                     <div v-else-if="activeTab === 'blits'">
                         <h2 class="font-display text-xl tracking-widest uppercase mb-4">Blits</h2>
@@ -397,6 +603,8 @@ export default {
                                     <td class="py-3">
                                         <span class="text-[10px] px-2 py-0.5 rounded bg-cream-dark/60">{{ o.status }}</span>
                                         <span v-if="o.payment_status === 'paid'" class="ml-1 text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">paid</span>
+                                        <!-- Without this, a paid order looked identical to a delivered one. -->
+                                        <span v-if="o.fulfillment_label" class="ml-1 text-[10px] px-2 py-0.5 rounded bg-gold/15 text-gold-dark">{{ o.fulfillment_label }}</span>
                                     </td>
                                     <td class="py-3 text-right space-x-3">
                                         <router-link :to="`/account/orders/${o.order_number}`" class="text-xs tracking-widest uppercase text-black/55 hover:text-gold">
@@ -413,18 +621,38 @@ export default {
                     <div v-else-if="activeTab === 'affiliate'">
                         <h2 class="font-display text-xl tracking-widest uppercase mb-4">Affiliate</h2>
                         <div v-if="!affiliateChecked" class="text-sm text-black/65">Loading…</div>
-                        <div v-else-if="!affiliate">
-                            <p class="text-sm text-black/65 mb-4">
-                                Earn commission on every order shopped via your code. Apply once — we review applications within 48 hours.
+                        <div v-else-if="!affiliate" class="border border-dashed border-gold/25 p-8 text-center">
+                            <TrendingUp class="w-9 h-9 mx-auto text-gold/50 mb-4" />
+                            <h3 class="font-display text-lg tracking-wide mb-2">Earn on every order you send our way</h3>
+                            <p class="text-sm text-black/60 mb-5 max-w-sm mx-auto">
+                                Pick your own share code, send it to your people, and take 10% of every order placed
+                                through it. We review applications within a couple of business days.
                             </p>
-                            <router-link to="/affiliate/apply" class="inline-block bg-gold text-white px-6 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                            <router-link to="/affiliate/apply" class="inline-block bg-gold text-white px-8 py-3 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
                                 Apply now
                             </router-link>
                         </div>
-                        <div v-else-if="affiliate.status === 'pending'" class="text-sm text-black/65">
-                            <p class="bg-amber-50 border border-amber-200 text-amber-800 p-4 mb-3">
-                                Application received. We'll email <span class="font-mono">{{ customer.email }}</span> once your code <span class="font-mono">{{ affiliate.code }}</span> is approved.
-                            </p>
+
+                        <div v-else-if="affiliate.status === 'pending'">
+                            <div class="bg-amber-50 border border-amber-200 p-5">
+                                <p class="text-[10px] tracking-widest uppercase text-amber-700 mb-2">Under review</p>
+                                <p class="font-display text-2xl tracking-wider mb-2">{{ affiliate.code }}</p>
+                                <p class="text-sm text-amber-900">
+                                    We're holding this code for you. We'll email
+                                    <span class="font-mono">{{ customer.email }}</span> as soon as it's approved —
+                                    usually within a couple of business days.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div v-else-if="affiliate.status === 'paused'">
+                            <div class="bg-zinc-50 border border-zinc-200 p-5">
+                                <p class="text-[10px] tracking-widest uppercase text-zinc-500 mb-2">Paused</p>
+                                <p class="font-display text-2xl tracking-wider mb-2">{{ affiliate.code }}</p>
+                                <p class="text-sm text-black/60">
+                                    Your code isn't earning at the moment. Get in touch if you think this is a mistake.
+                                </p>
+                            </div>
                         </div>
                         <div v-else>
                             <div class="bg-cream-dark/40 border border-gold/20 p-5 mb-5">
@@ -462,8 +690,26 @@ export default {
                                 </div>
                             </div>
 
+                            <!-- The full dashboard existed but nothing linked to it,
+                                 so an approved affiliate had to know the URL. -->
+                            <router-link
+                                :to="`/affiliate/${affiliate.code}/dashboard`"
+                                class="flex items-center gap-3 border border-gold/20 bg-cream-dark/30 p-4 mb-6 hover:border-gold/50 transition-colors"
+                            >
+                                <TrendingUp class="w-5 h-5 text-gold-dark flex-shrink-0" />
+                                <span class="flex-1 min-w-0">
+                                    <span class="block font-display text-base">Your affiliate dashboard</span>
+                                    <span class="block text-xs text-black/55">Full earnings history, payouts and your profile</span>
+                                </span>
+                                <ArrowRight class="w-4 h-4 text-gold-dark flex-shrink-0" />
+                            </router-link>
+
                             <h3 class="text-sm tracking-widest uppercase text-black/70 mb-2">Recent sales</h3>
-                            <p v-if="!affiliate.recent_sales.length" class="text-sm text-black/55">No sales yet. Share your code to start earning.</p>
+                            <div v-if="!affiliate.recent_sales.length" class="border border-dashed border-gold/25 p-8 text-center">
+                                <TrendingUp class="w-8 h-8 mx-auto text-gold/40 mb-3" />
+                                <p class="text-sm text-black/60 mb-1">No sales yet.</p>
+                                <p class="text-xs text-black/45">Share your link — you earn on every order placed through it.</p>
+                            </div>
                             <table v-else class="w-full text-sm">
                                 <thead class="text-[10px] tracking-widest uppercase text-black/55 border-b border-gold/10">
                                     <tr>
@@ -498,9 +744,9 @@ export default {
                         <form v-if="addrEditing" @submit.prevent="saveAddress" class="bg-cream-dark/40 border border-gold/10 p-5 mb-5 space-y-3">
                             <div class="grid grid-cols-2 gap-3">
                                 <input v-model="addrForm.label" placeholder="Label (Home, Work…)" class="border border-black/15 px-3 py-2 text-sm" />
-                                <input v-model="addrForm.phone" placeholder="Phone" class="border border-black/15 px-3 py-2 text-sm" />
-                                <input v-model="addrForm.first_name" placeholder="First name" class="border border-black/15 px-3 py-2 text-sm" />
-                                <input v-model="addrForm.last_name" placeholder="Last name" class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.phone" placeholder="Phone — the courier calls this" required class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.first_name" placeholder="Recipient first name" required class="border border-black/15 px-3 py-2 text-sm" />
+                                <input v-model="addrForm.last_name" placeholder="Recipient last name" class="border border-black/15 px-3 py-2 text-sm" />
                             </div>
                             <input v-model="addrForm.line1" placeholder="Street address" required class="w-full border border-black/15 px-3 py-2 text-sm" />
                             <input v-model="addrForm.line2" placeholder="Apartment, suite, etc. (optional)" class="w-full border border-black/15 px-3 py-2 text-sm" />
@@ -508,7 +754,10 @@ export default {
                                 <input v-model="addrForm.city" placeholder="City" required class="border border-black/15 px-3 py-2 text-sm" />
                                 <input v-model="addrForm.region" placeholder="Province / region" class="border border-black/15 px-3 py-2 text-sm" />
                                 <input v-model="addrForm.postal_code" placeholder="Postal code" class="border border-black/15 px-3 py-2 text-sm" />
-                                <input v-model="addrForm.country" placeholder="Country (2 letters, e.g. ZW)" maxlength="2" required class="border border-black/15 px-3 py-2 text-sm uppercase" />
+                                <!-- A raw 2-letter code invited typos like "ZI" for Zimbabwe. -->
+                                <select v-model="addrForm.country" required class="border border-black/15 px-3 py-2 text-sm">
+                                    <option v-for="c in countryOptions" :key="c.code" :value="c.code">{{ c.name }}</option>
+                                </select>
                             </div>
                             <div class="flex items-center gap-4 text-xs">
                                 <label class="flex items-center gap-1.5"><input type="checkbox" v-model="addrForm.is_default_shipping" /> Default shipping</label>
@@ -608,10 +857,45 @@ export default {
                         </ul>
                     </div>
                     <div v-else-if="activeTab === 'wishlist'">
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-2">Wishlist</h2>
-                        <p class="text-sm text-black/65">
-                            <router-link to="/wishlist" class="text-gold underline">View full wishlist →</router-link>
-                        </p>
+                        <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+                            <h2 class="font-display text-xl tracking-widest uppercase">Wishlist</h2>
+                            <router-link
+                                v-if="wishlistItems?.length"
+                                to="/wishlist"
+                                class="text-[10px] tracking-widest uppercase text-black/55 hover:text-gold inline-flex items-center gap-1"
+                            >
+                                View all <ArrowRight class="w-3 h-3" />
+                            </router-link>
+                        </div>
+
+                        <p v-if="wishlistItems === null" class="text-sm text-black/55">Loading…</p>
+
+                        <!-- It used to be a bare link off the page; saved pieces
+                             belong where you're already looking. -->
+                        <ul v-else-if="wishlistItems.length" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <li v-for="p in wishlistItems.slice(0, 6)" :key="p.id">
+                                <router-link :to="`/shop/${p.handle}`" class="block group">
+                                    <span class="block aspect-[3/4] bg-cream-dark overflow-hidden mb-2">
+                                        <img
+                                            v-if="p.thumbnail"
+                                            :src="p.thumbnail"
+                                            :alt="p.title"
+                                            class="w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-500"
+                                        />
+                                    </span>
+                                    <span class="block font-display text-sm leading-tight line-clamp-1">{{ p.title }}</span>
+                                    <span v-if="p.price_label" class="block text-xs text-black/55 mt-0.5">{{ p.price_label }}</span>
+                                </router-link>
+                            </li>
+                        </ul>
+
+                        <div v-else class="border border-dashed border-gold/25 p-8 text-center">
+                            <Heart class="w-8 h-8 mx-auto text-gold/40 mb-3" />
+                            <p class="text-sm text-black/60 mb-4">Nothing saved yet.</p>
+                            <router-link to="/shop" class="inline-block bg-gold text-white px-6 py-2.5 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                                Browse the shop
+                            </router-link>
+                        </div>
                     </div>
                 </section>
             </div>

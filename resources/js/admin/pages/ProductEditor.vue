@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { ArrowLeft, Trash2, Pencil, Upload, Image as ImageIcon, Plus, Star } from 'lucide-vue-next';
 
@@ -14,7 +15,8 @@ export default {
             saved: false,
             product: null,
             catalogues: [],
-            form: { title: '', handle: '', subtitle: '', description: '', status: 'draft', catalogue_ids: [] },
+            form: { title: '', handle: '', subtitle: '', description: '', status: 'draft', sourcing: 'local', default_courier_id: null, catalogue_ids: [] },
+            couriers: [],
             // Variant inline state
             newVariant: this.emptyVariant(),
             editingVariantId: null,
@@ -76,8 +78,16 @@ export default {
                     subtitle:    this.product.subtitle    || '',
                     description: this.product.description || '',
                     status:      this.product.status,
+                    // 'local' = already in Zimbabwe, no courier fee charged.
+                    // 'import' = carried in by a courier the buyer chooses and pays for.
+                    sourcing:    this.product.sourcing || 'local',
+                    default_courier_id: this.product.default_courier_id || null,
                     catalogue_ids: this.product.catalogue_ids || [],
                 };
+                try {
+                    const c = await api.get('/api/admin/couriers');
+                    this.couriers = (c.couriers || []).filter((x) => x.is_active);
+                } catch { this.couriers = []; }
             } catch (e) {
                 this.error = e.payload?.error || 'Product not found.';
             } finally {
@@ -106,7 +116,7 @@ export default {
                 this.newVariant = this.emptyVariant();
                 await this.fetchAll();
             } catch (e) {
-                alert(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Could not add variant.');
+                toast(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Could not add variant.', { tone: 'error' });
             }
         },
         startEditVariant(v) {
@@ -126,11 +136,11 @@ export default {
                 this.editingVariantId = null;
                 await this.fetchAll();
             } catch (e) {
-                alert(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Could not save.');
+                toast(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Could not save.', { tone: 'error' });
             }
         },
         async removeVariant(v) {
-            if (!confirm(`Delete variant "${v.title}"?`)) return;
+            if (!await confirmDialog({ title: `Delete variant "${v.title}"?`, confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/products/${this.id}/variants/${v.id}`);
             await this.fetchAll();
         },
@@ -152,7 +162,7 @@ export default {
             }
         },
         async removeImage(image) {
-            if (!confirm('Delete this image?')) return;
+            if (!await confirmDialog({ title: 'Delete this image?', confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/products/${this.id}/images/${image.id}`);
             await this.fetchAll();
         },
@@ -193,7 +203,7 @@ export default {
             }
         },
         async removeVideo() {
-            if (!confirm('Remove this product video?')) return;
+            if (!await confirmDialog({ title: 'Remove this product video?', confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/products/${this.id}/video`);
             await this.fetchAll();
         },
@@ -243,6 +253,51 @@ export default {
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                     </select>
+
+                    <!-- Decides whether this product is charged courier shipping. -->
+                    <div class="col-span-2 border border-zinc-200 p-4">
+                        <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2">Where does this come from?</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label
+                                class="border p-3 cursor-pointer transition-colors"
+                                :class="form.sourcing === 'local' ? 'border-gold border-2 bg-gold/5' : 'border-zinc-200 hover:border-gold/40'"
+                            >
+                                <span class="flex items-center gap-2">
+                                    <input type="radio" value="local" v-model="form.sourcing" class="accent-[#C9A84C]" />
+                                    <span class="font-semibold text-sm">Local stock</span>
+                                </span>
+                                <span class="block text-xs text-zinc-500 mt-1 ml-6">
+                                    Already in Zimbabwe. No courier fee. Collect or quick local delivery.
+                                </span>
+                            </label>
+
+                            <label
+                                class="border p-3 cursor-pointer transition-colors"
+                                :class="form.sourcing === 'import' ? 'border-gold border-2 bg-gold/5' : 'border-zinc-200 hover:border-gold/40'"
+                            >
+                                <span class="flex items-center gap-2">
+                                    <input type="radio" value="import" v-model="form.sourcing" class="accent-[#C9A84C]" />
+                                    <span class="font-semibold text-sm">Imported</span>
+                                </span>
+                                <span class="block text-xs text-zinc-500 mt-1 ml-6">
+                                    Sourced from a supplier abroad. The buyer picks a courier and pays its rate.
+                                </span>
+                            </label>
+                        </div>
+
+                        <div v-if="form.sourcing === 'import'" class="mt-3">
+                            <p class="text-xs tracking-widest uppercase text-zinc-500 mb-1">Courier</p>
+                            <select v-model="form.default_courier_id" class="border border-zinc-300 px-3 py-2 w-full text-sm">
+                                <option :value="null">Let the buyer choose</option>
+                                <option v-for="c in couriers" :key="c.id" :value="c.id">
+                                    {{ c.name }} — {{ c.base_fee_label }} + {{ c.per_item_fee_label }}/item
+                                </option>
+                            </select>
+                            <p class="text-xs text-zinc-500 mt-1">
+                                Pick one only if this item must travel a particular way.
+                            </p>
+                        </div>
+                    </div>
                     <div class="col-span-2">
                         <p class="text-xs tracking-widest uppercase text-zinc-500 mb-1">Catalogues</p>
                         <div class="flex flex-wrap gap-2">

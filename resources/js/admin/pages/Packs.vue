@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Trash2, Rocket, X, ExternalLink, Copy } from 'lucide-vue-next';
 
@@ -69,7 +70,7 @@ export default {
             } finally { this.defSaving = false; }
         },
         async removeDef(d) {
-            if (!confirm(`Delete pack "${d.title}"? Open campaigns will be cancelled.`)) return;
+            if (!await confirmDialog({ title: `Delete pack "${d.title}"? Open campaigns will be cancelled.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/packs/definitions/${d.id}`);
             await this.fetchAll();
         },
@@ -89,7 +90,7 @@ export default {
             } finally { this.launchSaving = false; }
         },
         async cancelCampaign(c) {
-            if (!confirm(`Cancel campaign ${c.public_code}? Slots will be released.`)) return;
+            if (!await confirmDialog({ title: `Cancel campaign ${c.public_code}? Slots will be released.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.post(`/api/admin/packs/campaigns/${c.id}/cancel`);
             await this.fetchAll();
         },

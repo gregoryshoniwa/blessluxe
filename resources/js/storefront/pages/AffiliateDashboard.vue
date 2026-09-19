@@ -6,7 +6,16 @@ export default {
     name: 'AffiliateDashboard',
     components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag },
     data() {
-        return { data: null, loading: true, error: '', copied: false, needsLogin: false };
+        return {
+            data: null, loading: true, error: '', copied: false, needsLogin: false,
+            // Optional, and entirely the affiliate's own — deliberately not part
+            // of applying.
+            profile: { bio: '', instagram: '', tiktok: '', website: '' },
+            profileOpen: false,
+            profileSaving: false,
+            profileSaved: false,
+            profileError: '',
+        };
     },
     computed: {
         code() { return (this.$route.params.code || '').toUpperCase(); },
@@ -19,6 +28,13 @@ export default {
         try {
             const res = await api.get(`/api/store/affiliate/dashboard/${encodeURIComponent(this.code)}`);
             this.data = res;
+            const meta = res.affiliate?.metadata || {};
+            this.profile = {
+                bio: meta.bio || '',
+                instagram: meta.instagram || '',
+                tiktok: meta.tiktok || '',
+                website: meta.website || '',
+            };
         } catch (e) {
             this.error = e.payload?.error || 'Affiliate code not found.';
             if (e.status === 401) this.needsLogin = true;
@@ -35,6 +51,18 @@ export default {
             } catch { /* ignore */ }
         },
         fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString() : '—'; },
+        async saveProfile() {
+            this.profileSaving = true;
+            this.profileError = '';
+            this.profileSaved = false;
+            try {
+                await api.put('/api/account/affiliate/profile', this.profile);
+                this.profileSaved = true;
+                setTimeout(() => { this.profileSaved = false; }, 2200);
+            } catch (e) {
+                this.profileError = e.payload?.error || 'Could not save your profile.';
+            } finally { this.profileSaving = false; }
+        },
     },
 };
 </script>
@@ -123,6 +151,57 @@ export default {
                         <ExternalLink class="w-4 h-4" />
                         Open
                     </a>
+                </div>
+            </section>
+
+            <!-- Your profile. Optional, and entirely yours — none of this was
+                 asked for when applying. -->
+            <section class="bg-white border border-gold/15 mb-10">
+                <header class="px-5 py-3 border-b border-gold/10 flex items-center justify-between gap-3">
+                    <h2 class="font-display text-sm tracking-widest uppercase">Your profile</h2>
+                    <button
+                        @click="profileOpen = !profileOpen"
+                        class="text-[10px] tracking-widest uppercase text-black/55 hover:text-gold"
+                    >
+                        {{ profileOpen ? 'Close' : 'Edit' }}
+                    </button>
+                </header>
+
+                <div v-if="profileOpen" class="px-5 py-4 space-y-3">
+                    <p class="text-xs text-black/55">
+                        Optional — add your links and a short bio if you'd like them on record.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <input v-model="profile.instagram" placeholder="Instagram" class="border border-black/15 px-3 py-2 text-sm" />
+                        <input v-model="profile.tiktok" placeholder="TikTok" class="border border-black/15 px-3 py-2 text-sm" />
+                        <input v-model="profile.website" placeholder="Website" class="border border-black/15 px-3 py-2 text-sm" />
+                    </div>
+                    <textarea v-model="profile.bio" rows="3" placeholder="A short bio (optional)" class="w-full border border-black/15 px-3 py-2 text-sm"></textarea>
+
+                    <p v-if="profileError" class="text-sm text-red-600">{{ profileError }}</p>
+
+                    <div class="flex items-center gap-3">
+                        <button
+                            @click="saveProfile"
+                            :disabled="profileSaving"
+                            class="bg-gold text-white px-5 py-2 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-50"
+                        >
+                            {{ profileSaving ? 'Saving' : 'Save profile' }}
+                        </button>
+                        <span v-if="profileSaved" class="text-xs text-emerald-700">Saved ✓</span>
+                    </div>
+                </div>
+
+                <div v-else class="px-5 py-4 text-sm text-black/65">
+                    <template v-if="profile.instagram || profile.tiktok || profile.website || profile.bio">
+                        <p v-if="profile.bio" class="mb-2">{{ profile.bio }}</p>
+                        <p class="text-xs text-black/55">
+                            <span v-if="profile.instagram">{{ profile.instagram }}</span>
+                            <span v-if="profile.tiktok"> · {{ profile.tiktok }}</span>
+                            <span v-if="profile.website"> · {{ profile.website }}</span>
+                        </p>
+                    </template>
+                    <p v-else class="text-black/45">Nothing here yet — add your links if you'd like.</p>
                 </div>
             </section>
 

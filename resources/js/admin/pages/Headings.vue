@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2 } from 'lucide-vue-next';
 
@@ -94,12 +95,12 @@ export default {
             }
         },
         async remove(h) {
-            if (!confirm(`Delete heading "${h.name}"? This also deletes its catalogues.`)) return;
+            if (!await confirmDialog({ title: `Delete heading "${h.name}"? This also deletes its catalogues.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/admin/headings/${h.id}`);
                 await this.fetchAll();
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete.');
+                toast(e.payload?.error || 'Could not delete.', { tone: 'error' });
             }
         },
     },

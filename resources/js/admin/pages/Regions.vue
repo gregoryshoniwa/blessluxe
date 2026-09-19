@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2 } from 'lucide-vue-next';
 
@@ -53,11 +54,11 @@ export default {
             } finally { this.saving = false; }
         },
         async remove(r) {
-            if (!confirm(`Delete region "${r.name}"?`)) return;
+            if (!await confirmDialog({ title: `Delete region "${r.name}"?`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/admin/regions/${r.id}`);
                 await this.fetchAll();
-            } catch (e) { alert(e.payload?.error || 'Could not delete.'); }
+            } catch (e) { toast(e.payload?.error || 'Could not delete.', { tone: 'error' }); }
         },
     },
 };

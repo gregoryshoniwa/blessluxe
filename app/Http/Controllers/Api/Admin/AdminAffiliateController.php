@@ -70,7 +70,19 @@ class AdminAffiliateController extends Controller
             'status'          => ['sometimes', Rule::in(['pending', 'active', 'paused'])],
             'first_name'      => ['sometimes', 'nullable', 'string', 'max:120'],
             'last_name'       => ['sometimes', 'nullable', 'string', 'max:120'],
+            // Codes are assigned automatically on approval; this is the override
+            // for when a name-derived code isn't the one you want.
+            'code'            => [
+                'sometimes', 'string', 'max:60', 'regex:/^[A-Z0-9-]+$/i',
+                Rule::unique('affiliates', 'code')->ignore($a->id),
+            ],
         ]);
+
+        // Codes are shared publicly and land in URLs — normalise so JANE10 and
+        // jane10 can't become two different affiliates.
+        if (isset($data['code'])) {
+            $data['code'] = strtoupper($data['code']);
+        }
         $wasPending = $a->status === 'pending';
         $a->update($data);
 
@@ -78,6 +90,15 @@ class AdminAffiliateController extends Controller
         // application. Send the welcome email + drop a customer-side
         // notification if a matching account exists.
         if ($wasPending && ($data['status'] ?? null) === 'active') {
+            // Applicants choose and reserve their own code, so by now it exists.
+            // Admin-created affiliates may not have one; they can be given a code
+            // via the override field before going active.
+            if (! $a->code) {
+                return response()->json([
+                    'error' => 'This affiliate has no share code yet. Set one before making them active.',
+                ], 422);
+            }
+
             if ($a->email) {
                 try {
                     \Illuminate\Support\Facades\Mail::to($a->email)

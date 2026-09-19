@@ -8,7 +8,12 @@ use App\Models\AffiliateSale;
 use App\Models\Order;
 use App\Models\Package;
 use App\Models\PaymentSession;
+use App\Enums\FulfillmentStatus;
+use App\Enums\PackageStatus;
+use App\Services\Carriers;
 use App\Services\OrderRefunds;
+use App\Services\Shipping;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -50,11 +55,49 @@ class AdminOrderController extends Controller
         ];
     }
 
+    /**
+     * POST /api/admin/orders/{id}/packages
+     *
+     * Create the order's parcel when it has none. `BL-PACK-SMOKE` is the proof this
+     * is needed: package creation runs once at payment, and if it failed or the
+     * order predates it, there was no way back.
+     *
+     * Idempotent via ensurePackagesForOrder.
+     */
+    public function createPackage(string $id)
+    {
+        $order = Order::with('lineItems')->findOrFail($id);
+
+        $ordinaryLines = $order->lineItems->reject(fn ($l) => (bool) ($l->metadata['pack_slot_id'] ?? null));
+        if ($ordinaryLines->isEmpty()) {
+            return response()->json([
+                'error' => 'This order has only pack slots — those ship inside the campaign consignment, not as their own parcel.',
+            ], 422);
+        }
+
+        $packages = Shipping::ensurePackagesForOrder($order);
+
+        return [
+            'packages' => $packages->map(fn ($p) => [
+                'id'           => $p->id,
+                'package_code' => $p->package_code,
+                'status'       => $p->status,
+                'is_pack'      => (bool) $p->is_pack,
+            ])->values(),
+        ];
+    }
+
     /** GET /api/admin/orders/{id} — full detail bundle. */
     public function show(string $id)
     {
         $order = Order::with(['lineItems', 'customer:id,email,first_name,last_name,loyalty_points'])->findOrFail($id);
-        $package = Package::with('events')->where('order_id', $id)->first();
+        $packages = Shipping::packagesForOrder($id);
+        $package = $packages->first()?->load('events');
+        $mySlotIds = DB::table('pack_slots')
+            ->where('order_id', $id)
+            ->whereNull('deleted_at')
+            ->pluck('id')
+            ->all();
         $session = PaymentSession::where('order_id', $id)->first();
         $affiliateSales = AffiliateSale::with('affiliate:id,code,email,commission_rate')
             ->where('order_id', $id)->get();
@@ -93,6 +136,8 @@ class AdminOrderController extends Controller
                     'line_total'    => '$' . number_format(($l->unit_price * $l->quantity) / 100, 2),
                 ]),
             ],
+            // Kept for backwards compatibility with anything still reading a single
+            // package; `packages` below is the one to use.
             'package' => $package ? [
                 'id'           => $package->id,
                 'package_code' => $package->package_code,
@@ -101,6 +146,41 @@ class AdminOrderController extends Controller
                 'shipped_at'   => $package->shipped_at?->toIso8601String(),
                 'delivered_at' => $package->delivered_at?->toIso8601String(),
             ] : null,
+
+            // Every package this order has a stake in: its own parcel, plus any
+            // pack consignment carrying one of its slots.
+            'packages' => $packages->map(fn ($p) => array_merge(
+                Carriers::payload($p->carrier, $p->carrier_tracking_number),
+                [
+                    'id'               => $p->id,
+                    'package_code'     => $p->package_code,
+                    'status'           => $p->status,
+                    'status_label'     => PackageStatus::tryFrom((string) $p->status)?->label(),
+                    'is_pack'          => (bool) $p->is_pack,
+                    'leg'              => $p->leg,
+                    'destination_kind' => $p->destination_kind,
+                    'shipped_at'       => $p->shipped_at?->toIso8601String(),
+                    'delivered_at'     => $p->delivered_at?->toIso8601String(),
+                    'estimated_delivery' => Shipping::estimatedDelivery($p),
+                    // For a consignment, name only THIS order's piece — admin sees
+                    // the full manifest on the package screen, not here.
+                    'our_pieces'       => $p->is_pack
+                        ? $p->items()->whereIn('pack_slot_id', $mySlotIds)->get(['sub_code', 'size_label', 'status'])
+                        : [],
+                    'pack_public_code' => $p->pack_campaign_id
+                        ? DB::table('pack_campaigns')->where('id', $p->pack_campaign_id)->value('public_code')
+                        : null,
+                ],
+            ))->values(),
+
+            'fulfillment' => [
+                'status' => $order->fulfillment_status,
+                'label'  => FulfillmentStatus::tryFrom((string) $order->fulfillment_status)?->label(),
+                // BL-PACK-SMOKE proves this is needed: an order can end up with no
+                // package at all and, until now, no way to recover.
+                'can_create_package' => $packages->where('is_pack', false)->isEmpty()
+                    && $order->lineItems->reject(fn ($l) => (bool) ($l->metadata['pack_slot_id'] ?? null))->isNotEmpty(),
+            ],
             'payment_session' => $session ? [
                 'reference'         => $session->reference,
                 'provider'          => $session->provider,

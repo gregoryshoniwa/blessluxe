@@ -14,10 +14,11 @@
                     <p style="line-height:1.6;color:#444;margin:0 0 16px;">
                         We've received your application to join the BLESSLUXE affiliate programme. Our team reviews new applications within a couple of business days.
                     </p>
+                    {{-- No code exists yet: it is assigned on approval, so promising
+                         a "reserved code" here rendered an empty sentence. --}}
                     <p style="line-height:1.6;color:#444;margin:0 0 16px;">
-                        While we look it over, your reserved code is
-                        <span style="font-family:'Courier New',monospace;color:#B8860B;font-weight:700;">{{ $affiliate->code }}</span>.
-                        Once approved, you'll receive a follow-up email with your dashboard link and a ready-to-share URL.
+                        Once approved, you'll receive a follow-up email with your share code,
+                        your dashboard link and a ready-to-share URL.
                     </p>
                     <p style="font-size:13px;line-height:1.5;color:#666;margin:0;">
                         Questions? Reply to this email or write to <a href="mailto:info@blessluxe.com" style="color:#B8860B;">info@blessluxe.com</a>.

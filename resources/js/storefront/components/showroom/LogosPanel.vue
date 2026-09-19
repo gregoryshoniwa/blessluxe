@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../../lib/api.js';
+import { confirmDialog, toast } from '../../../lib/dialog.js';
 
 /**
  * Show Room → Logos.
@@ -127,13 +128,13 @@ export default {
             }
         },
         async remove(l) {
-            if (!confirm(`Delete "${l.name || 'this logo'}"? This cannot be undone.`)) return;
+            if (!await confirmDialog({ title: `Delete "${l.name || 'this logo'}"? This cannot be undone.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/logos/${l.id}`);
                 this.logos = this.logos.filter((x) => x.id !== l.id);
                 if (this.editing?.id === l.id) this.closeEdit();
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete the logo.');
+                toast(e.payload?.error || 'Could not delete the logo.', { tone: 'error' });
             }
         },
         hasRenderChange() {

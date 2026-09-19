@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 
 export default {
     name: 'AdminUsers',
@@ -53,12 +54,12 @@ export default {
             }
         },
         async remove(u) {
-            if (!confirm(`Delete admin user ${u.email}?`)) return;
+            if (!await confirmDialog({ title: `Delete admin user ${u.email}?`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/admin/users/${u.id}`);
                 await this.load();
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete user.');
+                toast(e.payload?.error || 'Could not delete user.', { tone: 'error' });
             }
         },
     },

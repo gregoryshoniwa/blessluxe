@@ -15,6 +15,7 @@ export default {
             refunding: false,
             refundError: '',
             refundResult: null,
+            creatingPackage: false,
         };
     },
     computed: {
@@ -48,6 +49,15 @@ export default {
             } catch (e) {
                 this.refundError = e.payload?.error || 'Could not record refund.';
             } finally { this.refunding = false; }
+        },
+        async createPackage() {
+            this.creatingPackage = true;
+            try {
+                await api.post(`/api/admin/orders/${this.id}/packages`, {});
+                await this.fetch();
+            } catch (e) {
+                this.error = e.payload?.error || 'Could not create a package for this order.';
+            } finally { this.creatingPackage = false; }
         },
         fmtDate(iso) { return iso ? new Date(iso).toLocaleString() : '—'; },
         addressLine(parts) { return parts.filter(Boolean).join(', '); },
@@ -110,9 +120,7 @@ export default {
             </section>
 
             <section v-if="refundResult" class="bg-emerald-50 border border-emerald-300 p-4 mb-6 text-sm text-emerald-800">
-                Refunded ✓ — restocked {{ Object.keys(refundResult.restocked).length }} variant(s)
-                @if (refundResult.blits_refunded), refunded {{ refundResult.blits_refunded }} Blits @endif
-                @if (refundResult.affiliate_reversed), reversed ${{ (refundResult.affiliate_reversed / 100).toFixed(2) }} in affiliate earnings @endif
+                Refunded ✓ — restocked {{ Object.keys(refundResult.restocked).length }} variant(s)<template v-if="refundResult.blits_refunded">, refunded {{ refundResult.blits_refunded }} Blits</template><template v-if="refundResult.affiliate_reversed">, reversed ${{ (refundResult.affiliate_reversed / 100).toFixed(2) }} in affiliate earnings</template>
             </section>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -170,13 +178,60 @@ export default {
                         <p class="text-sm">{{ addr.country }}</p>
                     </section>
 
-                    <section v-if="data.package" class="bg-white border border-zinc-200 p-4">
-                        <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2 inline-flex items-center gap-1"><Truck class="w-3 h-3" /> Package</p>
-                        <p class="font-mono text-xs text-gold-dark">{{ data.package.package_code }}</p>
-                        <p class="text-sm capitalize">{{ data.package.status.replace(/_/g, ' ') }}</p>
-                        <router-link :to="`/admin/packages`" class="text-xs tracking-widest uppercase text-zinc-500 hover:text-gold mt-2 inline-block">
-                            Open package →
-                        </router-link>
+                    <section class="bg-white border border-zinc-200 p-4">
+                        <p class="text-xs tracking-widest uppercase text-zinc-500 mb-3 inline-flex items-center gap-1">
+                            <Truck class="w-3 h-3" /> Fulfilment
+                            <span v-if="data.fulfillment?.label" class="ml-1 text-[10px] px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 normal-case tracking-normal">
+                                {{ data.fulfillment.label }}
+                            </span>
+                        </p>
+
+                        <div v-if="!data.packages?.length" class="text-sm text-zinc-500">
+                            <p class="mb-3">No package yet.</p>
+                            <!-- Package creation runs once at payment. If it failed,
+                                 there was previously no way back. -->
+                            <button
+                                v-if="data.fulfillment?.can_create_package"
+                                @click="createPackage"
+                                :disabled="creatingPackage"
+                                class="border border-zinc-300 px-3 py-1.5 text-xs tracking-widest uppercase hover:bg-zinc-100 disabled:opacity-40"
+                            >
+                                {{ creatingPackage ? 'Creating…' : 'Create package' }}
+                            </button>
+                        </div>
+
+                        <div v-for="p in data.packages" :key="p.id" class="border-t border-zinc-100 first:border-t-0 py-3 first:pt-0">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <router-link :to="`/admin/packages/${p.id}`" class="font-mono text-xs text-gold-dark hover:underline">
+                                        {{ p.package_code }}
+                                    </router-link>
+                                    <p class="text-sm">{{ p.status_label || p.status }}</p>
+                                </div>
+                                <span v-if="p.is_pack" class="text-[10px] tracking-widest uppercase px-2 py-0.5 bg-gold/15 text-gold-dark shrink-0">Pack</span>
+                            </div>
+
+                            <p v-if="p.is_pack && p.pack_public_code" class="text-xs text-zinc-500 mt-1">
+                                Consignment · <span class="font-mono">{{ p.pack_public_code }}</span>
+                            </p>
+                            <!-- Which piece inside the shared box is THIS order's. -->
+                            <p v-for="piece in p.our_pieces" :key="piece.sub_code" class="text-xs text-zinc-600 mt-1">
+                                This order's piece: <span class="font-mono text-gold-dark">{{ piece.sub_code }}</span>
+                                <span v-if="piece.size_label"> · {{ piece.size_label }}</span>
+                            </p>
+
+                            <p v-if="p.carrier_label" class="text-xs text-zinc-500 mt-1">
+                                {{ p.carrier_label }}
+                                <a v-if="p.carrier_tracking_url" :href="p.carrier_tracking_url" target="_blank" rel="noopener noreferrer" class="font-mono text-gold-dark underline ml-1">
+                                    {{ p.carrier_tracking_number }}
+                                </a>
+                                <span v-else-if="p.carrier_tracking_number" class="font-mono ml-1">{{ p.carrier_tracking_number }}</span>
+                            </p>
+
+                            <router-link :to="`/admin/packages/${p.id}`" class="text-xs tracking-widest uppercase text-zinc-500 hover:text-gold mt-2 inline-block">
+                                Open package →
+                            </router-link>
+                        </div>
                     </section>
 
                     <section v-if="data.payment_session" class="bg-white border border-zinc-200 p-4">

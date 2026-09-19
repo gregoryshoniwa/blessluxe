@@ -65,6 +65,9 @@ class AdminProductController extends Controller
             'description' => $product->description,
             'thumbnail'   => $product->thumbnail,
             'status'      => $product->status,
+            // Decides whether this product attracts a courier fee at all.
+            'sourcing'    => $product->sourcing,
+            'default_courier_id' => $product->default_courier_id,
             'catalogue_ids' => $product->catalogues->pluck('id'),
             'variants'    => $product->variants->map(fn ($v) => [
                 'id'                 => $v->id,
@@ -90,6 +93,10 @@ class AdminProductController extends Controller
             'description'   => ['nullable', 'string'],
             'thumbnail'     => ['nullable', 'string'],
             'status'        => ['nullable', Rule::in(['draft', 'published'])],
+            // 'local' stock is already in Zimbabwe and attracts no courier fee;
+            // 'import' is carried in by a courier the buyer chooses and pays for.
+            'sourcing'      => ['nullable', Rule::in(['local', 'import'])],
+            'default_courier_id' => ['nullable', 'string'],
             'catalogue_ids' => ['nullable', 'array'],
             'catalogue_ids.*' => ['string', 'exists:catalogues,id'],
             'price'         => ['nullable', 'integer', 'min:0'], // cents
@@ -104,6 +111,8 @@ class AdminProductController extends Controller
                 'description' => $data['description'] ?? null,
                 'thumbnail'   => $data['thumbnail']   ?? null,
                 'status'      => $data['status']      ?? 'draft',
+                'sourcing'    => $data['sourcing']    ?? 'local',
+                'default_courier_id' => $data['default_courier_id'] ?? null,
             ]);
             if (! empty($data['catalogue_ids'])) {
                 $product->catalogues()->sync($data['catalogue_ids']);
@@ -139,6 +148,8 @@ class AdminProductController extends Controller
             'description'   => ['sometimes', 'nullable', 'string'],
             'thumbnail'     => ['sometimes', 'nullable', 'string'],
             'status'        => ['sometimes', Rule::in(['draft', 'published'])],
+            'sourcing'      => ['sometimes', Rule::in(['local', 'import'])],
+            'default_courier_id' => ['sometimes', 'nullable', 'string'],
             'catalogue_ids' => ['sometimes', 'array'],
             'catalogue_ids.*' => ['string', 'exists:catalogues,id'],
         ]);

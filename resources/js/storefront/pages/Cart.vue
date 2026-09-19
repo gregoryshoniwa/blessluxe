@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { toast } from '../../lib/dialog.js';
 import { Minus, Plus, Trash2, ArrowRight, Tag, Lock, Truck, RotateCw, Heart } from 'lucide-vue-next';
 
 export default {
@@ -48,7 +49,7 @@ export default {
                 this.cart = data.cart;
                 window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
             } catch (e) {
-                alert(e.payload?.error || 'Could not update quantity.');
+                toast(e.payload?.error || 'Could not update quantity.', { tone: 'error' });
             } finally {
                 this.updating[line.id] = false;
             }

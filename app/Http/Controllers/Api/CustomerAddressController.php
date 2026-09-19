@@ -95,20 +95,34 @@ class CustomerAddressController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'label'                => ['nullable', 'string', 'max:64'],
-            'first_name'           => ['nullable', 'string', 'max:120'],
+            // A courier label needs someone to ask for, and in Zimbabwe drivers
+            // phone ahead rather than hunting for a street number. Both were
+            // nullable, which allowed saving an address nobody could deliver to.
+            'first_name'           => ['required', 'string', 'max:120'],
             'last_name'            => ['nullable', 'string', 'max:120'],
-            'phone'                => ['nullable', 'string', 'max:40'],
+            'phone'                => ['required', 'string', 'max:40'],
             'line1'                => ['required', 'string', 'max:255'],
             'line2'                => ['nullable', 'string', 'max:255'],
             'city'                 => ['required', 'string', 'max:120'],
             'region'               => ['nullable', 'string', 'max:120'],
             'postal_code'          => ['nullable', 'string', 'max:40'],
-            'country'              => ['required', 'string', 'size:2'],
+            // Normalised so "Zimbabwe" typed by a client can't become "ZI".
+            'country'              => ['required', 'string', 'max:60'],
             'is_default_shipping'  => ['nullable', 'boolean'],
             'is_default_billing'   => ['nullable', 'boolean'],
         ]);
+
+        // Accepts an ISO-2 code or a country name; rejects anything we can't place,
+        // rather than storing a truncated guess.
+        $code = \App\Support\Address::countryCode($data['country'] ?? null);
+        if (! $code) {
+            abort(422, 'We could not recognise that country. Please pick one from the list.');
+        }
+        $data['country'] = $code;
+
+        return $data;
     }
 
     private function shape(CustomerAddress $a): array

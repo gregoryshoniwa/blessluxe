@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2 } from 'lucide-vue-next';
 
@@ -54,12 +55,12 @@ export default {
             } finally { this.saving = false; }
         },
         async remove(c) {
-            if (!confirm(`Delete catalogue "${c.name}"? Products will be unlinked.`)) return;
+            if (!await confirmDialog({ title: `Delete catalogue "${c.name}"? Products will be unlinked.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/admin/catalogues/${c.id}`);
                 const d = await api.get('/api/admin/catalogues');
                 this.catalogues = d.catalogues || [];
-            } catch (e) { alert(e.payload?.error || 'Could not delete.'); }
+            } catch (e) { toast(e.payload?.error || 'Could not delete.', { tone: 'error' }); }
         },
     },
 };

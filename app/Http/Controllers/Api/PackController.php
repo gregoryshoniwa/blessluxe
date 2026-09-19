@@ -221,7 +221,7 @@ class PackController extends Controller
             // One cart line per slot — keyed by slot_id, not just variant_id.
             $existing = DB::table('cart_line_items')
                 ->where('cart_id', $cartId)
-                ->whereRaw("JSON_EXTRACT(metadata, '$.pack_slot_id') = ?", [$slot->id])
+                ->where('metadata->pack_slot_id', $slot->id)
                 ->first();
             if (! $existing) {
                 CartLineItem::create([
@@ -273,7 +273,7 @@ class PackController extends Controller
             if ($cartId) {
                 DB::table('cart_line_items')
                     ->where('cart_id', $cartId)
-                    ->whereRaw("JSON_EXTRACT(metadata, '$.pack_slot_id') = ?", [$slot->id])
+                    ->where('metadata->pack_slot_id', $slot->id)
                     ->delete();
             }
         });
@@ -281,8 +281,26 @@ class PackController extends Controller
         return ['ok' => true];
     }
 
-    /** Mark slot(s) paid + link them to an order line item. */
-    public static function markPaidForOrder(string $orderId, array $items): void
+    /**
+     * GET /api/store/couriers
+     *
+     * Public: the options and prices a buyer chooses between for imported stock.
+     * Priced per piece; a basket with no imports gets an empty list, which is the
+     * signal to show no shipping section at all.
+     */
+    public function couriers(Request $request)
+    {
+        $items = max(1, (int) $request->query('items', 1));
+
+        return ['couriers' => \App\Services\Couriers::optionsFor($items)];
+    }
+
+    /**
+     * Mark slot(s) paid + link them to an order line item.
+     *
+     * @param  array<string,string>  $slotLineIds  slot id => order line item id
+     */
+    public static function markPaidForOrder(string $orderId, array $items, array $slotLineIds = []): void
     {
         // $items is the cart_snapshot items array — each may carry
         // metadata.pack_slot_id which we already passed through Paynow's
@@ -296,6 +314,7 @@ class PackController extends Controller
                 ->update([
                     'status'         => 'paid',
                     'order_id'       => $orderId,
+                    'line_item_id'   => $slotLineIds[$slotId] ?? null,
                     'reserved_until' => null,
                     'updated_at'    => now(),
                 ]);
@@ -306,8 +325,11 @@ class PackController extends Controller
             ->pluck('pack_campaign_id')
             ->unique();
         foreach ($touchedCampaigns as $campaignId) {
+            // whereNull('deleted_at') matters: pack_slots is soft-deleting, and a
+            // single removed slot would otherwise keep the campaign from ever filling.
             $unpaid = DB::table('pack_slots')
                 ->where('pack_campaign_id', $campaignId)
+                ->whereNull('deleted_at')
                 ->where('status', '!=', 'paid')
                 ->count();
             if ($unpaid === 0) {
@@ -316,5 +338,9 @@ class PackController extends Controller
                     ->update(['status' => 'filled', 'updated_at' => now()]);
             }
         }
+
+        // A slot going paid — and a campaign filling — both change what the buyer's
+        // order is waiting on, so refresh the derived summary.
+        \App\Services\Shipping::syncOrderFulfillment($orderId);
     }
 }

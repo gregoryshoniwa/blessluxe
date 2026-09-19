@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { confirmDialog } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2, Plus, Image as ImageIcon, Upload } from 'lucide-vue-next';
 
@@ -84,7 +85,7 @@ export default {
             } finally { this.saving = false; }
         },
         async remove(a) {
-            if (!confirm(`Delete this ${a.position} slide?`)) return;
+            if (!await confirmDialog({ title: `Delete this ${a.position} slide?`, confirmLabel: 'Delete', tone: 'danger' })) return;
             await api.del(`/api/admin/announcements/${a.id}`);
             await this.fetchAll();
         },

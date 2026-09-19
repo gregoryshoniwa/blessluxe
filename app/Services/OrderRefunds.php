@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PieceStatus;
 use App\Models\Affiliate;
 use App\Models\AffiliateSale;
 use App\Models\Order;
@@ -100,7 +101,12 @@ class OrderRefunds
 
             // 4. Cancel the package if it hasn't shipped yet; either way,
             //    record a "cancelled" event so /track shows the refund.
-            $packages = Package::where('order_id', $order->id)->get();
+            // is_pack filter is load-bearing. A pack consignment is SHARED by every
+            // buyer in the campaign, so cancelling it here would kill the shipment
+            // for four other people and fire four "your order was returned" emails.
+            // Withdrawing a single buyer's piece is handled separately (Phase 6);
+            // the consignment's own status is never touched by one buyer's refund.
+            $packages = Shipping::packagesForOrder($order)->where('is_pack', false);
             foreach ($packages as $pkg) {
                 if (! $pkg->shipped_at) {
                     Shipping::recordEvent($pkg, 'cancelled', null, $reason ? "Order refunded — {$reason}" : 'Order refunded', 'system');
@@ -109,6 +115,10 @@ class OrderRefunds
                     Shipping::recordEvent($pkg, 'returned', null, $reason ? "Refunded post-ship — {$reason}" : 'Refunded post-ship', 'system');
                 }
             }
+
+            // 4b. Pack slots are withdrawn individually. The shared consignment's
+            //     own status is NEVER changed by one buyer's refund.
+            self::withdrawPackSlots($order, $reason);
 
             // 5. Mark the order itself refunded.
             $metadata = $order->metadata ?: [];
@@ -128,5 +138,67 @@ class OrderRefunds
                 'already_refunded'  => false,
             ];
         });
+    }
+
+    /**
+     * Withdraw this order's pack slots without disturbing anyone else's.
+     *
+     * A leg-1 consignment is shared by every buyer in the campaign. Recording
+     * 'cancelled' on it — which is what would happen if pack packages were treated
+     * like ordinary ones — would cancel four other people's shipment and, once
+     * notifications land, email them all to say their order was returned. So the
+     * consignment's status is left completely alone; only this buyer's piece moves.
+     */
+    private static function withdrawPackSlots(Order $order, ?string $reason): void
+    {
+        $slots = DB::table('pack_slots')
+            ->where('order_id', $order->id)
+            ->whereNull('deleted_at')
+            ->get(['id', 'pack_campaign_id', 'size_label']);
+
+        foreach ($slots as $slot) {
+            $item = DB::table('package_items')->where('pack_slot_id', $slot->id)->first();
+            $consignment = $item ? Package::find($item->package_id) : null;
+
+            // Mark the piece cancelled — never delete it. sub_code positions have to
+            // stay stable; the hub may already hold a printed manifest.
+            if ($item) {
+                DB::table('package_items')->where('id', $item->id)->update([
+                    'status'     => PieceStatus::Cancelled->value,
+                    'updated_at' => now(),
+                ]);
+            }
+
+            // Return the slot to the pool only while the pack can still be changed.
+            if (! $consignment?->shipped_at) {
+                DB::table('pack_slots')->where('id', $slot->id)->update([
+                    'status'         => 'available',
+                    'customer_id'    => null,
+                    'order_id'       => null,
+                    'line_item_id'   => null,
+                    'reserved_until' => null,
+                    'updated_at'     => now(),
+                ]);
+
+                // A campaign that had filled is open again.
+                DB::table('pack_campaigns')
+                    ->where('id', $slot->pack_campaign_id)
+                    ->where('status', 'filled')
+                    ->update(['status' => 'open', 'filled_at' => null, 'updated_at' => now()]);
+            }
+
+            if ($consignment) {
+                // A note on the timeline at the CURRENT status — not a status change,
+                // and silent so no buyer is emailed about someone else's refund.
+                Shipping::recordEvent(
+                    $consignment,
+                    $consignment->status,
+                    null,
+                    trim(($item->sub_code ?? 'A piece') . ' withdrawn — refunded' . ($reason ? " ({$reason})" : '') . '.'),
+                    'system',
+                    silent: true,
+                );
+            }
+        }
     }
 }

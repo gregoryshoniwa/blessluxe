@@ -85,11 +85,19 @@ Route::prefix('store')->group(function () {
         Route::get  ('/affiliate/active',           [AffiliateController::class, 'active']);
         Route::post ('/affiliate/clear',            [AffiliateController::class, 'clear']);
         Route::get  ('/affiliate/dashboard/{code}', [AffiliateController::class, 'dashboard']);
+        // Applying needs a signed-in customer with a payout address; eligibility
+        // tells the form what it already knows so it only asks for the rest.
+        Route::get  ('/affiliate/eligibility',      [AffiliateController::class, 'eligibility']);
+        // Live "is this code free?" while they type, like a username field.
+        Route::get  ('/affiliate/code-available',   [AffiliateController::class, 'codeAvailable']);
         Route::post ('/affiliate/apply',            [AffiliateController::class, 'apply']);
 
         // Pack campaigns (group buy). Reservation needs a logged-in customer,
         // enforced inside the controller so we can return 401 with the
         // SPA-friendly JSON shape.
+        // Courier choices + prices, so a buyer can compare before committing.
+        Route::get  ('/couriers',                             [PackController::class, 'couriers']);
+
         Route::get  ('/packs',                                [PackController::class, 'index']);
         Route::get  ('/packs/{code}',                         [PackController::class, 'show']);
         Route::post ('/packs/{code}/slots/{slotId}/reserve',  [PackController::class, 'reserve']);
@@ -171,8 +179,14 @@ Route::middleware('web')->prefix('account')->group(function () {
 
     // Affiliate (per signed-in customer).
     Route::get ('/affiliate',               [AffiliateController::class, 'mine']);
+    // Links and bio — the affiliate's own to fill in after approval, not part
+    // of applying.
+    Route::put ('/affiliate/profile',       [AffiliateController::class, 'updateProfile']);
 
     // Returns / RMA.
+    // How a pack buyer wants their piece once BLESSLUXE has it.
+    Route::put ('/pack-slots/{slotId}/delivery', [AccountController::class, 'setDeliveryPreference']);
+
     Route::get ('/returns',       [ReturnController::class, 'index']);
     Route::post('/returns',       [ReturnController::class, 'store']);
     Route::get ('/returns/{id}',  [ReturnController::class, 'show']);
@@ -307,10 +321,26 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put ('/packages/{id}',           [AdminPackageController::class, 'update']);
         Route::post('/packages/{id}/events',    [AdminPackageController::class, 'appendEvent']);
 
+        // Handing pieces to buyers: in person (PIN-verified) or onward dispatch.
+        Route::post('/packages/{id}/items/{itemId}/handover', [AdminPackageController::class, 'handover']);
+        Route::post('/packages/{id}/items/{itemId}/dispatch', [AdminPackageController::class, 'dispatchPiece']);
+
+        // Couriers the buyer chooses between, and their rates.
+        Route::get   ('/couriers',              [AdminPackageController::class, 'couriers']);
+        Route::post  ('/couriers',              [AdminPackageController::class, 'storeCourier']);
+        Route::put   ('/couriers/{id}',         [AdminPackageController::class, 'updateCourier']);
+        Route::delete('/couriers/{id}',         [AdminPackageController::class, 'destroyCourier']);
+
+        // Where pack consignments ship to, and where buyers collect from.
+        Route::get ('/fulfilment-settings',     [AdminPackageController::class, 'settings']);
+        Route::put ('/fulfilment-settings',     [AdminPackageController::class, 'updateSettings']);
+
         // Orders + refund flow.
         Route::get ('/orders',                  [AdminOrderController::class, 'index']);
         Route::get ('/orders/{id}',             [AdminOrderController::class, 'show']);
         Route::post('/orders/{id}/refund',      [AdminOrderController::class, 'refund']);
+        // Recovery path for an order that ended up with no parcel.
+        Route::post('/orders/{id}/packages',    [AdminOrderController::class, 'createPackage']);
 
         // Notifications inbox (per-admin).
         Route::get ('/notifications',           [AdminNotificationsController::class, 'index']);

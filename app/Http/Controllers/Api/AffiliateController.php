@@ -7,8 +7,10 @@ use App\Mail\AffiliateApplicationReceivedMail;
 use App\Models\Affiliate;
 use App\Models\AffiliatePayout;
 use App\Models\AffiliateSale;
+use App\Models\CustomerAddress;
 use App\Models\OrderLineItem;
 use App\Services\Notifications;
+use App\Support\Address;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -93,25 +95,192 @@ class AffiliateController extends Controller
     }
 
     /**
+     * GET /api/store/affiliate/eligibility
+     *
+     * What the apply form needs to know before rendering: who the customer is,
+     * whether they already applied, and whether they have somewhere to be paid.
+     * Lets the page ask only for what it genuinely doesn't know.
+     */
+    public function eligibility(Request $request)
+    {
+        $customer = Auth::guard('customer')->user();
+
+        if (! $customer) {
+            return [
+                'signed_in' => false,
+                'eligible'  => false,
+                'reason'    => 'sign_in_required',
+            ];
+        }
+
+        $existing = Affiliate::where('customer_id', $customer->id)
+            ->orWhereRaw('LOWER(email) = ?', [strtolower((string) $customer->email)])
+            ->first();
+
+        $address = $this->payoutAddressFor($customer->id);
+
+        // Distinguish "no address at all" from "an address we can't use". Telling
+        // someone to add an address while they're looking at one is maddening —
+        // and addresses saved from checkout have no name or phone, so this is the
+        // common case, not an edge case.
+        $hasAnyAddress = CustomerAddress::where('customer_id', $customer->id)->exists();
+
+        return [
+            'signed_in' => true,
+            'customer'  => [
+                'first_name' => $customer->first_name,
+                'last_name'  => $customer->last_name,
+                'email'      => $customer->email,
+            ],
+            'has_address'    => (bool) $address,
+            'address'        => $address ? Address::normalize($address->toArray()) : null,
+            'already_applied' => (bool) $existing,
+            'existing'       => $existing ? [
+                'code'   => $existing->code,
+                'status' => $existing->status,
+            ] : null,
+            'has_any_address' => $hasAnyAddress,
+            'eligible' => ! $existing && (bool) $address,
+            'reason'   => $existing
+                ? 'already_applied'
+                : ($address ? null : ($hasAnyAddress ? 'address_incomplete' : 'address_required')),
+        ];
+    }
+
+    /**
+     * The address commission gets paid to.
+     *
+     * Requires a name and a street — orders.shipping_address carries neither, so a
+     * shipping snapshot can never stand in for this.
+     */
+    private function payoutAddressFor(string $customerId): ?object
+    {
+        return CustomerAddress::where('customer_id', $customerId)
+            ->whereNotNull('line1')
+            ->where('line1', '!=', '')
+            ->whereNotNull('city')
+            ->where('city', '!=', '')
+            ->where(fn ($q) => $q->whereNotNull('first_name')->orWhereNotNull('last_name'))
+            ->orderByDesc('is_default_shipping')
+            ->first();
+    }
+
+    /**
+     * GET /api/store/affiliate/code-available?code=JANE10
+     *
+     * Live availability while they type, the way a username field works. Signed-in
+     * only — a public endpoint would let anyone enumerate every affiliate code.
+     */
+    public function codeAvailable(Request $request)
+    {
+        if (! Auth::guard('customer')->user()) {
+            return response()->json(['error' => 'Sign in first.'], 401);
+        }
+
+        $raw    = (string) $request->query('code', '');
+        $code   = Affiliate::normalizeCode($raw);
+        $reason = Affiliate::codeUnavailableReason($code);
+
+        return [
+            'code'        => $code,
+            'available'   => $reason === null,
+            'reason'      => $reason,
+            // Only worth suggesting alternatives when the code was well-formed
+            // and simply gone — not when they're mid-word or used a bad character.
+            'suggestions' => $reason === 'Already taken.' ? Affiliate::suggestCodes($code) : [],
+        ];
+    }
+
+    /**
+     * PUT /api/account/affiliate/profile
+     *
+     * An affiliate's own profile: their links and a short bio. Deliberately not
+     * part of the application — none of it is needed to decide, and asking for it
+     * up front made applying feel like an interview.
+     *
+     * Scoped to the signed-in owner; an affiliate can only edit their own.
+     */
+    public function updateProfile(Request $request)
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) {
+            return response()->json(['error' => 'Sign in first.'], 401);
+        }
+
+        $affiliate = Affiliate::where('customer_id', $customer->id)->first();
+        if (! $affiliate) {
+            return response()->json(['error' => 'You are not an affiliate yet.'], 404);
+        }
+
+        $data = $request->validate([
+            'bio'       => ['nullable', 'string', 'max:1000'],
+            'instagram' => ['nullable', 'string', 'max:255'],
+            'tiktok'    => ['nullable', 'string', 'max:255'],
+            'website'   => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Merge rather than replace, so a partial save can't wipe the rest.
+        $affiliate->update([
+            'metadata' => array_merge($affiliate->metadata ?? [], array_filter(
+                $data,
+                fn ($v) => $v !== null,
+            )),
+        ]);
+
+        return ['profile' => $affiliate->fresh()->metadata];
+    }
+
+    /**
      * POST /api/store/affiliate/apply
      *
-     * Public — anyone can apply. We auto-generate a CODE from their name
-     * (or a random fallback). The new row lands in `status=pending` and
-     * an admin approves it from /admin/affiliates.
+     * Signed-in customers only. Name and email come from the account rather than
+     * the form — asking a logged-in person to retype what we already hold is both
+     * friction and a way for the two records to disagree.
+     *
+     * A complete address is required because commission has to be paid somewhere,
+     * and chasing it after approval is worse than asking for it now.
      */
     public function apply(Request $request)
     {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) {
+            return response()->json([
+                'error'  => 'Please sign in to apply — your affiliate account is tied to your BLESSLUXE account.',
+                'reason' => 'sign_in_required',
+            ], 401);
+        }
+
+        // The one thing we genuinely can't know: what they want to be called.
+        // Everything else comes from the account. Nullable here so the checks
+        // below can run in order of how hard they are to fix — being told to pick
+        // another code is useless if you also have to go and add an address.
         $data = $request->validate([
-            'first_name' => ['required', 'string', 'max:120'],
-            'last_name'  => ['nullable', 'string', 'max:120'],
-            'email'      => ['required', 'email', 'max:255'],
-            'desired_code' => ['nullable', 'string', 'max:60', 'regex:/^[A-Z0-9-]+$/i'],
-            'audience'   => ['nullable', 'string', 'max:1000'],
-            'social'     => ['nullable', 'string', 'max:255'],
+            'code' => ['nullable', 'string', 'max:' . Affiliate::CODE_MAX],
         ]);
 
-        $email = strtolower(trim($data['email']));
-        $existing = Affiliate::where('email', $email)->first();
+        // Identity comes from the account, never the request body.
+        $email = strtolower(trim((string) $customer->email));
+        $data['first_name'] = $customer->first_name ?: 'Affiliate';
+        $data['last_name']  = $customer->last_name;
+
+        $address = $this->payoutAddressFor($customer->id);
+        if (! $address) {
+            $hasAnyAddress = CustomerAddress::where('customer_id', $customer->id)->exists();
+
+            return response()->json([
+                'error' => $hasAnyAddress
+                    ? 'Your saved address is missing a recipient name or phone number. Add those and we can pay your commission there.'
+                    : 'Add a delivery address to your account first — we need somewhere to send your commission.',
+                'reason' => $hasAnyAddress ? 'address_incomplete' : 'address_required',
+            ], 422);
+        }
+
+        // Match on the customer OR the email, so an older email-only row still
+        // blocks a duplicate application.
+        $existing = Affiliate::where('customer_id', $customer->id)
+            ->orWhereRaw('LOWER(email) = ?', [$email])
+            ->first();
+
         if ($existing) {
             return response()->json([
                 'error' => $existing->status === 'pending'
@@ -120,30 +289,39 @@ class AffiliateController extends Controller
             ], 409);
         }
 
-        // Generate a code: caller's desired_code if available, else
-        // FIRSTNAME10-style auto-pick, with a numeric suffix on collision.
-        $base = strtoupper(preg_replace('/[^A-Z0-9]/', '', $data['desired_code'] ?? $data['first_name']));
-        $base = substr($base, 0, 12) ?: 'AFF';
-        $code = $base;
-        $n = 2;
-        while (Affiliate::where('code', $code)->exists()) {
-            $code = $base . $n;
-            $n++;
-            if ($n > 999) { $code = $base . strtoupper(Str::random(4)); break; }
+        // Code last: by now we know they can actually apply, so a code error is
+        // the only thing standing between them and being done.
+        //
+        // Re-checked server-side even though the form checked live — someone else
+        // may have taken it in the seconds since, and the client can be bypassed.
+        $code = Affiliate::normalizeCode($data['code'] ?? '');
+        if ($reason = Affiliate::codeUnavailableReason($code)) {
+            return response()->json([
+                'error'       => $reason === 'Already taken.'
+                    ? "Someone just took {$code}. Pick another."
+                    : $reason,
+                'reason'      => 'code_unavailable',
+                'suggestions' => Affiliate::suggestCodes($code),
+            ], 422);
         }
 
         $affiliate = Affiliate::create([
             'id'              => 'aff_' . Str::random(16),
+            'customer_id'     => $customer->id,
+            // Held from the moment they apply. A live "available!" check that
+            // doesn't reserve would be a lie — someone could lose the code they
+            // just watched turn green.
             'code'            => $code,
             'email'           => $email,
             'first_name'      => $data['first_name'],
             'last_name'       => $data['last_name'] ?? null,
             'commission_rate' => 10,
             'status'          => 'pending',
-            'metadata'        => [
-                'audience' => $data['audience'] ?? null,
-                'social'   => $data['social']   ?? null,
-            ],
+            // Snapshotted, so editing the address book later cannot silently
+            // redirect a payout.
+            'payout_address'  => Address::normalize($address->toArray()),
+            // Links and bio are the affiliate's own to add later, from their profile.
+            'metadata'        => [],
         ]);
 
         // Acknowledge to the applicant + notify the team. Both wrapped so
@@ -156,15 +334,17 @@ class AffiliateController extends Controller
         Notifications::forAllAdmins(
             kind:      'affiliate_application',
             title:     'New affiliate application',
-            body:      "{$affiliate->first_name} ({$affiliate->email}) — code {$affiliate->code}",
+            body:      "{$affiliate->first_name} ({$affiliate->email})",
             actionUrl: '/admin/affiliates',
         );
 
         return [
             'affiliate' => [
-                'code'   => $affiliate->code,
-                'email'  => $affiliate->email,
-                'status' => $affiliate->status,
+                // Null until approval — the confirmation screen no longer claims a
+                // code has been reserved.
+                'code'           => $affiliate->code,
+                'email'          => $affiliate->email,
+                'status'         => $affiliate->status,
             ],
         ];
     }
@@ -279,6 +459,8 @@ class AffiliateController extends Controller
             'affiliate' => [
                 'code'             => $affiliate->code,
                 'name'             => trim(($affiliate->first_name ?? '') . ' ' . ($affiliate->last_name ?? '')) ?: $affiliate->code,
+                // The affiliate's own links and bio, added after approval.
+                'metadata'         => $affiliate->metadata ?? [],
                 'status'           => $affiliate->status,
                 'commission_rate'  => (float) $affiliate->commission_rate,
             ],

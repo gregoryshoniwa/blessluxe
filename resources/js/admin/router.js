@@ -16,6 +16,10 @@ const routes = [
     { path: '/admin/blits',      name: 'admin-blits',     component: () => import('./pages/Blits.vue') },
     { path: '/admin/packs',      name: 'admin-packs',     component: () => import('./pages/Packs.vue') },
     { path: '/admin/packages',   name: 'admin-packages',  component: () => import('./pages/Packages.vue') },
+    // Package detail was pure component state, so it could not be linked to —
+    // which is why the order screen linked to the list instead.
+    { path: '/admin/packages/:id', name: 'admin-package-detail', component: () => import('./pages/Packages.vue') },
+    { path: '/admin/couriers',   name: 'admin-couriers',  component: () => import('./pages/Couriers.vue') },
     { path: '/admin/orders',     name: 'admin-orders',         component: () => import('./pages/Orders.vue') },
     { path: '/admin/orders/:id', name: 'admin-order-detail',   component: () => import('./pages/OrderDetail.vue') },
     { path: '/admin/content',    name: 'admin-content',   component: () => import('./pages/Content.vue') },

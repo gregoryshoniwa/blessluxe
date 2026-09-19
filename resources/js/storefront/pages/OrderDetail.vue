@@ -1,9 +1,17 @@
 <script>
 import { api } from '../../lib/api.js';
+import { addressLines } from '../../lib/address.js';
+import ShipmentProgress from '../components/tracking/ShipmentProgress.vue';
+import ShipmentTimeline from '../components/tracking/ShipmentTimeline.vue';
+import TrackingSummary from '../components/tracking/TrackingSummary.vue';
+import PackageContents from '../components/tracking/PackageContents.vue';
+import PackFillMeter from '../components/tracking/PackFillMeter.vue';
+import DeliveryChoice from '../components/tracking/DeliveryChoice.vue';
 
 export default {
     name: 'OrderDetailPage',
-    data() { return { order: null, loading: true, error: '' }; },
+    components: { ShipmentProgress, ShipmentTimeline, TrackingSummary, PackageContents, PackFillMeter, DeliveryChoice },
+    data() { return { order: null, loading: true, error: '', addresses: [] }; },
     async mounted() { await this.load(); },
     watch: {
         '$route.params.number'() { this.load(); },
@@ -15,6 +23,13 @@ export default {
             try {
                 const data = await api.get(`/api/account/orders/${encodeURIComponent(this.$route.params.number)}`);
                 this.order = data.order;
+                // Only needed when the buyer might choose delivery over collection.
+                if (this.order.pack?.delivery?.length && !this.addresses.length) {
+                    try {
+                        const a = await api.get('/api/account/addresses');
+                        this.addresses = a.addresses || [];
+                    } catch { this.addresses = []; }
+                }
             } catch (e) {
                 if (e.status === 401) {
                     this.$router.replace(`/account/login?next=${encodeURIComponent(this.$route.fullPath)}`);
@@ -26,16 +41,9 @@ export default {
             }
         },
         fmtDate(iso) { return iso ? new Date(iso).toLocaleString() : '—'; },
-        addressLines(a) {
-            if (!a) return [];
-            return [
-                [a.first_name, a.last_name].filter(Boolean).join(' '),
-                a.line1,
-                a.line2,
-                [a.city, a.region, a.postal_code].filter(Boolean).join(', '),
-                a.country,
-            ].filter(Boolean);
-        },
+        // Orders store {address1, province}; this used to read only {line1, region},
+        // so the panel rendered blank. The shared helper accepts both shapes.
+        addressLines,
     },
 };
 </script>
@@ -64,6 +72,8 @@ export default {
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-[10px] tracking-widest uppercase px-3 py-1 bg-cream-dark/60">{{ order.status }}</span>
                     <span v-if="order.payment_status === 'paid'" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-emerald-100 text-emerald-700">Paid</span>
+                    <!-- Payment and fulfilment answer different questions — show both. -->
+                    <span v-if="order.fulfillment_label" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-gold/15 text-gold-dark">{{ order.fulfillment_label }}</span>
                     <router-link v-if="order.tracking_code" :to="`/track/${order.tracking_code}`" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-gold text-white hover:bg-gold-dark transition-colors">
                         Track →
                     </router-link>
@@ -112,14 +122,69 @@ export default {
                         <p v-for="(line, i) in addressLines(order.shipping_address)" :key="i" class="text-sm text-black/75">{{ line }}</p>
                     </div>
 
-                    <div v-if="order.tracking_code">
-                        <h2 class="font-display text-sm tracking-widest uppercase mb-2">Tracking</h2>
-                        <p class="text-xs text-black/55">Code <span class="font-mono">{{ order.tracking_code }}</span></p>
-                        <p v-if="order.carrier" class="text-xs text-black/55">Carrier {{ order.carrier }}</p>
-                        <p v-if="order.tracking_number" class="text-xs text-black/55">Ref <span class="font-mono">{{ order.tracking_number }}</span></p>
-                    </div>
+                    <PackFillMeter v-if="order.pack" :pack="order.pack" class="-mx-6 px-6 md:mx-0 md:px-5" />
                 </aside>
             </div>
+
+            <!-- One card per piece this buyer owns in the pack. -->
+            <section v-if="order.pack?.delivery?.length" class="mt-6 space-y-6">
+                <DeliveryChoice
+                    v-for="d in order.pack.delivery"
+                    :key="d.slot_id"
+                    :delivery="d"
+                    :addresses="addresses"
+                    @updated="load"
+                />
+            </section>
+
+            <!-- Shipments. Previously this whole area was three lines of text; the
+                 anonymous /track page showed the customer more than their own
+                 account did. One block per package, so a split shipment or a pack
+                 consignment reads as its own journey. -->
+            <section v-if="order.shipments?.length" class="mt-6 space-y-6">
+                <article
+                    v-for="s in order.shipments"
+                    :key="s.code"
+                    class="bg-white border border-gold/10 p-6"
+                >
+                    <header class="flex items-end justify-between gap-4 flex-wrap mb-5">
+                        <div>
+                            <h2 class="font-display text-sm tracking-widest uppercase">
+                                {{ s.is_pack ? 'Pack consignment' : 'Shipment' }}
+                            </h2>
+                            <p class="font-mono text-xs text-gold-dark mt-1">{{ s.code }}</p>
+                        </div>
+                        <router-link
+                            :to="`/track/${s.code}`"
+                            class="text-[10px] tracking-widest uppercase px-3 py-1 border border-black/15 hover:border-gold hover:text-gold transition-colors"
+                        >
+                            Full tracking →
+                        </router-link>
+                    </header>
+
+                    <ShipmentProgress
+                        :progress-index="s.progress_index"
+                        :is-failure="s.is_failure"
+                        :status-label="s.status_label"
+                        :awaiting-pack="order.fulfillment_status === 'awaiting_pack'"
+                    />
+
+                    <div class="mt-6">
+                        <TrackingSummary :shipment="s" />
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gold/10">
+                        <div>
+                            <h3 class="font-display text-sm tracking-widest uppercase text-gold mb-3">In this shipment</h3>
+                            <PackageContents :items="s.items" />
+                        </div>
+                        <div>
+                            <h3 class="font-display text-sm tracking-widest uppercase text-gold mb-3">Activity</h3>
+                            <ShipmentTimeline :events="s.events" />
+                        </div>
+                    </div>
+                </article>
+            </section>
         </div>
     </div>
 </template>

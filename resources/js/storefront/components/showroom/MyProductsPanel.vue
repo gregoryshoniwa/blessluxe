@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../../lib/api.js';
+import { confirmDialog, toast } from '../../../lib/dialog.js';
 
 /**
  * Show Room → My Products.
@@ -127,13 +128,13 @@ export default {
             }
         },
         async remove(p) {
-            if (!confirm(`Delete "${p.name || 'this product'}"? This cannot be undone.`)) return;
+            if (!await confirmDialog({ title: `Delete "${p.name || 'this product'}"? This cannot be undone.`, confirmLabel: 'Delete', tone: 'danger' })) return;
             try {
                 await api.del(`/api/account/my-products/${p.id}`);
                 this.products = this.products.filter((x) => x.id !== p.id);
                 if (this.editing?.id === p.id) this.closeEdit();
             } catch (e) {
-                alert(e.payload?.error || 'Could not delete the product.');
+                toast(e.payload?.error || 'Could not delete the product.', { tone: 'error' });
             }
         },
         hasRenderChange() {

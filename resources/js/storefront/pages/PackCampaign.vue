@@ -1,10 +1,10 @@
 <script>
 import { api } from '../../lib/api.js';
-import { Clock, Lock, Check, X, ArrowRight, Sparkles } from 'lucide-vue-next';
+import { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles } from 'lucide-vue-next';
 
 export default {
     name: 'PackCampaign',
-    components: { Clock, Lock, Check, X, ArrowRight, Sparkles },
+    components: { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles },
     data() {
         return {
             data: null,
@@ -22,7 +22,9 @@ export default {
         campaign() { return this.data?.campaign || null; },
         slots() { return this.data?.slots || []; },
         totals() { return this.data?.totals || { total: 0, available: 0, reserved: 0, paid: 0 }; },
-        myReservedSlot() { return this.slots.find((s) => s.is_mine); },
+        // Paid slots keep their customer_id, so is_mine stays true after checkout —
+        // only a live reservation counts as "holding".
+        myReservedSlot() { return this.slots.find((s) => s.is_mine && s.status === 'reserved'); },
     },
     async mounted() {
         await Promise.all([this.fetch(), this.fetchMe()]);
@@ -158,10 +160,10 @@ export default {
                         <p class="text-xs text-black/55">Size {{ slot.size_label || slot.variant.title }}</p>
                         <p class="text-sm font-semibold mt-1">{{ slot.variant.price_label || '—' }}</p>
 
-                        <!-- State badges -->
-                        <div class="mt-2 flex items-center gap-1 text-[10px] tracking-widest uppercase">
+                        <!-- State badge + actions share one row; actions sit flush right -->
+                        <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tracking-widest uppercase">
                             <span v-if="slot.status === 'paid'" class="bg-emerald-100 text-emerald-700 px-2 py-0.5 inline-flex items-center gap-1">
-                                <Check class="w-3 h-3" /> Paid
+                                <Check class="w-3 h-3" /> {{ slot.is_mine ? 'Yours · Paid' : 'Paid' }}
                             </span>
                             <span v-else-if="slot.status === 'reserved' && !slot.is_mine" class="bg-amber-100 text-amber-700 px-2 py-0.5 inline-flex items-center gap-1">
                                 <Lock class="w-3 h-3" /> Held
@@ -171,26 +173,41 @@ export default {
                                 Yours · <Clock class="w-3 h-3" /> {{ formatSeconds(secondsLeft(slot)) }}
                             </span>
                             <span v-else class="bg-emerald-50 text-emerald-700 px-2 py-0.5">Available</span>
-                        </div>
 
-                        <!-- Actions -->
-                        <div class="mt-3">
-                            <button
-                                v-if="slot.status === 'available' && campaign.status === 'open'"
-                                @click="reserve(slot)"
-                                :disabled="actingOnSlotId === slot.id"
-                                class="w-full bg-gold text-white px-3 py-1.5 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1"
-                            >
-                                {{ actingOnSlotId === slot.id ? 'Reserving…' : 'Reserve' }}
-                                <ArrowRight v-if="actingOnSlotId !== slot.id" class="w-3 h-3" />
-                            </button>
-                            <div v-else-if="slot.is_mine" class="flex gap-1">
-                                <router-link to="/cart" class="flex-1 text-center bg-gold text-white px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase hover:bg-gold-dark">
-                                    Checkout
-                                </router-link>
-                                <button @click="release(slot)" :disabled="actingOnSlotId === slot.id" class="border border-black/15 px-3 py-1.5 text-[10px] tracking-widest uppercase hover:border-red-300 hover:text-red-600 disabled:opacity-50" title="Drop the hold">
-                                    <X class="w-3 h-3" />
+                            <div class="ml-auto shrink-0 flex items-center gap-1">
+                                <button
+                                    v-if="slot.status === 'available' && campaign.status === 'open'"
+                                    @click="reserve(slot)"
+                                    :disabled="actingOnSlotId === slot.id"
+                                    :title="actingOnSlotId === slot.id ? 'Reserving…' : 'Reserve this slot'"
+                                    :aria-label="actingOnSlotId === slot.id ? 'Reserving…' : 'Reserve this slot'"
+                                    class="w-7 h-7 inline-flex items-center justify-center bg-gold text-white hover:bg-gold-dark transition-colors disabled:opacity-50"
+                                >
+                                    <LoaderCircle v-if="actingOnSlotId === slot.id" class="w-3.5 h-3.5 animate-spin" />
+                                    <Plus v-else class="w-3.5 h-3.5" />
                                 </button>
+
+                                <!-- Only a live reservation can be checked out or released. -->
+                                <template v-else-if="slot.is_mine && slot.status === 'reserved'">
+                                    <router-link
+                                        to="/cart"
+                                        title="Check out this slot"
+                                        aria-label="Check out this slot"
+                                        class="w-7 h-7 inline-flex items-center justify-center bg-gold text-white hover:bg-gold-dark transition-colors"
+                                    >
+                                        <ShoppingBag class="w-3.5 h-3.5" />
+                                    </router-link>
+                                    <button
+                                        @click="release(slot)"
+                                        :disabled="actingOnSlotId === slot.id"
+                                        title="Release this slot"
+                                        aria-label="Release this slot"
+                                        class="w-7 h-7 inline-flex items-center justify-center border border-black/15 text-black/55 hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-50"
+                                    >
+                                        <LoaderCircle v-if="actingOnSlotId === slot.id" class="w-3.5 h-3.5 animate-spin" />
+                                        <X v-else class="w-3.5 h-3.5" />
+                                    </button>
+                                </template>
                             </div>
                         </div>
                     </div>

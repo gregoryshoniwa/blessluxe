@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Check, X, MessageSquareReply } from 'lucide-vue-next';
 
@@ -31,7 +32,7 @@ export default {
             try {
                 await api.put(`/api/admin/reviews/${r.id}`, { status });
                 r.status = status;
-            } catch (e) { alert(e.payload?.error || 'Could not update.'); }
+            } catch (e) { toast(e.payload?.error || 'Could not update.', { tone: 'error' }); }
         },
         startReply(r) {
             this.replying = r; this.response = r.admin_response || ''; this.error = '';

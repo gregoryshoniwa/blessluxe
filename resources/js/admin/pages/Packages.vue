@@ -1,11 +1,26 @@
 <script>
 import { api } from '../../lib/api.js';
+import { toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
+import { statusOptions } from '../../lib/shipping.js';
 import { ExternalLink, ArrowLeft, Plus, Truck } from 'lucide-vue-next';
 
 export default {
     name: 'AdminPackages',
     components: { IconButton, ExternalLink, ArrowLeft, Plus, Truck },
+    computed: {
+        // Single source of truth, mirrored from App\Enums\PackageStatus.
+        statusOptions() { return statusOptions(); },
+        // True once the admin picks "Other…" or the stored value isn't a registry key.
+        carrierIsOther() {
+            if (this.carrier === '__other__') return true;
+            if (!this.carrier) return false;
+            return !this.carriers.some((c) => c.value === this.carrier);
+        },
+        // 'created' is set by the system when a package is minted; an admin
+        // appending it by hand would rewind the package's status.
+        eventStatusOptions() { return statusOptions().filter((s) => s.value !== 'created'); },
+    },
     data() {
         return {
             tab: 'list',
@@ -22,11 +37,33 @@ export default {
             error: '',
             carrier: '', tracking_number: '', estimated_delivery_at: '', notes: '',
             newEvent: this.emptyEvent(),
+            carriers: [],
         };
     },
-    mounted() { this.fetchAll(); },
+    async mounted() {
+        this.loadCarriers();
+        // /admin/packages/:id opens straight into detail, so the screen is linkable
+        // from the order page and shareable between staff.
+        if (this.$route.params.id) {
+            this.open({ id: this.$route.params.id });
+        } else {
+            this.fetchAll();
+        }
+    },
+    watch: {
+        '$route.params.id'(id) {
+            if (id) this.open({ id });
+            else { this.selected = null; this.tab = 'list'; this.fetchAll(); }
+        },
+    },
     methods: {
         emptyEvent() { return { status: 'shipped', location: '', notes: '' }; },
+        async loadCarriers() {
+            try {
+                const d = await api.get('/api/admin/fulfilment-settings');
+                this.carriers = d.carriers || [];
+            } catch { this.carriers = []; }
+        },
         async fetchAll() {
             this.loading = true;
             try {
@@ -49,10 +86,14 @@ export default {
                 this.notes = d.package.notes || '';
                 this.tab = 'detail';
             } catch (e) {
-                alert(e.payload?.error || 'Could not open package.');
+                toast(e.payload?.error || 'Could not open package.', { tone: 'error' });
             }
         },
-        back() { this.selected = null; this.tab = 'list'; this.error = ''; this.fetchAll(); },
+        back() {
+            this.selected = null; this.tab = 'list'; this.error = '';
+            if (this.$route.params.id) this.$router.push('/admin/packages');
+            else this.fetchAll();
+        },
         publicUrl(code) {
             if (typeof window === 'undefined') return '';
             return `${window.location.origin}/track/${code}`;
@@ -106,15 +147,7 @@ export default {
                 <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code, order #, email…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
                 <select v-model="statusFilter" @change="page = 1; fetchAll()" class="border border-zinc-300 px-3 py-2 text-sm">
                     <option value="">All statuses</option>
-                    <option value="created">Created</option>
-                    <option value="picked">Picked</option>
-                    <option value="packed">Packed</option>
-                    <option value="shipped">Shipped</option>
-                    <option value="in_transit">In transit</option>
-                    <option value="out_for_delivery">Out for delivery</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="returned">Returned</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </select>
                 <button @click="page = 1; fetchAll()" class="border border-zinc-300 px-4 py-2 text-xs tracking-widest uppercase hover:bg-zinc-100">Search</button>
             </div>
@@ -197,11 +230,37 @@ export default {
                 </div>
             </section>
 
+            <!-- Dispatching a consignment to a blank address loses the goods with no
+                 way to trace them. The server enforces this too (422). -->
+            <div v-if="selected.is_pack && !selected.can_dispatch" class="bg-amber-50 border border-amber-300 text-sm text-amber-800 p-4 mb-6">
+                <strong>Set the BLESSLUXE hub address before dispatching.</strong>
+                This consignment has no destination, so it cannot be marked shipped.
+            </div>
+
             <!-- Carrier form -->
             <section class="bg-white border border-zinc-200 p-5 mb-6">
                 <h2 class="font-semibold mb-3">Carrier details</h2>
                 <div class="grid grid-cols-2 gap-3">
-                    <input v-model="carrier" placeholder="Carrier (e.g. ups, fedex, dhl, manual)" class="border border-zinc-300 px-3 py-2" />
+                    <!-- A registry key gives the customer a clickable tracking link.
+                         Free text still works for anything not listed. -->
+                    <div>
+                        <select v-if="!carrierIsOther" v-model="carrier" class="border border-zinc-300 px-3 py-2 w-full">
+                            <option value="">No carrier</option>
+                            <option v-for="c in carriers" :key="c.value" :value="c.value">
+                                {{ c.label }}{{ c.has_url ? '' : ' (no online tracking)' }}
+                            </option>
+                            <option value="__other__">Other…</option>
+                        </select>
+                        <input
+                            v-else
+                            v-model="carrier"
+                            placeholder="Carrier name"
+                            class="border border-zinc-300 px-3 py-2 w-full"
+                        />
+                        <button v-if="carrierIsOther" @click="carrier = ''" class="text-[10px] tracking-widest uppercase text-zinc-500 hover:text-gold mt-1">
+                            ← Pick from list
+                        </button>
+                    </div>
                     <input v-model="tracking_number" placeholder="Carrier tracking number" class="border border-zinc-300 px-3 py-2 font-mono" />
                     <input v-model="estimated_delivery_at" type="datetime-local" class="border border-zinc-300 px-3 py-2" />
                     <input v-model="notes" placeholder="Internal notes" class="border border-zinc-300 px-3 py-2" />
@@ -216,24 +275,45 @@ export default {
 
             <!-- Items -->
             <section v-if="selected.items?.length" class="bg-white border border-zinc-200 mb-6">
-                <header class="px-5 py-3 border-b border-zinc-200">
-                    <h2 class="font-semibold">Contents</h2>
+                <header class="px-5 py-3 border-b border-zinc-200 flex items-center justify-between gap-3 flex-wrap">
+                    <h2 class="font-semibold">{{ selected.is_pack ? 'Manifest' : 'Contents' }}</h2>
+                    <p v-if="selected.pack" class="text-xs text-zinc-500">
+                        <span class="font-mono text-gold-dark">{{ selected.pack.public_code }}</span>
+                        · {{ selected.pack.slots_paid }} of {{ selected.pack.slots_total }} slots
+                    </p>
                 </header>
                 <table class="w-full text-sm">
                     <thead class="bg-zinc-50 text-xs tracking-widest uppercase text-zinc-500">
                         <tr>
+                            <th v-if="selected.is_pack" class="px-5 py-2 text-left">Piece</th>
                             <th class="px-5 py-2 text-left">Item</th>
-                            <th class="px-5 py-2 text-left">SKU</th>
+                            <th v-if="selected.is_pack" class="px-5 py-2 text-left">Buyer order</th>
+                            <th v-if="selected.is_pack" class="px-5 py-2 text-left">State</th>
+                            <th v-else class="px-5 py-2 text-left">SKU</th>
                             <th class="px-5 py-2 text-right">Qty</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="i in selected.items" :key="i.id" class="border-t border-zinc-100">
+                        <tr
+                            v-for="i in selected.items"
+                            :key="i.id"
+                            class="border-t border-zinc-100"
+                            :class="i.status === 'cancelled' ? 'opacity-50' : ''"
+                        >
+                            <!-- The code a buyer presents to collect their piece. -->
+                            <td v-if="selected.is_pack" class="px-5 py-2 font-mono text-xs text-gold-dark">{{ i.sub_code || '—' }}</td>
                             <td class="px-5 py-2">
                                 <p>{{ i.product_title }}</p>
-                                <p v-if="i.variant_title" class="text-xs text-zinc-500">{{ i.variant_title }}</p>
+                                <p v-if="i.size_label || i.variant_title" class="text-xs text-zinc-500">{{ i.size_label || i.variant_title }}</p>
                             </td>
-                            <td class="px-5 py-2 font-mono text-xs">{{ i.sku || '—' }}</td>
+                            <td v-if="selected.is_pack" class="px-5 py-2 font-mono text-xs">{{ i.buyer_order_number || '—' }}</td>
+                            <td v-if="selected.is_pack" class="px-5 py-2">
+                                <span class="text-[10px] tracking-widest uppercase px-2 py-0.5 rounded"
+                                      :class="i.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-600'">
+                                    {{ i.piece_label || i.status }}
+                                </span>
+                            </td>
+                            <td v-else class="px-5 py-2 font-mono text-xs">{{ i.sku || '—' }}</td>
                             <td class="px-5 py-2 text-right">×{{ i.quantity }}</td>
                         </tr>
                     </tbody>
@@ -249,14 +329,7 @@ export default {
                     <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2 inline-flex items-center gap-1"><Plus class="w-3 h-3" /> Append event</p>
                     <div class="grid grid-cols-3 gap-2">
                         <select v-model="newEvent.status" class="border border-zinc-300 px-3 py-2 text-sm">
-                            <option value="picked">Picked</option>
-                            <option value="packed">Packed</option>
-                            <option value="shipped">Shipped</option>
-                            <option value="in_transit">In transit</option>
-                            <option value="out_for_delivery">Out for delivery</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="returned">Returned</option>
-                            <option value="cancelled">Cancelled</option>
+                            <option v-for="s in eventStatusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                         </select>
                         <input v-model="newEvent.location" placeholder="Location (optional)" class="border border-zinc-300 px-3 py-2 text-sm" />
                         <input v-model="newEvent.notes" placeholder="Notes (optional)" class="border border-zinc-300 px-3 py-2 text-sm" />

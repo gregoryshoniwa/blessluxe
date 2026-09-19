@@ -36,7 +36,7 @@ class CheckOrderStatusTool extends AiTool
             ->first();
         if (! $order) return $this->fail('No order found with that number on your account.');
 
-        $package = Package::query()->where('order_id', $order->id)->first();
+        $package = \App\Services\Shipping::packagesForOrder($order)->first();
         return $this->ok([
             'order_number'   => $order->order_number,
             'status'         => $order->status,

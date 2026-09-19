@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\PackController;
+use App\Services\PackForwarding;
 use App\Mail\AffiliateSaleMail;
 use App\Mail\OrderReceiptMail;
 use App\Models\Affiliate;
@@ -295,13 +296,25 @@ class PaynowController extends Controller
             'raw_ipn_payload'    => json_encode($fields),
         ]);
 
-        if ($classified === 'paid' && ! $session->order_id) {
-            $this->createOrderFromSession($session->fresh());
+        // ─── Discriminate on session kind ──────────────────────────────────
+        // A forwarding fee is a payment with NO order behind it. Without this
+        // branch it would fall into createOrderFromSession and mint a second
+        // Order whose total is the shipping fee — earning Blits on it and
+        // potentially accruing affiliate commission. The kind check is what
+        // keeps shipping money out of the sales ledger entirely.
+        if ($classified === 'paid') {
+            if ($session->kind === PackForwarding::SESSION_KIND) {
+                PackForwarding::markFeePaid($session->fresh());
+            } elseif (! $session->order_id) {
+                $this->createOrderFromSession($session->fresh());
+            }
         }
 
         // Refund any debited Blits when the payment ends up cancelled/failed.
         // Guarded against double-refund via session.metadata.blits_refunded.
-        if (in_array($classified, ['cancelled', 'failed'], true)) {
+        // Only order sessions ever debit Blits, so a forwarding fee must not
+        // take this path.
+        if ($session->kind === 'order' && in_array($classified, ['cancelled', 'failed'], true)) {
             $fresh = PaymentSession::find($session->id);
             $snap  = $fresh?->cart_snapshot ?? [];
             $blitsDebited = (int) ($snap['blits_debited'] ?? 0);
@@ -357,11 +370,16 @@ class PaynowController extends Controller
                 ],
             ]);
 
+            // slot id => line id, so pack slots can be linked back to the exact line
+            // they became. Without this the pack↔order link is lost at checkout.
+            $slotLineIds = [];
+
             foreach ($items as $it) {
                 $variant = ProductVariant::with('product')->find($it['variant_id']);
                 if (! $variant) continue;
+                $lineId = 'line_' . Str::random(20);
                 OrderLineItem::create([
-                    'id'            => 'line_' . Str::random(20),
+                    'id'            => $lineId,
                     'order_id'      => $orderId,
                     'variant_id'    => $variant->id,
                     'product_id'    => $variant->product_id,
@@ -372,7 +390,13 @@ class PaynowController extends Controller
                     'quantity'      => (int) $it['quantity'],
                     'unit_price'    => (int) $it['unit_price'],
                     'unit_cost'     => $variant->cost_price,
+                    // Carries pack_slot_id / pack_campaign_id / affiliate_code through
+                    // from the cart line. Previously dropped here.
+                    'metadata'      => $it['metadata'] ?? null,
                 ]);
+                if ($slotId = ($it['metadata']['pack_slot_id'] ?? null)) {
+                    $slotLineIds[$slotId] = $lineId;
+                }
                 // Decrement inventory if it's tracked, and flag the
                 // variant for a post-commit low-stock notification.
                 if ($variant->manage_inventory) {
@@ -422,7 +446,7 @@ class PaynowController extends Controller
             }
 
             // ─── Pack slots: flip reserved → paid for any pack-attributed line. ─
-            PackController::markPaidForOrder($orderId, $items);
+            PackController::markPaidForOrder($orderId, $items, $slotLineIds);
 
             // ─── Blits earn on paid order ─────────────────────────────
             // Earn is computed on the *charged* amount (after the discount
@@ -452,7 +476,9 @@ class PaynowController extends Controller
             if ($order) {
                 // Mint the package + initial event before sending the
                 // receipt so the email can include the tracking code.
-                Shipping::ensurePackageForOrder($order->load('lineItems'));
+                // Pack lines join their campaign's shared consignment; ordinary
+                // lines get the order's own parcel. An order may produce both.
+                Shipping::ensurePackagesForOrder($order->load('lineItems'));
                 if ($order->email) {
                     Mail::to($order->email)->send(new OrderReceiptMail($order->fresh()));
                 }
@@ -533,6 +559,11 @@ class PaynowController extends Controller
     /** Idempotent: skip if a row with the same line1 + city already exists. */
     private function saveAddressToCustomerBook(string $customerId, array $addr): void
     {
+        // Checkout posts {address1, province, country: "Zimbabwe"}; this table wants
+        // {line1, region, country: "ZW"}. Reading the raw keys meant $line1 was always
+        // '' and this method returned early on every single checkout, which is why
+        // customer_addresses had no rows at all.
+        $addr  = \App\Support\Address::normalize($addr);
         $line1 = trim((string) ($addr['line1'] ?? ''));
         $city  = trim((string) ($addr['city']  ?? ''));
         if ($line1 === '' || $city === '') return;
@@ -555,7 +586,7 @@ class PaynowController extends Controller
             'city'                => $city,
             'region'              => $addr['region']      ?? null,
             'postal_code'         => $addr['postal_code'] ?? null,
-            'country'             => strtoupper(substr((string) ($addr['country'] ?? 'ZW'), 0, 2)),
+            'country'             => $addr['country'] ?? 'ZW',
             'is_default_shipping' => ! $hasAny,
             'is_default_billing'  => ! $hasAny,
         ]);

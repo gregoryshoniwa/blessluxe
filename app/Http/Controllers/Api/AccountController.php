@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\FulfillmentStatus;
 use App\Http\Controllers\Controller;
 use App\Mail\PasswordResetMail;
 use App\Mail\VerifyEmailMail;
@@ -10,6 +11,8 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\Package;
+use App\Services\PackForwarding;
+use App\Services\Shipping;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -127,11 +130,11 @@ class AccountController extends Controller
             ->where('customer_id', $customer->id)
             ->orderByDesc('created_at')
             ->limit(50)
-            ->get(['id', 'order_number', 'total', 'currency_code', 'status', 'payment_status', 'created_at']);
+            ->get(['id', 'order_number', 'total', 'currency_code', 'status', 'payment_status', 'fulfillment_status', 'created_at']);
 
-        $packageCodes = Package::query()
-            ->whereIn('order_id', $orders->pluck('id'))
-            ->pluck('package_code', 'order_id');
+        // Resolves pack orders too: their tracking lives on the shared consignment,
+        // which carries no order_id of its own.
+        $packageCodes = collect(Shipping::trackingCodeMap($orders->pluck('id')));
 
         return [
             'orders' => $orders->map(fn ($o) => [
@@ -139,6 +142,10 @@ class AccountController extends Controller
                 'total_label'    => '$' . number_format($o->total / 100, 2),
                 'status'         => $o->status,
                 'payment_status' => $o->payment_status,
+                // Payment and fulfilment answer different questions; the list used
+                // to show only the first, so "paid" looked the same as "delivered".
+                'fulfillment_status' => $o->fulfillment_status,
+                'fulfillment_label'  => FulfillmentStatus::tryFrom((string) $o->fulfillment_status)?->label(),
                 'tracking_code'  => $packageCodes->get($o->id),
                 'created_at'     => $o->created_at?->toIso8601String(),
             ]),
@@ -253,7 +260,45 @@ class AccountController extends Controller
         if (! $order) abort(response()->json(['error' => 'Not found.'], 404));
 
         $items = OrderLineItem::query()->where('order_id', $order->id)->get();
-        $package = Package::query()->where('order_id', $order->id)->first();
+        $package = Shipping::packagesForOrder($order)->first();
+
+        // This buyer's slots. Everything pack-related below is scoped to these, so
+        // a shared consignment can never leak another buyer's pieces.
+        $mySlots = DB::table('pack_slots')
+            ->where('order_id', $order->id)
+            ->whereNull('deleted_at')
+            ->get(['id', 'pack_campaign_id', 'size_label', 'status']);
+        $mySlotIds = $mySlots->pluck('id');
+
+        // Pack progress: fill COUNTS only. Never names, emails or other buyers'
+        // items — the buyer needs to know what their order is waiting on, not who
+        // else is in the drop.
+        $packContext = null;
+        if ($campaignId = $mySlots->first()?->pack_campaign_id) {
+            $campaign = DB::table('pack_campaigns')->where('id', $campaignId)->first();
+            $slotStats = DB::table('pack_slots')
+                ->where('pack_campaign_id', $campaignId)
+                ->whereNull('deleted_at')
+                ->selectRaw("COUNT(*) as total, SUM(status = 'paid') as paid")
+                ->first();
+
+            $packContext = [
+                'public_code'    => $campaign?->public_code,
+                'title'          => $campaign?->title,
+                'status'         => $campaign?->status,
+                'slots_total'    => (int) ($slotStats->total ?? 0),
+                'slots_paid'     => (int) ($slotStats->paid ?? 0),
+                'ships_when_full'=> $campaign?->status === 'open',
+                'your_items'     => $mySlots->map(fn ($s) => [
+                    'slot_id'    => $s->id,
+                    'size_label' => $s->size_label,
+                    'status'     => $s->status,
+                ])->values(),
+                // How this buyer gets their piece once BLESSLUXE has collected the
+                // consignment from the courier.
+                'delivery'       => $mySlots->map(fn ($s) => PackForwarding::quoteFor($s->id))->values(),
+            ];
+        }
 
         return [
             'order' => [
@@ -283,9 +328,77 @@ class AccountController extends Controller
                 ]),
                 'tracking_code'    => $package?->package_code,
                 'carrier'          => $package?->carrier,
-                'tracking_number'  => $package?->tracking_number,
+                'tracking_number'  => $package?->carrier_tracking_number,
+
+                'fulfillment_status' => $order->fulfillment_status,
+                'fulfillment_label'  => FulfillmentStatus::tryFrom((string) $order->fulfillment_status)?->label(),
+
+                // The customer's own order page used to show LESS than the anonymous
+                // /track page — no status, no events, no ETA. Full shipments now.
+                // Pack consignment contents are filtered to this buyer's slots
+                // server-side; sub_codes are included because the caller is
+                // authenticated as the buyer who owns them.
+                'shipments' => Shipping::packagesForOrder($order)
+                    ->map(fn ($p) => Shipping::shipmentPayload(
+                        $p,
+                        $p->is_pack ? $mySlotIds->all() : null,
+                        includeSubCodes: true,
+                    ))
+                    ->values(),
+
+                'pack' => $packContext,
             ],
         ];
+    }
+
+    /**
+     * PUT /api/account/pack-slots/{slotId}/delivery
+     *
+     * How the buyer wants their piece once BLESSLUXE has it: collect in person
+     * (free, default) or pay to have it forwarded. Changeable at any time until
+     * admin dispatches or hands the piece over.
+     */
+    public function setDeliveryPreference(Request $request, string $slotId)
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) return response()->json(['error' => 'Sign in first.'], 401);
+
+        // Scope to the owner — a slot id must never be enough on its own.
+        $slot = DB::table('pack_slots')->where('id', $slotId)->where('customer_id', $customer->id)->first();
+        if (! $slot) return response()->json(['error' => 'That slot is not on your account.'], 404);
+
+        $data = $request->validate([
+            'preference' => ['required', 'in:collect,forward'],
+            'address_id' => ['nullable', 'string'],
+            'address'    => ['nullable', 'array'],
+            'courier_id' => ['nullable', 'string'],
+        ]);
+
+        // A saved address wins over a posted one; it is the shape that can be labelled.
+        $address = $data['address'] ?? null;
+        if (! empty($data['address_id'])) {
+            $saved = DB::table('customer_addresses')
+                ->where('id', $data['address_id'])
+                ->where('customer_id', $customer->id)
+                ->first();
+            if (! $saved) return response()->json(['error' => 'That address is not on your account.'], 404);
+            $address = array_merge((array) $saved, ['id' => $saved->id]);
+        }
+
+        try {
+            return [
+                'delivery' => PackForwarding::setPreference(
+                    $slotId,
+                    $data['preference'],
+                    $address,
+                    $data['courier_id'] ?? null,
+                ),
+                // Priced for one piece, so the buyer can compare before committing.
+                'courier_options' => \App\Services\Couriers::optionsFor(1),
+            ];
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     /**
