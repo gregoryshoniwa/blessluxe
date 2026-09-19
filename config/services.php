@@ -36,10 +36,13 @@ return [
     ],
 
     // OAuth (Socialite) — Google sign-in for storefront customers.
+    // The callback follows APP_URL unless GOOGLE_REDIRECT_URI overrides it, so
+    // each environment gets the right host (and https behind Cloudflare).
     'google' => [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect'      => env('GOOGLE_REDIRECT_URI', '/api/account/oauth/google/callback'),
+        'redirect'      => env('GOOGLE_REDIRECT_URI')
+            ?: rtrim((string) env('APP_URL'), '/') . '/api/account/oauth/google/callback',
     ],
 
 ];
