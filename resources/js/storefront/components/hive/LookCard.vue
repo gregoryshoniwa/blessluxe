@@ -3,7 +3,7 @@ import { api } from '../../../lib/api.js';
 import { confirmDialog, toast, toastError } from '../../../lib/dialog.js';
 import { hiveStore, timeAgo, occasionLabel, whatsappShare } from '../../hive-store.js';
 import LookComments from './LookComments.vue';
-import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play } from 'lucide-vue-next';
+import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink } from 'lucide-vue-next';
 
 /**
  * One look: who, the photos, what she's wearing, and the three things you can
@@ -16,7 +16,7 @@ import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, Me
  */
 export default {
     name: 'LookCard',
-    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play },
+    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink },
     props: {
         look: { type: Object, required: true },
         // On someone's own page the author row is repetition.
@@ -26,7 +26,7 @@ export default {
     },
     emits: ['removed', 'report'],
     data() {
-        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null };
+        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false };
     },
     computed: {
         when() { return timeAgo(this.look.created_at); },
@@ -138,8 +138,33 @@ export default {
 
         <!-- The photos. Double-tap to heart, swipe for more. -->
         <div class="relative bg-cream-dark">
+            <!-- A post on another platform. Nothing is requested from that platform
+                 until the tap: it costs data, and they will see the visit. The
+                 frame's address was built by our server, never typed by a member. -->
+            <div v-if="look.embed" :class="[look.embed.shape === 'wide' ? 'aspect-video' : look.embed.shape === 'tall' ? 'aspect-[9/16] max-h-[44rem] mx-auto' : 'aspect-[4/5]', 'w-full bg-black']">
+                <iframe
+                    v-if="loaded"
+                    :src="look.embed.url"
+                    :title="`${look.embed.label} post shared by ${look.author.display_name}`"
+                    class="w-full h-full border-0 bg-white"
+                    loading="lazy"
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write"
+                    allowfullscreen
+                ></iframe>
+                <button v-else @click="loaded = true" class="relative block w-full h-full text-white" :aria-label="`Load this ${look.embed.label} post`">
+                    <img v-if="look.images[0]" :src="look.images[0]" alt="" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover opacity-55" />
+                    <span v-else class="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black"></span>
+                    <span class="relative flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+                        <span class="w-16 h-16 rounded-full bg-black/55 flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
+                        <span class="text-sm font-medium drop-shadow">Tap to load from {{ look.embed.label }}</span>
+                        <span class="text-[11px] text-white/75 drop-shadow max-w-[16rem]">Uses your data. {{ look.embed.label }} will know you viewed it.</span>
+                    </span>
+                </button>
+            </div>
             <!-- Video: a cover with its size until tapped; then the clip, with controls. -->
-            <div v-if="look.video" class="aspect-[4/5] bg-black">
+            <div v-else-if="look.video" class="aspect-[4/5] bg-black">
                 <video v-if="playing" ref="video" :src="look.video.url" :poster="look.images[0]" controls playsinline loop preload="auto" class="w-full h-full object-contain bg-black"></video>
                 <button v-else @click="play" class="relative block w-full h-full" :aria-label="`Play video, ${look.video.size_label || ''}`">
                     <img :src="look.images[0]" :alt="look.caption || `Video by ${look.author.display_name}`" loading="lazy" decoding="async" class="w-full h-full object-cover" />
@@ -165,10 +190,14 @@ export default {
                 </div>
             </div>
             <Heart v-if="burst" class="absolute inset-0 m-auto w-24 h-24 text-white fill-white drop-shadow-lg pointer-events-none animate-ping" />
-            <div v-if="!look.video && look.images.length > 1" class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
+            <div v-if="!look.video && !look.embed && look.images.length > 1" class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
                 <span v-for="(s, i) in look.images" :key="i" :class="['w-1.5 h-1.5 rounded-full transition-colors', i === slide ? 'bg-white' : 'bg-white/45']"></span>
             </div>
         </div>
+
+        <a v-if="look.embed" :href="look.embed.source" target="_blank" rel="noopener nofollow" class="flex items-center gap-1.5 px-3.5 py-2 bg-cream/70 border-b border-black/5 text-[11px] text-black/55 hover:text-gold-dark">
+            <ExternalLink class="w-3.5 h-3.5" /> From {{ look.embed.label }} · open it there
+        </a>
 
         <!-- Ordered vs got: only ever shown for a real, paid purchase. -->
         <div v-if="look.try_on" class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 bg-cream/70 border-b border-black/5 text-xs">

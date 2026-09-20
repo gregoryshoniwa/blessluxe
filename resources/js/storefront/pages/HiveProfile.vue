@@ -247,8 +247,9 @@ export default {
                 </div>
                 <div v-else class="grid grid-cols-3 gap-1">
                     <button v-for="l in looks" :key="l.id" @click="open = l" class="relative aspect-[4/5] bg-cream-dark overflow-hidden group" :aria-label="l.caption || 'Open look'">
-                        <img :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
-                        <Play v-if="l.video" class="absolute top-2 right-2 w-4 h-4 text-white fill-white drop-shadow" />
+                        <img v-if="l.images[0]" :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+                        <span v-else class="absolute inset-0 bg-gradient-to-br from-zinc-700 to-black text-white flex flex-col items-center justify-center gap-1.5 text-[11px]"><Play class="w-5 h-5 fill-white" /> {{ l.embed?.label }}</span>
+                        <Play v-if="l.video || l.embed" class="absolute top-2 right-2 w-4 h-4 text-white fill-white drop-shadow" />
                         <Images v-else-if="l.images.length > 1" class="absolute top-2 right-2 w-4 h-4 text-white drop-shadow" />
                         <ShoppingBag v-if="l.refs.length" class="absolute bottom-2 left-2 w-4 h-4 text-white drop-shadow" />
                     </button>

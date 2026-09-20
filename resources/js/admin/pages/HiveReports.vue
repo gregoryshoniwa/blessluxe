@@ -99,6 +99,7 @@ export default {
                     </p>
                     <p v-if="s.talk?.text" class="text-sm text-zinc-800 mt-1 break-words">“{{ s.talk.text }}”</p>
                     <a v-if="s.look?.video_url" :href="s.look.video_url" target="_blank" rel="noopener" class="inline-block mt-1 text-xs underline underline-offset-2">▶ This look is a video — watch it</a>
+                    <a v-if="s.look?.embed" :href="s.look.embed.source" target="_blank" rel="noopener" class="inline-block mt-1 text-xs underline underline-offset-2">↗ This look is a {{ s.look.embed.label }} post — open it</a>
                     <p v-if="s.look?.caption" class="text-sm text-zinc-600 mt-1 break-words">“{{ s.look.caption }}”</p>
 
                     <ul class="mt-3 space-y-1.5">

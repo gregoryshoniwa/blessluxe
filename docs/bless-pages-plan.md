@@ -185,10 +185,11 @@ Bless Pages for everyone (profile, follow, photo Looks tagged to products — re
 Ask (polls, occasion boards, accepted answers); ranked feed; notifications; tap-to-play clips with the data label; creator earnings dashboard; weekly Bees challenges.
 - **Built (20 Sep 2026):** Ask — questions, *which one?* photo votes (tally hidden until you vote), answers that tag shop pieces, accepted answers that pay 25 Bees with anti-farming caps; Activity (hearts, comments, follows, answers, Bees earned); occasion filters on the feed.
 - **Added later on 20 Sep 2026:** weekly Bees challenges (staff create, judge and pay) · "Earned" statement on every page.
-- **Added 20 Sep 2026 (late):** ranked "For you" feed · tap-to-play clips (≤30s, shrunk to 480p on the poster's phone, size shown before playing). Video costs **no monthly service fee** — clips live in the existing bucket at ~$0.02/GB; 10,000 clips of ~2 MB ≈ 20 GB ≈ $0.40/month. **Phase 2 is feature-complete**; the gate (1,000 weekly actives, answers under an hour) is now about people, not code.
+- **Added 20 Sep 2026 (late):** ranked "For you" feed · tap-to-play clips (≤30s, shrunk to 480p on the poster's phone, size shown before playing). Video costs **no monthly service fee** — clips live in the existing bucket at ~$0.02/GB; 10,000 clips of ~2 MB ≈ 20 GB ≈ $0.40/month. Looks can also be **links**: YouTube/TikTok/Instagram/Facebook posts shown in a tap-to-load frame, or a picture copied in from its address. **Phase 2 is feature-complete**; the gate (1,000 weekly actives, answers under an hour) is now about people, not code.
 - **Gate:** 1,000 weekly actives · questions answered in under 1 hour · measurable lift in conversion for shoppers who use Fit or Ask.
 
 ### Phase 3 — Trusted sellers + Closet · 8–10 weeks
+**Decided 20 Sep 2026:** a seller is an **approved affiliate** — no separate seller sign-up or verification track. **Commission and payment are the existing affiliate process** — same commission rates, same Paynow checkout, same payouts. Phase 3 adds nothing new to how money moves; it adds trust signals and seller-facing features on top of affiliates.
 Verified tailors/designers/runners with held payment and PIN collection; deadlines and dispute handling; resale, starting with kidswear and uniforms.
 - **Gate:** 50 verified sellers · dispute rate under 3% · commission covers the platform's running cost.
 

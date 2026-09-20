@@ -374,6 +374,8 @@ class Hive
                 'url' => $l->video_url, 'seconds' => (int) $l->video_seconds,
                 'size_label' => $l->video_bytes ? (($mb = $l->video_bytes / 1048576) >= 1 ? number_format($mb, 1) . ' MB' : max(1, (int) round($l->video_bytes / 1024)) . ' KB') : null,
             ] : null,
+            // A post on another platform, framed only after a tap. The address is built by us.
+            'embed'      => HiveEmbeds::present($l->embed_provider ?? null, $l->embed_ref ?? null),
             'try_on'     => ! empty($l->line_item_id) ? ['fit' => $l->fit, 'size_worn' => $l->size_worn, 'rating' => $l->rating ? (int) $l->rating : null] : null,
             'challenge_id' => $l->challenge_id ?? null,
             'won'        => ! empty($l->won_at),

@@ -30,7 +30,7 @@ class AdminHiveController extends Controller
 
         $looks = DB::table('hive_looks as l')->join('hive_profiles as p', 'p.customer_id', '=', 'l.customer_id')
             ->whereIn('l.id', $rows->where('subject_type', 'look')->pluck('subject_id')->unique())
-            ->get(['l.id', 'l.caption', 'l.images', 'l.video_url', 'l.status', 'l.reports_count', 'p.handle'])->keyBy('id');
+            ->get(['l.id', 'l.caption', 'l.images', 'l.video_url', 'l.embed_provider', 'l.embed_ref', 'l.status', 'l.reports_count', 'p.handle'])->keyBy('id');
         $pages = DB::table('hive_profiles')->whereIn('customer_id', $rows->where('subject_type', 'page')->pluck('subject_id')->unique())
             ->get(['customer_id', 'handle', 'display_name', 'suspended_at'])->keyBy('customer_id');
 
@@ -55,7 +55,7 @@ class AdminHiveController extends Controller
                 return [
                     'id' => $r->id, 'reason' => $r->reason, 'note' => $r->note, 'status' => $r->status,
                     'created_at' => \Illuminate\Support\Carbon::parse($r->created_at, config('app.timezone'))->toIso8601String(), 'reporter' => $r->reporter_handle, 'subject_type' => $r->subject_type,
-                    'look' => $look ? ['id' => $look->id, 'caption' => $look->caption, 'images' => json_decode((string) $look->images, true) ?: [], 'video_url' => $look->video_url,
+                    'look' => $look ? ['id' => $look->id, 'caption' => $look->caption, 'images' => json_decode((string) $look->images, true) ?: [], 'video_url' => $look->video_url, 'embed' => \App\Services\HiveEmbeds::present($look->embed_provider, $look->embed_ref),
                         'status' => $look->status, 'reports' => (int) $look->reports_count, 'author' => $look->handle] : null,
                     'talk' => $talk["{$r->subject_type}:{$r->subject_id}"] ?? null,
                     'page' => $page ? ['handle' => $page->handle, 'display_name' => $page->display_name, 'suspended' => (bool) $page->suspended_at] : null,

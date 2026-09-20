@@ -241,6 +241,7 @@ Route::middleware('web')->prefix('account')->group(function () {
         Route::get   ('/tryons/eligible',    [HiveController::class, 'eligibleTryOns']);
         Route::get   ('/earnings',           [HiveController::class, 'earnings']);
         Route::get   ('/mentions',           [HiveController::class, 'mentions'])->middleware('throttle:hive-read');
+        Route::post  ('/links/inspect',      [HiveController::class, 'inspectLink'])->middleware('throttle:hive-talk');
         Route::post  ('/looks',              [HiveController::class, 'storeLook'])->middleware('throttle:hive-post');
         Route::delete('/looks/{id}',         [HiveController::class, 'destroyLook']);
         Route::post  ('/looks/{id}/like',    [HiveController::class, 'like'])->middleware('throttle:hive-tap');

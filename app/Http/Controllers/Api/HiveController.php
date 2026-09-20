@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Affiliate;
 use App\Services\Hive;
+use App\Services\HiveEmbeds;
 use App\Services\HiveRewards;
 use App\Services\HiveTalk;
 use App\Services\Media;
 use App\Services\MessageRefs;
+use App\Services\RemoteImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -178,7 +180,11 @@ class HiveController extends Controller
         $me = $this->mustBeMember();
 
         $data = $request->validate([
-            'images'   => ['required', 'array', 'min:1', 'max:' . Hive::MAX_IMAGES],
+            // A look is photos (uploaded and/or copied from links), OR one clip, OR one post from another platform.
+            'images'       => ['required_without_all:image_urls,embed_url', 'array', 'max:' . Hive::MAX_IMAGES],
+            'image_urls'   => ['nullable', 'array', 'max:' . Hive::MAX_IMAGES],
+            'image_urls.*' => ['string', 'max:2000', 'starts_with:https://'],
+            'embed_url'    => ['nullable', 'string', 'max:500'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
             'caption'  => ['nullable', 'string', 'max:500'],
             'occasion' => ['nullable', Rule::in(Hive::OCCASIONS)],
@@ -193,13 +199,27 @@ class HiveController extends Controller
             'size_worn'    => ['nullable', 'string', 'max:24'],
             'rating'       => ['nullable', 'integer', 'between:1,5'],
         ], [
-            'images.required' => 'Add at least one photo.', 'fit.required_with' => 'Tell people how it fits.',
+            'images.required_without_all' => 'Add a photo, a video or a link.', 'fit.required_with' => 'Tell people how it fits.',
             'video.max' => 'That clip is too large — keep it under ' . (int) (Hive::VIDEO_MAX_BYTES / 1048576) . ' MB.',
             'video.mimetypes' => 'Videos need to be MP4, MOV or WebM.',
             'video_seconds.between' => 'Clips can be up to ' . Hive::VIDEO_MAX_SECONDS . ' seconds.',
         ]);
-        if ($request->hasFile('video') && count($request->file('images')) !== 1) {
+        $files = $request->file('images') ?? [];
+        $links = array_values(array_unique($data['image_urls'] ?? []));
+        if ($request->hasFile('video') && (count($files) !== 1 || $links)) {
             return response()->json(['errors' => ['images' => ['A video look has one cover image.']]], 422);
+        }
+        if (count($files) + count($links) > Hive::MAX_IMAGES) {
+            return response()->json(['errors' => ['images' => ['A look can have up to ' . Hive::MAX_IMAGES . ' photos.']]], 422);
+        }
+
+        $embed = null;
+        if (! empty($data['embed_url'])) {
+            $embed = HiveEmbeds::parse($data['embed_url']);
+            if (! $embed) return response()->json(['errors' => ['embed_url' => ["We can show posts from YouTube, TikTok, Instagram and Facebook. Check the link and try again."]]], 422);
+            if ($request->hasFile('video') || $files || $links) return response()->json(['errors' => ['embed_url' => ['Share the link on its own — or upload, but not both.']]], 422);
+            // "Ordered vs got" has to be the buyer's own picture, not somebody's reel.
+            if (! empty($data['line_item_id'])) return response()->json(['errors' => ['embed_url' => ['A try-on needs your own photo or video.']]], 422);
         }
 
         $line = null;
@@ -219,16 +239,25 @@ class HiveController extends Controller
         if ($line) array_unshift($raw, ['type' => 'product', 'id' => $line->product_id]);
         $refs = MessageRefs::resolve($raw, Affiliate::where('customer_id', $me->customer_id)->first(), false);
 
-        $urls = array_map(fn ($f) => Media::upload($f, "hive/looks/{$me->customer_id}"), $request->file('images'));
+        $dir = "hive/looks/{$me->customer_id}";
+        $urls = array_map(fn ($f) => Media::upload($f, $dir), $files);
+        try {
+            foreach ($links as $link) $urls[] = RemoteImage::import($link, $dir);
+        } catch (\RuntimeException $e) {
+            foreach ($urls as $u) Media::delete($u);              // don't keep half a look
+            return response()->json(['errors' => ['image_urls' => [$e->getMessage()]]], 422);
+        }
+        if ($embed && ($cover = HiveEmbeds::cover($embed['provider'], $embed['ref'], $dir))) $urls[] = $cover;
         $video = $request->file('video');
         $videoUrl = $video ? Media::upload($video, "hive/looks/{$me->customer_id}") : null;
 
         $id = 'look_' . Str::ulid();
-        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge, $video, $videoUrl) {
+        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge, $video, $videoUrl, $embed) {
             DB::table('hive_looks')->insert([
                 'id' => $id, 'customer_id' => $me->customer_id,
                 'caption' => ($c = trim(strip_tags((string) ($data['caption'] ?? '')))) === '' ? null : $c,
                 'images' => json_encode($urls), 'refs' => $refs ? json_encode($refs) : null,
+                'embed_provider' => $embed['provider'] ?? null, 'embed_ref' => $embed['ref'] ?? null,
                 'video_url' => $videoUrl, 'video_bytes' => $video?->getSize(),
                 'video_seconds' => $video ? (int) round((float) $data['video_seconds']) : null,
                 'occasion' => $data['occasion'] ?? null, 'status' => 'published',
@@ -306,6 +335,33 @@ class HiveController extends Controller
             $request->query('q'),
             (int) $request->query('page', 1),
         );
+    }
+
+    /**
+     * POST /api/account/hive/links/inspect { url } — what would this link become?
+     * Recognised platforms answer at once. Anything else is treated as a picture
+     * and only vetted here (is it a public https address?); the copy itself is
+     * made when the look is posted, so abandoned drafts leave no files behind.
+     */
+    public function inspectLink(Request $request)
+    {
+        $this->mustBeMember(requireAdult: false);
+        $url = trim((string) $request->validate(['url' => ['required', 'string', 'max:2000']])['url']);
+
+        if ($embed = HiveEmbeds::parse($url)) {
+            return ['kind' => 'embed', 'embed' => HiveEmbeds::present($embed['provider'], $embed['ref'])];
+        }
+        // A platform's PAGE isn't a picture, and copying it would just fail later with a vaguer message.
+        if (preg_match('~^https://([\w-]+\.)*(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.watch)/~i', $url)) {
+            return response()->json(['error' => "We couldn't read that link. Open the post, tap Share → Copy link, and paste that."], 422);
+        }
+        try {
+            RemoteImage::vet($url);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return ['kind' => 'image', 'url' => $url];
     }
 
     /** DELETE /api/account/hive/looks/{id} — the owner takes their look down. */

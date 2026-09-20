@@ -5,7 +5,7 @@ import { resizeImage } from '../../../lib/image-resize.js';
 import { prepareClip, megabytes } from '../../../lib/video-compress.js';
 import { hiveStore, occasionLabel } from '../../hive-store.js';
 import MentionPicker from '../../../components/MentionPicker.vue';
-import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play } from 'lucide-vue-next';
+import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink } from 'lucide-vue-next';
 
 const MAX_IMAGES = 4;
 const MAX_REFS = 6;
@@ -19,7 +19,7 @@ const MAX_REFS = 6;
  */
 export default {
     name: 'LookComposer',
-    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play },
+    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink },
     emits: ['close', 'posted'],
     data() {
         return {
@@ -33,6 +33,12 @@ export default {
             sending: false,
             error: null,
             MAX_IMAGES,
+            // From a link: a picture to copy in, or a post on another platform to show in a frame.
+            linking: false,
+            linkUrl: '',
+            linkBusy: false,
+            linkError: null,
+            embed: null,         // { provider, label, source, shape } + the link that made it
             // A short clip instead of photos. Shrunk on this phone before upload.
             clip: null,          // { video, poster, posterUrl, seconds, compressed }
             clipProgress: null,  // 0..1 while shrinking
@@ -51,7 +57,7 @@ export default {
     },
     computed: {
         chosenKeys() { return this.refs.map((r) => `${r.type}:${r.id}`); },
-        canPost() { return (this.photos.length > 0 || this.clip) && !this.sending && !this.preparing && this.clipProgress === null && (!this.line || this.fit); },
+        canPost() { return (this.photos.length > 0 || this.clip || this.embed) && !this.sending && !this.preparing && this.clipProgress === null && (!this.line || this.fit); },
         videoRules() { return this.hive.options.video || { max_seconds: 30, max_bytes: 12 * 1024 * 1024 }; },
         clipLabel() { return this.clip ? `${Math.round(this.clip.seconds)}s · ${megabytes(this.clip.video.size)}` : ''; },
         occasions() { return this.hive.options.occasions.map((k) => ({ key: k, label: occasionLabel(k) })); },
@@ -65,7 +71,7 @@ export default {
     beforeUnmount() {
         document.body.style.overflow = '';
         window.removeEventListener('keydown', this.onKey);
-        this.photos.forEach((p) => URL.revokeObjectURL(p.url));
+        this.photos.forEach((p) => { if (!p.remote) URL.revokeObjectURL(p.url); });
         if (this.clip) URL.revokeObjectURL(this.clip.posterUrl);
     },
     methods: {
@@ -89,8 +95,46 @@ export default {
             }
         },
         removePhoto(i) {
-            URL.revokeObjectURL(this.photos[i].url);
+            if (!this.photos[i].remote) URL.revokeObjectURL(this.photos[i].url);
             this.photos.splice(i, 1);
+        },
+
+        /** Ask the server what this link is: a post we can frame, or a picture to copy in. */
+        async addLink() {
+            const url = this.linkUrl.trim();
+            if (!url || this.linkBusy) return;
+            this.linkBusy = true;
+            this.linkError = null;
+            try {
+                const d = await api.post('/api/account/hive/links/inspect', { url });
+                if (d.kind === 'embed') {
+                    if (this.photos.length || this.clip) { this.linkError = 'A post from another app is shared on its own. Remove the photos first.'; return; }
+                    this.embed = { ...d.embed, link: url };
+                    this.line = null;                       // a try-on has to be your own picture
+                } else {
+                    if (this.embed || this.clip) { this.linkError = 'Remove the video or post first to add pictures.'; return; }
+                    if (this.photos.length >= MAX_IMAGES) { this.linkError = `A look can have up to ${MAX_IMAGES} photos.`; return; }
+                    // Prove it's a picture NOW, while they can still fix the link — not as a
+                    // broken thumbnail that only fails when they press Post.
+                    const loads = await new Promise((resolve) => {
+                        const probe = new Image();
+                        probe.referrerPolicy = 'no-referrer';
+                        probe.onload = () => resolve(probe.naturalWidth > 1);
+                        probe.onerror = () => resolve(false);
+                        setTimeout(() => resolve(false), 10000);
+                        probe.src = d.url;
+                    });
+                    if (!loads) { this.linkError = "That link isn't a picture. Open the image itself and copy its address — or paste the post's link to embed it."; return; }
+                    // Shown straight from its own address for now; the server makes our copy when you post.
+                    this.photos.push({ remote: d.url, url: d.url });
+                }
+                this.linkUrl = '';
+                this.linking = false;
+            } catch (e) {
+                this.linkError = e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || "We couldn't read that link.";
+            } finally {
+                this.linkBusy = false;
+            }
         },
 
         async addClip(e) {
@@ -136,8 +180,10 @@ export default {
                 form.append('images[]', this.clip.poster);
                 form.append('video', this.clip.video);
                 form.append('video_seconds', String(this.clip.seconds));
+            } else if (this.embed) {
+                form.append('embed_url', this.embed.link);
             } else {
-                this.photos.forEach((p) => form.append('images[]', p.file));
+                this.photos.forEach((p) => (p.remote ? form.append('image_urls[]', p.remote) : form.append('images[]', p.file)));
             }
             if (this.caption.trim()) form.append('caption', this.caption.trim());
             if (this.occasion) form.append('occasion', this.occasion);
@@ -156,6 +202,8 @@ export default {
                 this.$emit('posted', d.look);
             } catch (e) {
                 const first = e.payload?.errors && Object.values(e.payload.errors)[0]?.[0];
+                // A linked picture that turned out not to be one: drop it so they can carry on.
+                if (e.payload?.errors?.image_urls) this.photos = this.photos.filter((p) => !p.remote);
                 this.error = first || e.payload?.error || "That didn't post. Check your connection and try again.";
             } finally {
                 this.sending = false;
@@ -188,6 +236,16 @@ export default {
                         <button @click="removeClip" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove video"><X class="w-3.5 h-3.5" /></button>
                     </div>
 
+                    <!-- A post from another platform -->
+                    <div v-else-if="embed" class="flex items-center gap-3 rounded-xl border border-black/10 bg-cream/60 p-3.5">
+                        <span class="w-11 h-11 rounded-full bg-black text-white flex items-center justify-center flex-shrink-0"><Play class="w-4 h-4 fill-white" /></span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-medium">{{ embed.label }} post</span>
+                            <a :href="embed.source" target="_blank" rel="noopener" class="flex items-center gap-1 text-[11px] text-black/50 truncate hover:text-gold-dark"><span class="truncate">{{ embed.source }}</span> <ExternalLink class="w-3 h-3 flex-shrink-0" /></a>
+                        </span>
+                        <button @click="embed = null" class="w-10 h-10 inline-flex items-center justify-center text-black/40 hover:text-black" aria-label="Remove link"><X class="w-4 h-4" /></button>
+                    </div>
+
                     <div v-else-if="clipProgress !== null" class="rounded-xl border border-gold/40 bg-cream/60 p-4 text-center">
                         <p class="text-sm font-medium">Shrinking your video… {{ Math.round(clipProgress * 100) }}%</p>
                         <div class="h-1.5 rounded-full bg-black/10 overflow-hidden mt-2.5"><div class="h-full bg-gold rounded-full transition-all" :style="{ width: (clipProgress * 100) + '%' }"></div></div>
@@ -195,34 +253,60 @@ export default {
                     </div>
 
                     <template v-else>
-                        <div class="grid grid-cols-4 gap-2">
+                        <!-- Nothing chosen yet: three equal doors, at every width. -->
+                        <div v-if="photos.length === 0" class="grid grid-cols-3 gap-2.5">
+                            <label class="rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                                <LoaderCircle v-if="preparing" class="w-6 h-6 animate-spin" />
+                                <ImagePlus v-else class="w-6 h-6" />
+                                <span class="text-xs tracking-wide leading-tight">{{ preparing ? 'Preparing…' : 'Photos' }}</span>
+                                <span class="text-[10px] text-black/40 leading-tight">up to {{ MAX_IMAGES }}</span>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
+                            </label>
+                            <label class="rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                                <Video class="w-6 h-6" />
+                                <span class="text-xs tracking-wide leading-tight">Video</span>
+                                <span class="text-[10px] text-black/40 leading-tight">up to {{ videoRules.max_seconds }}s</span>
+                                <input type="file" accept="video/mp4,video/quicktime,video/webm" class="sr-only" @change="addClip" />
+                            </label>
+                            <button type="button" @click="linking = !linking; linkError = null" :class="['rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors', linking ? 'bg-cream border-gold' : '']">
+                                <Link2 class="w-6 h-6" />
+                                <span class="text-xs tracking-wide leading-tight">Link</span>
+                                <span class="text-[10px] text-black/40 leading-tight">post or picture</span>
+                            </button>
+                        </div>
+
+                        <!-- Photos chosen: thumbnails, then same-sized tiles to add more. -->
+                        <div v-else class="grid grid-cols-4 gap-2">
                             <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] rounded-lg overflow-hidden bg-cream-dark">
                                 <img :src="p.url" alt="" class="w-full h-full object-cover" />
                                 <button @click="removePhoto(i)" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
                                     <X class="w-3.5 h-3.5" />
                                 </button>
                             </div>
-                            <label
-                                v-if="photos.length < MAX_IMAGES"
-                                :class="[
-                                    'rounded-lg border-2 border-dashed border-gold/40 flex flex-col items-center justify-center gap-1.5 text-gold-dark cursor-pointer hover:bg-cream transition-colors',
-                                    photos.length === 0 ? 'col-span-2 aspect-[4/3]' : 'aspect-[4/5]',
-                                ]"
-                            >
-                                <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" />
-                                <ImagePlus v-else class="w-6 h-6" />
-                                <span v-if="photos.length === 0" class="text-xs tracking-wide">{{ preparing ? 'Preparing…' : 'Photos' }}</span>
-                                <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
-                            </label>
-                            <label v-if="photos.length === 0" class="col-span-2 aspect-[4/3] rounded-lg border-2 border-dashed border-gold/40 flex flex-col items-center justify-center gap-1.5 text-gold-dark cursor-pointer hover:bg-cream transition-colors">
-                                <Video class="w-6 h-6" />
-                                <span class="text-xs tracking-wide">Video · up to {{ videoRules.max_seconds }}s</span>
-                                <input type="file" accept="video/mp4,video/quicktime,video/webm" class="sr-only" @change="addClip" />
-                            </label>
+                            <template v-if="photos.length < MAX_IMAGES">
+                                <label class="aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark cursor-pointer hover:bg-cream transition-colors" aria-label="Add photos">
+                                    <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" /><ImagePlus v-else class="w-6 h-6" />
+                                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
+                                </label>
+                                <button type="button" @click="linking = !linking; linkError = null" class="aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark hover:bg-cream transition-colors" aria-label="Add a picture from a link">
+                                    <Link2 class="w-6 h-6" />
+                                </button>
+                            </template>
                         </div>
+
+                        <form v-if="linking" @submit.prevent="addLink" class="mt-3">
+                            <div class="flex gap-2">
+                                <input v-model="linkUrl" type="url" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="Paste a link — https://…" class="flex-1 min-w-0 border border-black/12 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                                <button type="submit" :disabled="!linkUrl.trim() || linkBusy" class="px-5 rounded-full bg-gold text-white text-xs font-semibold tracking-widest uppercase disabled:opacity-40 inline-flex items-center gap-1.5 flex-shrink-0">
+                                    <LoaderCircle v-if="linkBusy" class="w-3.5 h-3.5 animate-spin" /> Add
+                                </button>
+                            </div>
+                            <p v-if="linkError" class="text-xs text-red-600 mt-1.5" role="alert">{{ linkError }}</p>
+                            <p v-else class="text-[11px] text-black/45 mt-1.5 leading-relaxed">A YouTube, TikTok, Instagram or Facebook post (Share → Copy link), or the address of a picture. Only share what's yours or what you're allowed to.</p>
+                        </form>
                     </template>
                     <p class="mt-2 text-[11px] text-black/45 leading-relaxed">
-                        {{ clip ? 'Nobody downloads your video until they tap play, and they see its size first.' : 'Full-length photos work best. Photos and videos are shrunk on your phone first, so posting uses very little data.' }}
+                        {{ embed ? `People tap to load it from ${embed.label}. Nothing loads from there until they do.` : clip ? 'Nobody downloads your video until they tap play, and they see its size first.' : 'Full-length photos work best. Photos and videos are shrunk on your phone first, so posting uses very little data.' }}
                     </p>
                 </div>
 
