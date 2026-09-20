@@ -2,9 +2,10 @@
 import { api } from '../../../lib/api.js';
 import { toast } from '../../../lib/dialog.js';
 import { resizeImage } from '../../../lib/image-resize.js';
+import { prepareClip, megabytes } from '../../../lib/video-compress.js';
 import { hiveStore, occasionLabel } from '../../hive-store.js';
 import MentionPicker from '../../../components/MentionPicker.vue';
-import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag } from 'lucide-vue-next';
+import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play } from 'lucide-vue-next';
 
 const MAX_IMAGES = 4;
 const MAX_REFS = 6;
@@ -18,7 +19,7 @@ const MAX_REFS = 6;
  */
 export default {
     name: 'LookComposer',
-    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag },
+    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play },
     emits: ['close', 'posted'],
     data() {
         return {
@@ -32,6 +33,9 @@ export default {
             sending: false,
             error: null,
             MAX_IMAGES,
+            // A short clip instead of photos. Shrunk on this phone before upload.
+            clip: null,          // { video, poster, posterUrl, seconds, compressed }
+            clipProgress: null,  // 0..1 while shrinking
             // Try-on: a look about something they bought. Pays Bees once per purchase.
             lines: [],
             reward: 0,
@@ -47,7 +51,9 @@ export default {
     },
     computed: {
         chosenKeys() { return this.refs.map((r) => `${r.type}:${r.id}`); },
-        canPost() { return this.photos.length > 0 && !this.sending && !this.preparing && (!this.line || this.fit); },
+        canPost() { return (this.photos.length > 0 || this.clip) && !this.sending && !this.preparing && this.clipProgress === null && (!this.line || this.fit); },
+        videoRules() { return this.hive.options.video || { max_seconds: 30, max_bytes: 12 * 1024 * 1024 }; },
+        clipLabel() { return this.clip ? `${Math.round(this.clip.seconds)}s · ${megabytes(this.clip.video.size)}` : ''; },
         occasions() { return this.hive.options.occasions.map((k) => ({ key: k, label: occasionLabel(k) })); },
     },
     mounted() {
@@ -60,6 +66,7 @@ export default {
         document.body.style.overflow = '';
         window.removeEventListener('keydown', this.onKey);
         this.photos.forEach((p) => URL.revokeObjectURL(p.url));
+        if (this.clip) URL.revokeObjectURL(this.clip.posterUrl);
     },
     methods: {
         occasionLabel,
@@ -86,6 +93,29 @@ export default {
             this.photos.splice(i, 1);
         },
 
+        async addClip(e) {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            this.error = null;
+            this.clipProgress = 0;
+            try {
+                const out = await prepareClip(file, {
+                    maxSeconds: this.videoRules.max_seconds, maxBytes: this.videoRules.max_bytes,
+                    onProgress: (p) => { this.clipProgress = p; },
+                });
+                this.clip = { ...out, posterUrl: URL.createObjectURL(out.poster) };
+            } catch (err) {
+                this.error = err.message || "That video didn't work. Try another clip.";
+            } finally {
+                this.clipProgress = null;
+            }
+        },
+        removeClip() {
+            URL.revokeObjectURL(this.clip.posterUrl);
+            this.clip = null;
+        },
+
         pick(item) {
             if (this.refs.length < MAX_REFS) this.refs.push(item);
             if (this.refs.length >= MAX_REFS) this.picking = false;
@@ -102,7 +132,13 @@ export default {
             this.error = null;
 
             const form = new FormData();
-            this.photos.forEach((p) => form.append('images[]', p.file));
+            if (this.clip) {
+                form.append('images[]', this.clip.poster);
+                form.append('video', this.clip.video);
+                form.append('video_seconds', String(this.clip.seconds));
+            } else {
+                this.photos.forEach((p) => form.append('images[]', p.file));
+            }
             if (this.caption.trim()) form.append('caption', this.caption.trim());
             if (this.occasion) form.append('occasion', this.occasion);
             if (this.challengeId) form.append('challenge_id', this.challengeId);
@@ -142,30 +178,51 @@ export default {
             </header>
 
             <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
-                <!-- Photos -->
+                <!-- Photos, or one short clip -->
                 <div>
-                    <div class="grid grid-cols-4 gap-2">
-                        <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] rounded-lg overflow-hidden bg-cream-dark">
-                            <img :src="p.url" alt="" class="w-full h-full object-cover" />
-                            <button @click="removePhoto(i)" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
-                                <X class="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <label
-                            v-if="photos.length < MAX_IMAGES"
-                            :class="[
-                                'aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex flex-col items-center justify-center gap-1.5 text-gold-dark cursor-pointer hover:bg-cream transition-colors',
-                                photos.length === 0 ? 'col-span-4 aspect-[16/9]' : '',
-                            ]"
-                        >
-                            <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" />
-                            <ImagePlus v-else class="w-6 h-6" />
-                            <span v-if="photos.length === 0" class="text-xs tracking-wide">{{ preparing ? 'Preparing…' : 'Add up to 4 photos' }}</span>
-                            <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
-                        </label>
+                    <!-- A clip: its cover, how long, and what it will cost a viewer to play. -->
+                    <div v-if="clip" class="relative w-40 mx-auto aspect-[4/5] rounded-xl overflow-hidden bg-black">
+                        <img :src="clip.posterUrl" alt="" class="w-full h-full object-cover opacity-90" />
+                        <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-black/55 text-white flex items-center justify-center"><Play class="w-5 h-5 fill-white" /></span>
+                        <span class="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px]">{{ clipLabel }}</span>
+                        <button @click="removeClip" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove video"><X class="w-3.5 h-3.5" /></button>
                     </div>
+
+                    <div v-else-if="clipProgress !== null" class="rounded-xl border border-gold/40 bg-cream/60 p-4 text-center">
+                        <p class="text-sm font-medium">Shrinking your video… {{ Math.round(clipProgress * 100) }}%</p>
+                        <div class="h-1.5 rounded-full bg-black/10 overflow-hidden mt-2.5"><div class="h-full bg-gold rounded-full transition-all" :style="{ width: (clipProgress * 100) + '%' }"></div></div>
+                        <p class="text-[11px] text-black/50 mt-2">This takes about as long as the clip. Keep this screen open.</p>
+                    </div>
+
+                    <template v-else>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] rounded-lg overflow-hidden bg-cream-dark">
+                                <img :src="p.url" alt="" class="w-full h-full object-cover" />
+                                <button @click="removePhoto(i)" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
+                                    <X class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <label
+                                v-if="photos.length < MAX_IMAGES"
+                                :class="[
+                                    'rounded-lg border-2 border-dashed border-gold/40 flex flex-col items-center justify-center gap-1.5 text-gold-dark cursor-pointer hover:bg-cream transition-colors',
+                                    photos.length === 0 ? 'col-span-2 aspect-[4/3]' : 'aspect-[4/5]',
+                                ]"
+                            >
+                                <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" />
+                                <ImagePlus v-else class="w-6 h-6" />
+                                <span v-if="photos.length === 0" class="text-xs tracking-wide">{{ preparing ? 'Preparing…' : 'Photos' }}</span>
+                                <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
+                            </label>
+                            <label v-if="photos.length === 0" class="col-span-2 aspect-[4/3] rounded-lg border-2 border-dashed border-gold/40 flex flex-col items-center justify-center gap-1.5 text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                                <Video class="w-6 h-6" />
+                                <span class="text-xs tracking-wide">Video · up to {{ videoRules.max_seconds }}s</span>
+                                <input type="file" accept="video/mp4,video/quicktime,video/webm" class="sr-only" @change="addClip" />
+                            </label>
+                        </div>
+                    </template>
                     <p class="mt-2 text-[11px] text-black/45 leading-relaxed">
-                        Full-length photos work best. We shrink them on your phone first, so posting uses very little data.
+                        {{ clip ? 'Nobody downloads your video until they tap play, and they see its size first.' : 'Full-length photos work best. Photos and videos are shrunk on your phone first, so posting uses very little data.' }}
                     </p>
                 </div>
 

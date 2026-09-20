@@ -8,7 +8,7 @@ import FitEditor from '../components/hive/FitEditor.vue';
 import PageEditor from '../components/hive/PageEditor.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
 import EarningsPanel from '../components/hive/EarningsPanel.vue';
-import { UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images, Coins } from 'lucide-vue-next';
+import { UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images, Coins, Play } from 'lucide-vue-next';
 
 const FIT_LABELS = {
     body_shape: 'Shape', size_top: 'Tops', size_bottom: 'Bottoms', size_dress: 'Dresses', size_shoe: 'Shoes',
@@ -23,7 +23,7 @@ const FIT_LABELS = {
  */
 export default {
     name: 'HiveProfilePage',
-    components: { LookCard, FitEditor, PageEditor, ReportSheet, EarningsPanel, Coins, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
+    components: { LookCard, FitEditor, PageEditor, ReportSheet, EarningsPanel, Coins, Play, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
     data() {
         return {
             auth: authStore.state,
@@ -248,7 +248,8 @@ export default {
                 <div v-else class="grid grid-cols-3 gap-1">
                     <button v-for="l in looks" :key="l.id" @click="open = l" class="relative aspect-[4/5] bg-cream-dark overflow-hidden group" :aria-label="l.caption || 'Open look'">
                         <img :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
-                        <Images v-if="l.images.length > 1" class="absolute top-2 right-2 w-4 h-4 text-white drop-shadow" />
+                        <Play v-if="l.video" class="absolute top-2 right-2 w-4 h-4 text-white fill-white drop-shadow" />
+                        <Images v-else-if="l.images.length > 1" class="absolute top-2 right-2 w-4 h-4 text-white drop-shadow" />
                         <ShoppingBag v-if="l.refs.length" class="absolute bottom-2 left-2 w-4 h-4 text-white drop-shadow" />
                     </button>
                 </div>

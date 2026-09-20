@@ -23,6 +23,11 @@ use Illuminate\Support\Str;
 class Hive
 {
     public const LOOKS_PER_PAGE = 12;
+    /** "For you" ranks the newest RANK_WINDOW looks from the last RANK_DAYS; older ones follow in date order. */
+    public const RANK_WINDOW = 300;
+    public const RANK_DAYS = 21;
+    public const VIDEO_MAX_SECONDS = 30;
+    public const VIDEO_MAX_BYTES = 12 * 1024 * 1024;
     public const MAX_IMAGES = 4;
     /** Distinct reporters before a look is hidden pending review. */
     public const REPORTS_TO_HIDE = 3;
@@ -364,6 +369,11 @@ class Hive
             // Conversation isn't a popularity score, so this one is public.
             'comments'   => (int) ($l->comments_count ?? 0),
             // "Ordered vs got": set only when this look is about a real purchase.
+            // The clip is fetched only on tap; the label says what that tap costs.
+            'video'      => ! empty($l->video_url) ? [
+                'url' => $l->video_url, 'seconds' => (int) $l->video_seconds,
+                'size_label' => $l->video_bytes ? (($mb = $l->video_bytes / 1048576) >= 1 ? number_format($mb, 1) . ' MB' : max(1, (int) round($l->video_bytes / 1024)) . ' KB') : null,
+            ] : null,
             'try_on'     => ! empty($l->line_item_id) ? ['fit' => $l->fit, 'size_worn' => $l->size_worn, 'rating' => $l->rating ? (int) $l->rating : null] : null,
             'challenge_id' => $l->challenge_id ?? null,
             'won'        => ! empty($l->won_at),
@@ -388,6 +398,89 @@ class Hive
                 DB::table('hive_looks')->where('id', $lookId)->where('likes_count', '>', 0)->decrement('likes_count');
             }
         });
+    }
+
+    // ─── "For you" ─────────────────────────────────────────────────────────
+
+    /**
+     * The ranked feed.
+     *
+     * Ranking and paging pull against each other: a score that changes between
+     * requests makes page 2 repeat or skip things. So the candidate set is
+     * FROZEN by the cursor — `r.<anchor>.<offset>` means "the newest RANK_WINDOW
+     * looks no newer than <anchor>, ranked, starting at <offset>". New looks
+     * arriving mid-scroll don't enter it; reloading starts a new one. When the
+     * ranked window is used up, the feed carries on in date order from where
+     * the window ended (an ordinary look-id cursor).
+     *
+     * What counts, for a signed-in member: how fresh it is, whether you follow
+     * them, whether they're built like you, whether it's a real try-on, and
+     * conversation (comments count double — hearts are cheap). Then a spacing
+     * rule so one busy person can't fill the screen. Signed out, it's freshness
+     * and conversation only. At this size it is one indexed query of 300 rows
+     * per page; past ~50k looks a day, precompute it.
+     */
+    public static function ranked(?object $viewer, ?string $cursor = null, ?string $occasion = null): array
+    {
+        [$anchor, $offset] = [null, 0];
+        if ($cursor && preg_match('/^r\.([A-Za-z0-9_]+)\.(\d+)$/', $cursor, $m)) [$anchor, $offset] = [$m[1], (int) $m[2]];
+
+        $q = DB::table('hive_looks as l')->join('hive_profiles as p', 'p.customer_id', '=', 'l.customer_id')
+            ->where('l.status', 'published')->whereNull('p.suspended_at')
+            ->where('l.created_at', '>=', now()->subDays(self::RANK_DAYS));
+        if ($occasion && in_array($occasion, self::OCCASIONS, true)) $q->where('l.occasion', $occasion);
+        if ($anchor) $q->where('l.id', '<=', $anchor);
+
+        $rows = $q->orderByDesc('l.id')->limit(self::RANK_WINDOW)->get(['l.*', 'p.handle', 'p.display_name', 'p.avatar_url',
+            'p.fit_visibility', 'p.bust_cm', 'p.waist_cm', 'p.hips_cm', 'p.height_cm', 'p.body_shape']);
+        // Nothing recent: fall back to plain date order so the feed is never empty while looks exist.
+        if ($rows->isEmpty()) return self::looks('everyone', $viewer, null, null, self::LOOKS_PER_PAGE, $occasion);
+
+        $anchor ??= $rows->first()->id;
+        $follows = $viewer ? array_flip(self::followedIds($viewer->customer_id)) : [];
+        $canMatch = $viewer && $viewer->fit_visibility !== 'private';
+        $matches = [];                                   // per author, not per look
+
+        $scored = $rows->map(function ($l) use ($viewer, $follows, $canMatch, &$matches) {
+            $ageHours = max(0, abs(now()->diffInMinutes(Carbon::parse($l->created_at))) / 60);
+            $score = 100 * exp(-$ageHours / 36);
+            $score += 12 * log(1 + (int) $l->likes_count + 2 * (int) $l->comments_count);
+            if (! empty($l->line_item_id)) $score += 15;
+            if (! empty($l->won_at)) $score += 10;
+            if ($viewer) {
+                if (isset($follows[$l->customer_id]) || $l->customer_id === $viewer->customer_id) $score += 40;
+                if ($canMatch && $l->fit_visibility !== 'private' && $l->customer_id !== $viewer->customer_id) {
+                    $matches[$l->customer_id] ??= self::matchPercent($viewer, $l) ?? 0;
+                    if ($matches[$l->customer_id] >= 70) $score += $matches[$l->customer_id] - 60;
+                }
+            }
+
+            return ['l' => $l, 's' => $score];
+        })->sortByDesc('s')->values();
+
+        // Spacing: each further look by the same person is worth a little less.
+        $seen = [];
+        $ranked = $scored->map(function ($r) use (&$seen) {
+            $k = $seen[$r['l']->customer_id] = ($seen[$r['l']->customer_id] ?? -1) + 1;
+            $r['s'] -= 25 * min($k, 4);
+
+            return $r;
+        })->sortByDesc('s')->values();
+
+        $page = $ranked->slice($offset, self::LOOKS_PER_PAGE)->pluck('l')->values();
+        $liked = $viewer && $page->isNotEmpty()
+            ? DB::table('hive_likes')->where('customer_id', $viewer->customer_id)->whereIn('look_id', $page->pluck('id'))->pluck('look_id')->all() : [];
+
+        $nextOffset = $offset + self::LOOKS_PER_PAGE;
+        $next = $nextOffset < $ranked->count()
+            ? "r.{$anchor}.{$nextOffset}"
+            // Window used up: carry on by date from its oldest look, if anything is older.
+            : (DB::table('hive_looks')->where('status', 'published')->where('id', '<', $rows->last()->id)->exists() ? $rows->last()->id : null);
+
+        return [
+            'looks' => $page->map(fn ($l) => self::presentLook($l, $viewer, in_array($l->id, $liked, true)))->all(),
+            'next'  => $next,
+        ];
     }
 
     // ─── Reports ───────────────────────────────────────────────────────────

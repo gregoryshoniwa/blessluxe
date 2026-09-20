@@ -3,7 +3,7 @@ import { api } from '../../../lib/api.js';
 import { confirmDialog, toast, toastError } from '../../../lib/dialog.js';
 import { hiveStore, timeAgo, occasionLabel, whatsappShare } from '../../hive-store.js';
 import LookComments from './LookComments.vue';
-import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy } from 'lucide-vue-next';
+import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play } from 'lucide-vue-next';
 
 /**
  * One look: who, the photos, what she's wearing, and the three things you can
@@ -16,7 +16,7 @@ import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, Me
  */
 export default {
     name: 'LookCard',
-    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy },
+    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play },
     props: {
         look: { type: Object, required: true },
         // On someone's own page the author row is repetition.
@@ -26,7 +26,7 @@ export default {
     },
     emits: ['removed', 'report'],
     data() {
-        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments };
+        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null };
     },
     computed: {
         when() { return timeAgo(this.look.created_at); },
@@ -37,7 +37,24 @@ export default {
             return whatsappShare(`See ${who} on Bless Hive —`, `/@${this.look.author.handle}?look=${this.look.id}`);
         },
     },
+    beforeUnmount() { this.watcher?.disconnect(); },
     methods: {
+        /**
+         * Nothing is downloaded until this tap — the label on the cover said
+         * what it costs. Scrolling the clip off screen pauses it, so a feed
+         * never has sound coming from somewhere you can't see.
+         */
+        play() {
+            this.playing = true;
+            this.$nextTick(() => {
+                const v = this.$refs.video;
+                if (!v) return;
+                v.play().catch(() => {});
+                this.watcher = new IntersectionObserver(([e]) => { if (!e.isIntersecting) v.pause(); }, { threshold: 0.25 });
+                this.watcher.observe(v);
+            });
+        },
+
         refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
 
         onSwipe(e) {
@@ -121,7 +138,17 @@ export default {
 
         <!-- The photos. Double-tap to heart, swipe for more. -->
         <div class="relative bg-cream-dark">
+            <!-- Video: a cover with its size until tapped; then the clip, with controls. -->
+            <div v-if="look.video" class="aspect-[4/5] bg-black">
+                <video v-if="playing" ref="video" :src="look.video.url" :poster="look.images[0]" controls playsinline loop preload="auto" class="w-full h-full object-contain bg-black"></video>
+                <button v-else @click="play" class="relative block w-full h-full" :aria-label="`Play video, ${look.video.size_label || ''}`">
+                    <img :src="look.images[0]" :alt="look.caption || `Video by ${look.author.display_name}`" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                    <span class="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/55 text-white flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
+                    <span class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-black/70 text-white text-[11px]">Video · {{ look.video.seconds }}s<template v-if="look.video.size_label"> · {{ look.video.size_label }}</template></span>
+                </button>
+            </div>
             <div
+                v-else
                 class="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 @scroll.passive="onSwipe"
                 @dblclick="toggleLike(true)"
@@ -138,7 +165,7 @@ export default {
                 </div>
             </div>
             <Heart v-if="burst" class="absolute inset-0 m-auto w-24 h-24 text-white fill-white drop-shadow-lg pointer-events-none animate-ping" />
-            <div v-if="look.images.length > 1" class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
+            <div v-if="!look.video && look.images.length > 1" class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
                 <span v-for="(s, i) in look.images" :key="i" :class="['w-1.5 h-1.5 rounded-full transition-colors', i === slide ? 'bg-white' : 'bg-white/45']"></span>
             </div>
         </div>

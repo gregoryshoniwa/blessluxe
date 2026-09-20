@@ -30,7 +30,14 @@ class HiveController extends Controller
         $me = $this->me();
         $scope = $request->query('scope') === 'following' ? 'following' : 'everyone';
 
-        return Hive::looks($scope, $me, null, $request->query('before'), Hive::LOOKS_PER_PAGE, $request->query('occasion')) + [
+        $before = $request->query('before');
+        // "For you" is ranked; once its window is used up the cursor becomes a
+        // plain look id and the feed carries on by date. Following is by date.
+        $feed = $scope === 'everyone' && (! $before || str_starts_with((string) $before, 'r.'))
+            ? Hive::ranked($me, $before, $request->query('occasion'))
+            : Hive::looks($scope, $me, null, $before, Hive::LOOKS_PER_PAGE, $request->query('occasion'));
+
+        return $feed + [
             'scope' => $scope,
             'me'    => $me ? Hive::present($me, $me) : null,
         ];
@@ -81,7 +88,10 @@ class HiveController extends Controller
     {
         $me = $this->mustBeMember(requireAdult: false);
 
-        return ['me' => Hive::present($me, $me), 'options' => ['shapes' => Hive::SHAPES, 'occasions' => Hive::OCCASIONS]];
+        return ['me' => Hive::present($me, $me), 'options' => [
+            'shapes' => Hive::SHAPES, 'occasions' => Hive::OCCASIONS,
+            'video' => ['max_seconds' => Hive::VIDEO_MAX_SECONDS, 'max_bytes' => self::uploadCeiling()],
+        ]];
     }
 
     /** PUT /api/account/hive/me — page details, fit, and the 18+ confirmation. */
@@ -173,13 +183,24 @@ class HiveController extends Controller
             'caption'  => ['nullable', 'string', 'max:500'],
             'occasion' => ['nullable', Rule::in(Hive::OCCASIONS)],
             'refs'     => ['nullable'],
+            // A short clip. Its poster travels as images[0], so a video look has exactly one image.
+            'video'         => ['nullable', 'file', 'mimetypes:video/mp4,video/webm,video/quicktime', 'max:' . (int) (Hive::VIDEO_MAX_BYTES / 1024)],
+            'video_seconds' => ['nullable', 'required_with:video', 'numeric', 'between:1,' . (Hive::VIDEO_MAX_SECONDS + 1)],
             'challenge_id' => ['nullable', 'string', 'max:64'],
             // Try-on: a look about something they bought.
             'line_item_id' => ['nullable', 'string', 'max:64'],
             'fit'          => ['nullable', 'required_with:line_item_id', Rule::in(HiveRewards::FITS)],
             'size_worn'    => ['nullable', 'string', 'max:24'],
             'rating'       => ['nullable', 'integer', 'between:1,5'],
-        ], ['images.required' => 'Add at least one photo.', 'fit.required_with' => 'Tell people how it fits.']);
+        ], [
+            'images.required' => 'Add at least one photo.', 'fit.required_with' => 'Tell people how it fits.',
+            'video.max' => 'That clip is too large — keep it under ' . (int) (Hive::VIDEO_MAX_BYTES / 1048576) . ' MB.',
+            'video.mimetypes' => 'Videos need to be MP4, MOV or WebM.',
+            'video_seconds.between' => 'Clips can be up to ' . Hive::VIDEO_MAX_SECONDS . ' seconds.',
+        ]);
+        if ($request->hasFile('video') && count($request->file('images')) !== 1) {
+            return response()->json(['errors' => ['images' => ['A video look has one cover image.']]], 422);
+        }
 
         $line = null;
         if (! empty($data['line_item_id'])) {
@@ -199,13 +220,17 @@ class HiveController extends Controller
         $refs = MessageRefs::resolve($raw, Affiliate::where('customer_id', $me->customer_id)->first(), false);
 
         $urls = array_map(fn ($f) => Media::upload($f, "hive/looks/{$me->customer_id}"), $request->file('images'));
+        $video = $request->file('video');
+        $videoUrl = $video ? Media::upload($video, "hive/looks/{$me->customer_id}") : null;
 
         $id = 'look_' . Str::ulid();
-        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge) {
+        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge, $video, $videoUrl) {
             DB::table('hive_looks')->insert([
                 'id' => $id, 'customer_id' => $me->customer_id,
                 'caption' => ($c = trim(strip_tags((string) ($data['caption'] ?? '')))) === '' ? null : $c,
                 'images' => json_encode($urls), 'refs' => $refs ? json_encode($refs) : null,
+                'video_url' => $videoUrl, 'video_bytes' => $video?->getSize(),
+                'video_seconds' => $video ? (int) round((float) $data['video_seconds']) : null,
                 'occasion' => $data['occasion'] ?? null, 'status' => 'published',
                 'challenge_id' => $challenge?->id,
                 'product_id' => $line?->product_id, 'line_item_id' => $line?->id,
@@ -291,7 +316,7 @@ class HiveController extends Controller
         if (! $look) return response()->json(['error' => 'Look not found.'], 404);
 
         Hive::setLookStatus($id, 'removed');
-        foreach (json_decode((string) $look->images, true) ?: [] as $url) {
+        foreach (array_filter([...(json_decode((string) $look->images, true) ?: []), $look->video_url]) as $url) {
             if (Media::isUnder($url, "hive/looks/{$me->customer_id}")) Media::delete($url);
         }
         DB::table('hive_looks')->where('id', $id)->delete();
@@ -368,6 +393,23 @@ class HiveController extends Controller
         Hive::report($me->customer_id, $data['type'], $subjectId, $data['reason'], $data['note'] ?? null);
 
         return ['ok' => true];
+    }
+
+    /**
+     * The largest clip this server will really accept: ours, or PHP's own upload
+     * limits if those are lower (hosting decides them, not the app). The phone
+     * compresses to fit whatever this says, so a small limit means a lower
+     * bitrate rather than a failed upload.
+     */
+    private static function uploadCeiling(): int
+    {
+        $bytes = function (string $v): int {
+            $n = (float) $v;
+            return (int) match (strtolower(substr(trim($v), -1))) { 'g' => $n * 1073741824, 'm' => $n * 1048576, 'k' => $n * 1024, default => $n };
+        };
+        $limits = array_filter([$bytes((string) ini_get('upload_max_filesize')), (int) ($bytes((string) ini_get('post_max_size')) * 0.9)]);
+
+        return (int) min(Hive::VIDEO_MAX_BYTES, ...($limits ?: [Hive::VIDEO_MAX_BYTES]));
     }
 
     // ─── Internals ─────────────────────────────────────────────────────────

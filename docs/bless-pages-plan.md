@@ -185,7 +185,7 @@ Bless Pages for everyone (profile, follow, photo Looks tagged to products — re
 Ask (polls, occasion boards, accepted answers); ranked feed; notifications; tap-to-play clips with the data label; creator earnings dashboard; weekly Bees challenges.
 - **Built (20 Sep 2026):** Ask — questions, *which one?* photo votes (tally hidden until you vote), answers that tag shop pieces, accepted answers that pay 25 Bees with anti-farming caps; Activity (hearts, comments, follows, answers, Bees earned); occasion filters on the feed.
 - **Added later on 20 Sep 2026:** weekly Bees challenges (staff create, judge and pay) · "Earned" statement on every page.
-- **Still to build in this phase:** ranked feed · tap-to-play clips with the data label (needs a video storage/transcoding decision and budget).
+- **Added 20 Sep 2026 (late):** ranked "For you" feed · tap-to-play clips (≤30s, shrunk to 480p on the poster's phone, size shown before playing). Video costs **no monthly service fee** — clips live in the existing bucket at ~$0.02/GB; 10,000 clips of ~2 MB ≈ 20 GB ≈ $0.40/month. **Phase 2 is feature-complete**; the gate (1,000 weekly actives, answers under an hour) is now about people, not code.
 - **Gate:** 1,000 weekly actives · questions answered in under 1 hour · measurable lift in conversion for shoppers who use Fit or Ask.
 
 ### Phase 3 — Trusted sellers + Closet · 8–10 weeks
