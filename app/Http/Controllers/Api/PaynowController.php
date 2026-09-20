@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\PackController;
 use App\Services\PackForwarding;
+use App\Services\AffiliatePricing;
+use App\Services\Exclusivity;
 use App\Mail\AffiliateSaleMail;
 use App\Mail\OrderReceiptMail;
 use App\Models\Affiliate;
@@ -303,11 +305,16 @@ class PaynowController extends Controller
         // potentially accruing affiliate commission. The kind check is what
         // keeps shipping money out of the sales ledger entirely.
         if ($classified === 'paid') {
-            if ($session->kind === PackForwarding::SESSION_KIND) {
-                PackForwarding::markFeePaid($session->fresh());
-            } elseif (! $session->order_id) {
-                $this->createOrderFromSession($session->fresh());
-            }
+            $fresh = $session->fresh();
+            $snap  = $fresh->cart_snapshot ?? [];
+
+            match ($fresh->kind) {
+                PackForwarding::SESSION_KIND => PackForwarding::markFeePaid($fresh),
+                // Exclusivity only goes live once the money is in — first to PAY
+                // wins, and activate() re-checks nobody beat them to it.
+                Exclusivity::SESSION_KIND    => $this->activateExclusivity($fresh, $snap),
+                default                      => $fresh->order_id ? null : $this->createOrderFromSession($fresh),
+            };
         }
 
         // Refund any debited Blits when the payment ends up cancelled/failed.
@@ -324,6 +331,120 @@ class PaynowController extends Controller
                 $snap['blits_refunded'] = true;
                 $fresh->update(['cart_snapshot' => $snap]);
             }
+        }
+    }
+
+    /**
+     * A paid exclusivity goes live, or the fee is flagged refundable.
+     *
+     * Two affiliates can both reach Paynow for the same piece; only one can hold
+     * it, so the loser is told plainly rather than silently losing their money.
+     */
+    private function activateExclusivity(PaymentSession $session, array $snap): void
+    {
+        $id = $snap['exclusivity_id'] ?? null;
+        if (! $id) return;
+
+        $won = Exclusivity::activate($id, $session->id);
+
+        $row = DB::table('product_exclusivities')->where('id', $id)->first();
+        $affiliate = $row ? Affiliate::find($row->affiliate_id) : null;
+        if (! $affiliate?->customer_id) return;
+
+        $product = $row ? DB::table('products')->where('id', $row->product_id)->value('title') : 'that piece';
+
+        Notifications::forCustomer(
+            $affiliate->customer_id,
+            $won ? 'exclusivity_active' : 'exclusivity_missed',
+            $won ? "{$product} is now exclusively yours" : "Someone took {$product} first",
+            $won
+                ? 'It has come off the main shop and sells only on your page.'
+                : 'Another affiliate paid moments before you — your fee is refundable, just reply to us.',
+            "/affiliate/{$affiliate->code}/dashboard",
+        );
+
+        if (! $won) {
+            Notifications::forAllAdmins(
+                'exclusivity_refund_due',
+                'Exclusivity fee to refund',
+                "{$affiliate->code} paid for {$product} but lost the race. Refund in Paynow.",
+                '/admin/affiliates',
+            );
+        }
+    }
+
+    /**
+     * POST /api/store/payments/paynow/exclusivity/{exclusivityId}
+     *
+     * Starts payment for a reserved exclusivity. Kept out of the cart flow
+     * entirely: this buys a right, not goods, and must never become an Order.
+     */
+    public function initiateExclusivity(Request $request, string $exclusivityId)
+    {
+        $customer = Auth::guard('customer')->user();
+        if (! $customer) return response()->json(['error' => 'Sign in first.'], 401);
+
+        $row = DB::table('product_exclusivities')->where('id', $exclusivityId)->first();
+        if (! $row) return response()->json(['error' => 'That reservation no longer exists.'], 404);
+
+        // Scoped to the owner — an id alone is never enough.
+        $affiliate = Affiliate::where('id', $row->affiliate_id)->where('customer_id', $customer->id)->first();
+        if (! $affiliate) return response()->json(['error' => 'That is not yours.'], 403);
+
+        if ($row->status !== Exclusivity::PENDING) {
+            return response()->json(['error' => 'That reservation has already been settled.'], 422);
+        }
+
+        // Somebody may have taken it while this one sat unpaid.
+        if (Exclusivity::holderOf($row->product_id)) {
+            return response()->json(['error' => 'Another affiliate now holds this piece.'], 409);
+        }
+
+        try {
+            $reference = $this->makeReference();
+            $paynow    = Paynow::fromConfig();
+
+            $init = $paynow->initiateTransaction([
+                'reference'      => $reference,
+                'amount'         => $row->fee_amount / 100,
+                'additionalInfo' => 'BLESSLUXE exclusivity',
+                'authEmail'      => $customer->email,
+            ]);
+
+            if (! $init['ok']) {
+                return response()->json(['error' => $init['error']], 502);
+            }
+
+            $session = PaymentSession::create([
+                'id'            => 'payses_' . Str::random(20),
+                'reference'     => $reference,
+                'provider'      => 'paynow',
+                'kind'          => Exclusivity::SESSION_KIND,
+                'status'        => 'pending',
+                'poll_url'      => $init['pollUrl'],
+                'amount'        => (int) $row->fee_amount,
+                'currency_code' => 'usd',
+                'email'         => $customer->email,
+                'customer_id'   => $customer->id,
+                // cart_snapshot is NOT NULL, and this is where the branch above
+                // finds which reservation the money belongs to.
+                'cart_snapshot' => [
+                    'kind'           => Exclusivity::SESSION_KIND,
+                    'exclusivity_id' => $exclusivityId,
+                    'product_id'     => $row->product_id,
+                    'affiliate_id'   => $row->affiliate_id,
+                    'fee_amount'     => (int) $row->fee_amount,
+                ],
+                'raw_init_response' => $init['raw'],
+            ]);
+
+            DB::table('product_exclusivities')->where('id', $exclusivityId)
+                ->update(['payment_session_id' => $session->id, 'updated_at' => now()]);
+
+            return ['browser_url' => $init['browserUrl'], 'reference' => $reference];
+        } catch (\Throwable $e) {
+            Log::error('[exclusivity initiate] ' . $e->getMessage());
+            return response()->json(['error' => 'Could not start that payment.'], 500);
         }
     }
 
@@ -415,34 +536,68 @@ class PaynowController extends Controller
             // commission and bump the affiliate's lifetime earnings.
             // Aggregated per affiliate so a 5-line cart with the same code
             // becomes one AffiliateSale row, not five.
+            // Split each attributed line into the BASE (what BLESSLUXE lists it at)
+            // and the affiliate's MARKUP. Commission is paid on the base only —
+            // the affiliate already keeps the whole markup, so paying commission
+            // on it as well would have the business funding an uplift it never
+            // received. Lines predating storefronts carry no split, so the charged
+            // price is the base.
             $byCode = [];
             foreach ($items as $it) {
                 $code = $it['metadata']['affiliate_code'] ?? null;
                 if (! $code) continue;
-                $code = strtoupper($code);
-                $byCode[$code] ??= 0;
-                $byCode[$code] += ((int) $it['unit_price']) * ((int) $it['quantity']);
+
+                $code  = strtoupper($code);
+                $qty   = (int) $it['quantity'];
+                $unit  = (int) $it['unit_price'];
+                $base  = (int) ($it['metadata']['base_price'] ?? $unit);
+                $markup = max(0, ($unit - $base)) * $qty;
+
+                $byCode[$code] ??= ['base' => 0, 'markup' => 0, 'charged' => 0];
+                $byCode[$code]['base']    += $base * $qty;
+                $byCode[$code]['markup']  += $markup;
+                $byCode[$code]['charged'] += $unit * $qty;
             }
-            foreach ($byCode as $code => $attributedTotal) {
+            foreach ($byCode as $code => $totals) {
                 $affiliate = Affiliate::where('code', $code)->first();
                 if (! $affiliate) continue;
-                $commission = (int) round($attributedTotal * ((float) $affiliate->commission_rate) / 100);
-                if ($commission <= 0) continue;
+
+                $commission = AffiliatePricing::commissionOn($totals['base'], (float) $affiliate->commission_rate);
+                // The markup is theirs in full, so a zero-commission line still
+                // pays out when they marked it up.
+                $payable = $commission + $totals['markup'];
+                if ($payable <= 0) continue;
+
                 $sale = AffiliateSale::create([
                     'id'                => 'asal_' . Str::random(20),
                     'affiliate_id'      => $affiliate->id,
                     'order_id'          => $orderId,
-                    'order_total'       => $attributedTotal,
-                    'commission_amount' => $commission,
+                    'order_total'       => $totals['charged'],
+                    'base_total'        => $totals['base'],
+                    'markup_total'      => $totals['markup'],
+                    'commission_amount' => $payable,
                     'currency_code'     => strtolower((string) $session->currency_code),
                     'status'            => 'pending',
                     'created_at'        => now(),
                 ]);
                 Affiliate::where('id', $affiliate->id)->update([
-                    'total_earnings' => DB::raw('total_earnings + ' . $commission),
+                    // Lifetime earnings must include the markup, or the dashboard
+                    // would under-report what the affiliate is actually owed.
+                    'total_earnings' => DB::raw('total_earnings + ' . $payable),
                     'updated_at'     => now(),
                 ]);
                 $pendingAffiliateMails[] = ['affiliate' => $affiliate->fresh(), 'sale' => $sale];
+
+                // Count units toward any exclusivity this affiliate holds. Without
+                // this the minimum can never be met, so every paid exclusive would
+                // lapse at the end of its first term.
+                foreach ($items as $it) {
+                    if (strtoupper((string) ($it['metadata']['affiliate_code'] ?? '')) !== $code) continue;
+                    $productId = ProductVariant::where('id', $it['variant_id'])->value('product_id');
+                    if ($productId) {
+                        Exclusivity::recordSale($productId, $affiliate->id, (int) $it['quantity']);
+                    }
+                }
             }
 
             // ─── Pack slots: flip reserved → paid for any pack-attributed line. ─

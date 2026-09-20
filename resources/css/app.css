@@ -27,3 +27,50 @@ html, body {
     background: var(--color-cream);
     color: #000;
 }
+
+/* ─── Selects ────────────────────────────────────────────────────────────
+   A native <select> renders its own chrome — a grey chevron in a system font,
+   cramped against the text — which looks nothing like the rest of the store.
+   Styling every select globally rather than per-component means dropdowns
+   match the brand everywhere, including screens not touched since.
+
+   The arrow is an inline SVG in the brand gold, and the right padding is
+   reserved for it so long option text can never run underneath. */
+select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B8860B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+    padding-right: 2.25rem;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--color-gold);
+}
+
+/* Firefox keeps a focus ring inside the control; remove it so the border
+   above is the only focus indicator, as it is on our inputs. */
+select:-moz-focusring {
+    color: transparent;
+    text-shadow: 0 0 0 #000;
+}
+
+select:disabled {
+    background-color: var(--color-cream-dark);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Native option lists can't be styled cross-browser, but padding and colour
+   land in Firefox and most Chromium builds. */
+select option {
+    padding: 0.5rem;
+    color: #000;
+    background: #fff;
+}

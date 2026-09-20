@@ -39,6 +39,7 @@ export default {
                     title: 'Commerce',
                     items: [
                         { to: '/admin/affiliates', label: 'Affiliates' },
+                        { to: '/admin/affiliate-inbox', label: 'Affiliate inbox' },
                         { to: '/admin/blits',      label: 'Blits' },
                         { to: '/admin/packs',      label: 'Packs' },
                         { to: '/admin/regions',    label: 'Regions' },

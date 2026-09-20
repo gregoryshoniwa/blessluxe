@@ -1,10 +1,12 @@
 <script>
 import { api } from '../../lib/api.js';
-import { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag } from 'lucide-vue-next';
+import { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown } from 'lucide-vue-next';
+import StorefrontBuilder from '../components/affiliate/StorefrontBuilder.vue';
+import AffiliateInbox from '../components/affiliate/AffiliateInbox.vue';
 
 export default {
     name: 'AffiliateDashboard',
-    components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag },
+    components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown, StorefrontBuilder, AffiliateInbox },
     data() {
         return {
             data: null, loading: true, error: '', copied: false, needsLogin: false,
@@ -15,6 +17,9 @@ export default {
             profileSaving: false,
             profileSaved: false,
             profileError: '',
+            // Sections: earnings | shop | inbox
+            section: 'earnings',
+            storefront: null,
         };
     },
     computed: {
@@ -29,6 +34,10 @@ export default {
             const res = await api.get(`/api/store/affiliate/dashboard/${encodeURIComponent(this.code)}`);
             this.data = res;
             const meta = res.affiliate?.metadata || {};
+            try {
+                const sf = await api.get('/api/account/affiliate/storefront');
+                this.storefront = sf;
+            } catch { /* not active yet */ }
             this.profile = {
                 bio: meta.bio || '',
                 instagram: meta.instagram || '',
@@ -51,6 +60,17 @@ export default {
             } catch { /* ignore */ }
         },
         fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString() : '—'; },
+        async refreshStorefront() {
+            try { this.storefront = await api.get('/api/account/affiliate/storefront'); } catch { /* keep last */ }
+        },
+        async toggleMode() {
+            const next = this.storefront.storefront.mode === 'curated' ? 'all' : 'curated';
+            try {
+                this.storefront = await api.put('/api/account/affiliate/storefront', { mode: next });
+            } catch (e) {
+                this.profileError = e.payload?.error || 'Could not switch mode.';
+            }
+        },
         async saveProfile() {
             this.profileSaving = true;
             this.profileError = '';
@@ -154,9 +174,78 @@ export default {
                 </div>
             </section>
 
+            <!-- Sections. Earnings is the default because it's what most
+                 affiliates open the dashboard to check. -->
+            <nav class="flex gap-1 mb-6 border-b border-gold/15">
+                <button
+                    v-for="s in [
+                        { id: 'earnings', label: 'Earnings', icon: 'TrendingUp' },
+                        { id: 'shop',     label: 'My shop',  icon: 'LayoutGrid' },
+                        { id: 'payouts',  label: 'Payouts',  icon: 'Wallet' },
+                        { id: 'inbox',    label: 'Messages', icon: 'MessageCircle' },
+                    ]"
+                    :key="s.id"
+                    @click="section = s.id"
+                    :class="[
+                        'px-4 py-3 text-[10px] tracking-widest uppercase inline-flex items-center gap-2 border-b-2 -mb-px transition-colors',
+                        section === s.id ? 'border-gold text-gold-dark' : 'border-transparent text-black/50 hover:text-black/80',
+                    ]"
+                >
+                    <component :is="s.icon" class="w-3.5 h-3.5" />
+                    {{ s.label }}
+                </button>
+            </nav>
+
+            <!-- ─── My shop ─────────────────────────────────────────── -->
+            <section v-if="section === 'shop'" class="mb-10">
+                <div v-if="storefront" class="bg-cream-dark/40 border border-gold/20 p-5 mb-6">
+                    <div class="flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Your shop shows</p>
+                            <p class="font-display text-lg">
+                                {{ storefront.storefront.mode === 'curated'
+                                    ? `${storefront.storefront.product_count} pieces you chose`
+                                    : 'Everything BLESSLUXE sells' }}
+                            </p>
+                        </div>
+                        <button
+                            @click="toggleMode"
+                            class="text-[10px] tracking-widest uppercase border border-gold/40 text-gold-dark px-4 py-2 hover:bg-gold/10 transition-colors"
+                        >
+                            Switch to {{ storefront.storefront.mode === 'curated' ? 'the whole shop' : 'my own line' }}
+                        </button>
+                    </div>
+
+                    <!-- Exclusives they hold, with progress against the minimum. -->
+                    <div v-if="storefront.exclusives?.length" class="mt-4 pt-4 border-t border-gold/15">
+                        <p class="text-[10px] tracking-widest uppercase text-black/55 mb-2 inline-flex items-center gap-1">
+                            <Crown class="w-3 h-3" /> Exclusive to you
+                        </p>
+                        <ul class="space-y-1.5">
+                            <li v-for="e in storefront.exclusives" :key="e.id" class="flex items-center gap-2 text-sm">
+                                <span class="flex-1 min-w-0 truncate">{{ e.product_title }}</span>
+                                <span v-if="e.progress" :class="e.at_risk ? 'text-amber-700' : 'text-emerald-700'" class="text-[10px] tracking-widest uppercase">
+                                    {{ e.progress }} sold
+                                </span>
+                                <span v-if="e.status === 'pending_payment'" class="text-[10px] tracking-widest uppercase text-black/45">
+                                    awaiting payment
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <StorefrontBuilder @changed="refreshStorefront" />
+            </section>
+
+            <!-- ─── Messages ────────────────────────────────────────── -->
+            <section v-else-if="section === 'inbox'" class="mb-10">
+                <AffiliateInbox />
+            </section>
+
             <!-- Your profile. Optional, and entirely yours — none of this was
                  asked for when applying. -->
-            <section class="bg-white border border-gold/15 mb-10">
+            <section v-show="section === 'earnings'" class="bg-white border border-gold/15 mb-10">
                 <header class="px-5 py-3 border-b border-gold/10 flex items-center justify-between gap-3">
                     <h2 class="font-display text-sm tracking-widest uppercase">Your profile</h2>
                     <button
@@ -206,7 +295,7 @@ export default {
             </section>
 
             <!-- Recent sales -->
-            <section class="bg-white border border-gold/15 mb-10">
+            <section v-show="section === 'earnings'" class="bg-white border border-gold/15 mb-10">
                 <header class="px-5 py-3 border-b border-gold/10 flex items-center justify-between">
                     <h2 class="font-display text-sm tracking-widest uppercase flex items-center gap-2"><ShoppingBag class="w-3.5 h-3.5" /> Recent sales</h2>
                     <span class="text-[10px] tracking-widest uppercase text-black/40">last 20</span>
@@ -240,10 +329,15 @@ export default {
                 </table>
             </section>
 
-            <!-- Payouts -->
-            <section class="bg-white border border-gold/15">
-                <header class="px-5 py-3 border-b border-gold/10">
+            <!-- Payouts. Its own tab: money already received answers a different
+                 question from money still owed, and it was previously rendering
+                 under every other tab because it had no section guard. -->
+            <section v-if="section === 'payouts'" class="bg-white border border-gold/15">
+                <header class="px-5 py-3 border-b border-gold/10 flex items-center justify-between gap-3 flex-wrap">
                     <h2 class="font-display text-sm tracking-widest uppercase flex items-center gap-2"><Wallet class="w-3.5 h-3.5" /> Payouts</h2>
+                    <p class="text-[10px] tracking-widest uppercase text-black/45">
+                        Awaiting payout · <span class="text-gold-dark">{{ data.summary.pending_balance }}</span>
+                    </p>
                 </header>
                 <table class="w-full text-sm">
                     <thead class="bg-cream-dark/30 text-[10px] tracking-widest uppercase text-black/55">

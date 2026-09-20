@@ -10,6 +10,7 @@ use App\Models\AffiliatePayout;
 use App\Models\AffiliateSale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -254,6 +255,101 @@ class AdminAffiliateController extends Controller
                     actionUrl: '/affiliate/' . $affiliate->code . '/dashboard',
                 );
             }
+        }
+
+        return ['ok' => true];
+    }
+
+    /** GET /api/admin/affiliate-inbox — every thread with activity. */
+    public function inbox()
+    {
+        return [
+            'threads' => \App\Services\Messages::adminInbox(),
+            'pending_requests' => DB::table('affiliate_product_requests')
+                ->where('status', 'pending')->count(),
+        ];
+    }
+
+    /** GET /api/admin/affiliates/{id}/messages */
+    public function messages(string $id)
+    {
+        $a = Affiliate::findOrFail($id);
+        \App\Services\Messages::markRead($a->id, 'admin');
+
+        return [
+            'affiliate' => ['id' => $a->id, 'code' => $a->code, 'email' => $a->email],
+            'messages'  => \App\Services\Messages::thread($a->id),
+            'requests'  => DB::table('affiliate_product_requests')
+                ->where('affiliate_id', $a->id)
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn ($r) => (array) $r + ['images' => json_decode((string) $r->images, true) ?: []]),
+        ];
+    }
+
+    /** POST /api/admin/affiliates/{id}/messages */
+    public function reply(Request $request, string $id)
+    {
+        $a = Affiliate::findOrFail($id);
+        $data = $request->validate(['body' => ['required', 'string', 'max:4000']]);
+
+        \App\Services\Messages::post(
+            $a->id, 'admin',
+            'user:' . optional(Auth::guard('web')->user())->id,
+            $data['body'],
+        );
+
+        // Tell the affiliate, since they aren't sitting on the page.
+        if ($a->customer_id) {
+            \App\Services\Notifications::forCustomer(
+                $a->customer_id,
+                'affiliate_message',
+                'Message from BLESSLUXE',
+                \Illuminate\Support\Str::limit($data['body'], 120),
+                "/affiliate/{$a->code}/dashboard",
+            );
+        }
+
+        return ['messages' => \App\Services\Messages::thread($a->id)];
+    }
+
+    /** PUT /api/admin/affiliate-requests/{id} — accept or decline a stock request. */
+    public function resolveRequest(Request $request, string $id)
+    {
+        $req = DB::table('affiliate_product_requests')->where('id', $id)->first();
+        if (! $req) return response()->json(['error' => 'Request not found.'], 404);
+
+        $data = $request->validate([
+            'status'     => ['required', 'in:accepted,declined'],
+            'admin_note' => ['nullable', 'string', 'max:2000'],
+            'product_id' => ['nullable', 'string'],
+        ]);
+
+        DB::table('affiliate_product_requests')->where('id', $id)->update([
+            'status'     => $data['status'],
+            'admin_note' => $data['admin_note'] ?? null,
+            'product_id' => $data['product_id'] ?? null,
+            'updated_at' => now(),
+        ]);
+
+        // The decision belongs in the conversation, not only in a status column.
+        $verb = $data['status'] === 'accepted' ? 'accepted' : 'declined';
+        \App\Services\Messages::post(
+            $req->affiliate_id, 'admin',
+            'user:' . optional(Auth::guard('web')->user())->id,
+            "Your request \"{$req->title}\" was {$verb}." . ($data['admin_note'] ? "\n\n{$data['admin_note']}" : ''),
+            [], $id,
+        );
+
+        $affiliate = Affiliate::find($req->affiliate_id);
+        if ($affiliate?->customer_id) {
+            \App\Services\Notifications::forCustomer(
+                $affiliate->customer_id,
+                'affiliate_request_' . $data['status'],
+                "Stock request {$verb}",
+                $req->title,
+                "/affiliate/{$affiliate->code}/dashboard",
+            );
         }
 
         return ['ok' => true];

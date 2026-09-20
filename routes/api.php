@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
+use App\Http\Controllers\Api\AffiliateStorefrontController;
 use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AvatarController;
 use App\Http\Controllers\Api\GenerationController;
@@ -57,10 +58,17 @@ Route::prefix('store')->group(function () {
     Route::get('/headings',                [HeadingController::class,   'index']);
     Route::get('/catalogues',              [CatalogueController::class, 'index']);
     Route::get('/catalogues/{idOrHandle}', [CatalogueController::class, 'show']);
-    Route::get ('/products',                [ProductController::class, 'index']);
-    Route::post('/products/batch',          [ProductController::class, 'batch']);
-    Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
-    Route::get ('/products/{handle}',       [ProductController::class, 'show']);
+    // These need the SESSION, not just the api stack: an affiliate storefront
+    // filters the catalogue to that affiliate's own line and prices it with their
+    // markup, and both are keyed off `affiliate_code` in the session. Without
+    // `web` here, $request->hasSession() is false, the viewing affiliate can
+    // never be resolved, and a curated shop silently shows everything.
+    Route::middleware('web')->group(function () {
+        Route::get ('/products',                  [ProductController::class, 'index']);
+        Route::post('/products/batch',            [ProductController::class, 'batch']);
+        Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
+        Route::get ('/products/{handle}',         [ProductController::class, 'show']);
+    });
 
     // Public content (no session needed).
     Route::get('/announcements', [ContentController::class, 'announcements']);
@@ -109,6 +117,8 @@ Route::prefix('store')->group(function () {
             ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
         Route::get('/payments/paynow/return',    [PaynowController::class, 'return']);
         Route::get('/payments/paynow/status/{reference}', [PaynowController::class, 'status']);
+        // Buys a right, not goods — deliberately outside the cart flow.
+        Route::post('/payments/paynow/exclusivity/{exclusivityId}', [PaynowController::class, 'initiateExclusivity']);
 
         // ─── LUXE shopping agent ──────────────────────────────────────
         // Session-backed because guest carts + history live on the session.
@@ -182,6 +192,20 @@ Route::middleware('web')->prefix('account')->group(function () {
     // Links and bio — the affiliate's own to fill in after approval, not part
     // of applying.
     Route::put ('/affiliate/profile',       [AffiliateController::class, 'updateProfile']);
+
+    // ─── Affiliate storefront: their own shop ───────────────────────────
+    Route::get ('/affiliate/gallery',       [AffiliateStorefrontController::class, 'gallery']);
+    Route::get ('/affiliate/storefront',    [AffiliateStorefrontController::class, 'storefront']);
+    Route::put ('/affiliate/storefront',    [AffiliateStorefrontController::class, 'updateStorefront']);
+    Route::put ('/affiliate/products/{productId}',          [AffiliateStorefrontController::class, 'setProduct']);
+    Route::put ('/affiliate/category-markups/{catalogueId}', [AffiliateStorefrontController::class, 'setCategoryMarkup']);
+    Route::post('/affiliate/exclusivity/{productId}',       [AffiliateStorefrontController::class, 'buyExclusivity']);
+
+    // Stock requests (with photos) and the conversation they land in.
+    Route::get ('/affiliate/requests',      [AffiliateStorefrontController::class, 'requests']);
+    Route::post('/affiliate/requests',      [AffiliateStorefrontController::class, 'storeRequest']);
+    Route::get ('/affiliate/messages',      [AffiliateStorefrontController::class, 'messages']);
+    Route::post('/affiliate/messages',      [AffiliateStorefrontController::class, 'sendMessage']);
 
     // Returns / RMA.
     // How a pack buyer wants their piece once BLESSLUXE has it.
@@ -285,6 +309,11 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put   ('/affiliates/{id}',            [AdminAffiliateController::class, 'update']);
         Route::delete('/affiliates/{id}',            [AdminAffiliateController::class, 'destroy']);
         Route::post  ('/affiliates/{id}/payouts',    [AdminAffiliateController::class, 'markPaid']);
+        // Affiliate <-> admin conversation, and the stock requests landing in it.
+        Route::get   ('/affiliate-inbox',            [AdminAffiliateController::class, 'inbox']);
+        Route::get   ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'messages']);
+        Route::post  ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'reply']);
+        Route::put   ('/affiliate-requests/{id}',    [AdminAffiliateController::class, 'resolveRequest']);
 
         Route::get   ('/regions',       [AdminRegionController::class, 'index']);
         Route::post  ('/regions',       [AdminRegionController::class, 'store']);

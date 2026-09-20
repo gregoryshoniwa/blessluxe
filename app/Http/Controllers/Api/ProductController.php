@@ -25,8 +25,16 @@ class ProductController extends Controller
         $limit = (int) min(60, max(1, (int) $request->query('limit', 24)));
         $sort  = (string) $request->query('sort', 'featured');
 
+        // When browsing an affiliate's storefront who sells a curated line,
+        // show only their chosen pieces. Null means "the whole shop", which is
+        // why it is checked against null rather than emptiness — an affiliate who
+        // has switched to curated but picked nothing yet should show nothing,
+        // not everything.
+        $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
+
         $query = Product::query()
             ->where('status', 'published')
+            ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
             ->when($request->query('catalogue'), fn ($q, $c) => $q
                 ->whereHas('catalogues', fn ($qq) => $qq->where('handle', $c))
             )
@@ -84,8 +92,12 @@ class ProductController extends Controller
             'ids'   => ['required', 'array', 'min:1', 'max:60'],
             'ids.*' => ['string'],
         ]);
+        // A curated affiliate only sells their own line, here as everywhere else.
+        $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
+
         $byId = Product::query()
             ->where('status', 'published')
+            ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
             ->whereIn('id', $data['ids'])
             ->with([
                 'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
@@ -128,9 +140,12 @@ class ProductController extends Controller
         $catIds = $seed->catalogues->pluck('id')->all();
         $headingIds = $seed->catalogues->pluck('heading_id')->filter()->unique()->all();
 
+        $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
+
         $query = Product::query()
             ->where('status', 'published')
             ->where('id', '!=', $seed->id)
+            ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
             ->when(! empty($catIds), function ($q) use ($catIds) {
                 $q->whereHas('catalogues', fn ($qc) => $qc->whereIn('catalogues.id', $catIds));
             })
@@ -274,5 +289,20 @@ class ProductController extends Controller
                 ] : null,
             ]),
         ];
+    }
+
+    /**
+     * The affiliate whose storefront is being browsed, if any.
+     *
+     * Their curated line and their prices both hang off this, so it is resolved
+     * once per request rather than in each query.
+     */
+    private function viewingAffiliate(\Illuminate\Http\Request $request): ?\App\Models\Affiliate
+    {
+        if (! $request->hasSession()) return null;
+        $code = $request->session()->get('affiliate_code');
+        if (! $code) return null;
+
+        return \App\Models\Affiliate::where('code', $code)->where('status', 'active')->first();
     }
 }

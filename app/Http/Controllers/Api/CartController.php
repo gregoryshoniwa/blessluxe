@@ -7,6 +7,7 @@ use App\Models\Cart;
 use App\Models\CartLineItem;
 use App\Models\ProductVariant;
 use App\Services\Couriers;
+use App\Services\AffiliatePricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -61,13 +62,34 @@ class CartController extends Controller
             // the line forever — even if the session attribution is cleared
             // later, the sale still belongs to whoever earned it.
             $affiliateCode = $request->session()->get('affiliate_code');
-            $metadata = $affiliateCode ? ['affiliate_code' => $affiliateCode] : null;
+            $base = (int) (optional($variant->prices->first())->amount ?? 0);
+
+            // An affiliate selling their own line charges base + their markup. The
+            // split is recorded on the line so checkout can pay commission on the
+            // base and hand the markup over whole — recomputing it later would give
+            // a different answer the moment the affiliate edits their price.
+            $affiliate = $affiliateCode
+                ? \App\Models\Affiliate::where('code', $affiliateCode)->where('status', 'active')->first()
+                : null;
+
+            $priced = AffiliatePricing::priceFor($affiliate, (string) $variant->product_id, $base);
+
+            $metadata = null;
+            if ($affiliateCode) {
+                $metadata = ['affiliate_code' => $affiliateCode, 'base_price' => $priced['base']];
+                if ($priced['markup'] > 0) {
+                    $metadata['markup_amount'] = $priced['markup'];
+                    $metadata['markup_type']   = $priced['markup_type'];
+                    $metadata['markup_value']  = $priced['markup_value'];
+                }
+            }
+
             CartLineItem::create([
                 'id'         => 'cli_' . Str::random(20),
                 'cart_id'    => $cart->id,
                 'variant_id' => $variant->id,
                 'quantity'   => $qty,
-                'unit_price' => optional($variant->prices->first())->amount ?? 0,
+                'unit_price' => $priced['total'],
                 'metadata'   => $metadata,
             ]);
         }

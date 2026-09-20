@@ -20,6 +20,7 @@ const routes = [
     // which is why the order screen linked to the list instead.
     { path: '/admin/packages/:id', name: 'admin-package-detail', component: () => import('./pages/Packages.vue') },
     { path: '/admin/couriers',   name: 'admin-couriers',  component: () => import('./pages/Couriers.vue') },
+    { path: '/admin/affiliate-inbox', name: 'admin-affiliate-inbox', component: () => import('./pages/AffiliateInbox.vue') },
     { path: '/admin/orders',     name: 'admin-orders',         component: () => import('./pages/Orders.vue') },
     { path: '/admin/orders/:id', name: 'admin-order-detail',   component: () => import('./pages/OrderDetail.vue') },
     { path: '/admin/content',    name: 'admin-content',   component: () => import('./pages/Content.vue') },

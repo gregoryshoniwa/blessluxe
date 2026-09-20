@@ -15,8 +15,19 @@ class Product extends Model
     public $incrementing = false;
     protected $guarded = [];
     protected $casts = [
-        'metadata' => 'array',
+        'metadata'            => 'array',
+        'exclusivity_enabled' => 'boolean',
     ];
+
+    /**
+     * Products another affiliate holds exclusively are hidden everywhere by
+     * default. Admin screens opt out with
+     * `Product::withoutGlobalScope(ExclusivityScope::class)`.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new \App\Models\Scopes\ExclusivityScope());
+    }
 
     public function variants(): HasMany
     {

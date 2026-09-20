@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\Scopes\ExclusivityScope;
 use App\Models\ProductImage;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
@@ -19,7 +20,7 @@ class AdminProductController extends Controller
     /** Paginated list with light variant + catalogue stats. */
     public function index(Request $request)
     {
-        $q = Product::query()
+        $q = Product::withoutGlobalScope(ExclusivityScope::class)
             ->withCount('variants')
             ->with(['catalogues:id,name,handle', 'images' => fn ($qq) => $qq->orderBy('rank')->limit(1)])
             ->when($request->query('q'), function ($q, $term) {
@@ -54,7 +55,7 @@ class AdminProductController extends Controller
 
     public function show(string $id)
     {
-        $product = Product::with(['variants.prices', 'images', 'media', 'options.values', 'catalogues:id,name,handle'])
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->with(['variants.prices', 'images', 'media', 'options.values', 'catalogues:id,name,handle'])
             ->findOrFail($id);
 
         return ['product' => [
@@ -140,7 +141,7 @@ class AdminProductController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $product = Product::findOrFail($id);
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($id);
         $data = $request->validate([
             'title'         => ['sometimes', 'string', 'max:255'],
             'handle'        => ['sometimes', 'string', 'max:255', 'regex:/^[a-z0-9-]+$/', Rule::unique('products', 'handle')->ignore($id)],
@@ -167,7 +168,7 @@ class AdminProductController extends Controller
 
     public function destroy(string $id)
     {
-        Product::findOrFail($id)->delete();
+        Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($id)->delete();
         return ['ok' => true];
     }
 
@@ -175,7 +176,7 @@ class AdminProductController extends Controller
 
     public function storeVariant(Request $request, string $productId)
     {
-        $product = Product::findOrFail($productId);
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($productId);
         $data = $request->validate([
             'title'              => ['required', 'string', 'max:120'],
             'sku'                => ['nullable', 'string', 'max:120', Rule::unique('product_variants', 'sku')],
@@ -253,7 +254,7 @@ class AdminProductController extends Controller
      */
     public function uploadImage(Request $request, string $productId)
     {
-        $product = Product::findOrFail($productId);
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($productId);
 
         // When PHP rejects the upload pre-Laravel (file > upload_max_filesize
         // or post_max_size), $_FILES is empty and the request body is gone.
@@ -331,7 +332,7 @@ class AdminProductController extends Controller
      */
     public function setVideo(Request $request, string $id)
     {
-        $product = Product::findOrFail($id);
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($id);
         $data = $request->validate([
             'video'       => ['required_without:youtube_url', 'nullable', 'file', 'mimetypes:video/mp4,video/webm,video/quicktime', 'max:102400'], // 100 MB
             'youtube_url' => ['required_without:video', 'nullable', 'string', 'max:500'],
