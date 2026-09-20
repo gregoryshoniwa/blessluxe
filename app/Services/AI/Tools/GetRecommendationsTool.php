@@ -42,7 +42,8 @@ class GetRecommendationsTool extends AiTool
         $budget = isset($params['budget']) ? (float) $params['budget'] : null;
         $category = trim((string) ($params['category'] ?? ''));
 
-        $q = Product::query()
+        // LUXE must not recommend what the shop it is standing in doesn't sell.
+        $q = \App\Services\AffiliatePricing::scopeToShop(Product::query())
             ->where('status', 'published')
             ->orderByDesc('updated_at')
             ->with([

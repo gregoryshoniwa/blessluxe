@@ -169,4 +169,154 @@ class CuratedStorefrontTest extends TestCase
         ExclusivityScope::flush();
         $this->assertContains('prod_a', $this->shopIds());
     }
+
+    // ─── A curated shop is curated EVERYWHERE, not just in the product grid ─
+
+    /** prod_a → Women/Dresses, prod_b → Men/Shirts, plus one open pack. */
+    private function seedShopFurniture(): void
+    {
+        foreach ([['women', 'Women', 'dresses', 'prod_a', 1], ['men', 'Men', 'shirts', 'prod_b', 2]] as [$h, $name, $c, $product, $rank]) {
+            DB::table('headings')->insert([
+                'id' => "head_$h", 'name' => $name, 'handle' => $h, 'rank' => $rank,
+                'is_active' => true, 'is_sale' => false, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('catalogues')->insert([
+                'id' => "cat_$c", 'heading_id' => "head_$h", 'name' => ucfirst($c), 'handle' => $c,
+                'is_active' => true, 'rank' => 1, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('product_catalogue_map')->insert(['product_id' => $product, 'catalogue_id' => "cat_$c"]);
+        }
+
+        DB::table('pack_definitions')->insert([
+            'id' => 'pdef_1', 'title' => 'Summer drop', 'handle' => 'summer-drop',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('pack_campaigns')->insert([
+            'id' => 'pcam_1', 'pack_definition_id' => 'pdef_1', 'host_kind' => 'admin',
+            'public_code' => 'PACK1', 'status' => 'open', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    private function curate(Affiliate $aff, array $productIds): void
+    {
+        $aff->update(['storefront_mode' => 'curated']);
+        foreach ($productIds as $i => $id) {
+            DB::table('affiliate_products')->insert([
+                'id' => "afp_x$i", 'affiliate_id' => $aff->id, 'product_id' => $id,
+                'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    }
+
+    #[Test]
+    public function a_curated_shop_lists_no_packs(): void
+    {
+        $aff = $this->seedCatalogue();
+        $this->seedShopFurniture();
+
+        // The full shop has the pack…
+        $this->assertCount(1, $this->getJson('/api/store/packs')->json('packs'));
+
+        // …an affiliate's hand-picked shop does not: nobody picked it.
+        $this->curate($aff, ['prod_a']);
+        $this->postJson('/api/store/affiliate/resolve', ['code' => 'JANE'])->assertOk();
+
+        $res = $this->getJson('/api/store/packs')->assertOk();
+        $this->assertSame([], $res->json('packs'));
+        // …and the page is told WHY, so it doesn't claim no packs exist anywhere.
+        $this->assertTrue($res->json('hidden_by_storefront'));
+    }
+
+    #[Test]
+    public function an_affiliate_mirroring_the_whole_shop_still_lists_packs(): void
+    {
+        $this->seedCatalogue();
+        $this->seedShopFurniture();
+
+        $this->postJson('/api/store/affiliate/resolve', ['code' => 'JANE'])->assertOk();
+
+        $this->assertCount(1, $this->getJson('/api/store/packs')->json('packs'));
+    }
+
+    #[Test]
+    public function the_menu_only_offers_categories_the_curated_shop_has_something_in(): void
+    {
+        $aff = $this->seedCatalogue();
+        $this->seedShopFurniture();
+
+        $handles = fn () => array_column($this->getJson('/api/store/headings')->json('headings'), 'handle');
+        $this->assertSame(['women', 'men'], $handles());
+
+        // Jane sells one dress. "Men" would be a tile that opens an empty page.
+        $this->curate($aff, ['prod_a']);
+        $this->postJson('/api/store/affiliate/resolve', ['code' => 'JANE'])->assertOk();
+
+        $this->assertSame(['women'], $handles());
+
+        // Leaving her shop widens the menu again.
+        $this->postJson('/api/store/affiliate/clear')->assertOk();
+        $this->assertSame(['women', 'men'], $handles());
+    }
+
+    #[Test]
+    public function an_empty_curated_shop_has_an_empty_menu_rather_than_dead_links(): void
+    {
+        $aff = $this->seedCatalogue();
+        $this->seedShopFurniture();
+        $this->curate($aff, []);
+
+        $this->postJson('/api/store/affiliate/resolve', ['code' => 'JANE'])->assertOk();
+
+        $this->assertSame([], $this->getJson('/api/store/headings')->json('headings'));
+    }
+
+    #[Test]
+    public function the_storefront_is_told_it_is_in_a_curated_shop_and_how_full_it_is(): void
+    {
+        $aff = $this->seedCatalogue();
+
+        // Whole-shop mode: not curated, and "how many" is meaningless.
+        $resolved = $this->postJson('/api/store/affiliate/resolve', ['code' => 'JANE'])->json('affiliate');
+        $this->assertFalse($resolved['curated']);
+        $this->assertNull($resolved['product_count']);
+
+        // Curated but empty — what the home page needs to say "still choosing"
+        // instead of showing shoppers a developer's note about seeding.
+        $this->curate($aff, []);
+        $active = $this->getJson('/api/store/affiliate/active')->json('affiliate');
+        $this->assertTrue($active['curated']);
+        $this->assertSame(0, $active['product_count']);
+
+        DB::table('affiliate_products')->insert([
+            'id' => 'afp_late', 'affiliate_id' => $aff->id, 'product_id' => 'prod_c',
+            'is_active' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->assertSame(1, $this->getJson('/api/store/affiliate/active')->json('affiliate.product_count'));
+    }
+
+    #[Test]
+    public function the_luxe_assistant_only_suggests_what_the_curated_shop_sells(): void
+    {
+        $aff = $this->seedCatalogue();
+        $this->curate($aff, ['prod_b']);
+
+        // The assistant runs inside a storefront request, so give it one that is
+        // shopping via Jane — the same session state the widget has.
+        $request = \Illuminate\Http\Request::create('/api/store/agent', 'POST');
+        $request->setLaravelSession($this->app['session']->driver());
+        $request->session()->put('affiliate_code', 'JANE');
+        $this->app->instance('request', $request);
+
+        $found = fn () => collect(json_decode(json_encode(
+            (new \App\Services\AI\Tools\SearchProductsTool)->execute(['query' => 'Piece', 'limit' => 12], new \App\Services\AI\AgentContext('sess_test'))
+        ), true))->flatten()->filter(fn ($v) => is_string($v) && str_starts_with($v, 'prod_'))->values()->all();
+
+        // An assistant recommending a dress this shop doesn't carry is the same
+        // leak as the Packs tile — just spoken instead of drawn.
+        $this->assertSame(['prod_b'], $found());
+
+        // Outside her shop it searches everything again.
+        $request->session()->forget('affiliate_code');
+        $this->assertEqualsCanonicalizing(['prod_a', 'prod_b', 'prod_c'], $found());
+    }
 }

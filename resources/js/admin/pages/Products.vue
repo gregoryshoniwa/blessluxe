@@ -68,7 +68,7 @@ export default {
 
 <template>
     <div>
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Catalogue</p>
                 <h1 class="text-2xl font-semibold">Products</h1>
@@ -77,7 +77,7 @@ export default {
         </header>
 
         <div class="mb-4 flex gap-2">
-            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search title or handle…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search title or handle…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
             <button @click="page = 1; fetchAll()" class="border border-zinc-300 px-4 py-2 text-xs tracking-widest uppercase hover:bg-zinc-100">Search</button>
         </div>
 

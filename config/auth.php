@@ -48,6 +48,12 @@ return [
             'driver' => 'session',
             'provider' => 'customers',
         ],
+        // Who a websocket belongs to. Not a login — it resolves to whichever
+        // of the two session guards above the requesting SPA says it is
+        // (see AppServiceProvider). Only channel auth uses it.
+        'realtime' => [
+            'driver' => 'realtime',
+        ],
     ],
 
     /*

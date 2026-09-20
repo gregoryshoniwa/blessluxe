@@ -1,20 +1,37 @@
 <script>
 import { api } from '../../lib/api.js';
+import { affiliateStore } from '../affiliate-store.js';
 import { Sparkles, Users } from 'lucide-vue-next';
 
 export default {
     name: 'PacksPage',
     components: { Sparkles, Users },
     data() {
-        return { packs: [], loading: true };
+        return { packs: [], loading: true, hiddenByShop: false };
     },
-    async mounted() {
-        try {
-            const data = await api.get('/api/store/packs');
-            this.packs = data.packs || [];
-        } finally { this.loading = false; }
+    computed: {
+        shopName() { return affiliateStore.state.affiliate?.name || affiliateStore.state.affiliate?.code || 'this shop'; },
+    },
+    mounted() {
+        this.load();
+        window.addEventListener('blessluxe:affiliate-changed', this.load);
+    },
+    beforeUnmount() {
+        window.removeEventListener('blessluxe:affiliate-changed', this.load);
     },
     methods: {
+        async load() {
+            this.loading = true;
+            try {
+                const data = await api.get('/api/store/packs');
+                this.packs = data.packs || [];
+                // The SERVER says why it is empty — a curated affiliate shop
+                // lists no packs — so this page can say so, rather than claiming
+                // there are none open anywhere.
+                this.hiddenByShop = Boolean(data.hidden_by_storefront);
+            } finally { this.loading = false; }
+        },
+        leaveShop() { affiliateStore.clear(); },
         fillPct(p) {
             if (!p.slots_total) return 0;
             return Math.round((p.slots_paid / p.slots_total) * 100);
@@ -46,6 +63,13 @@ export default {
                 <div class="h-3 bg-cream-dark animate-pulse w-2/3 mb-1" />
                 <div class="h-3 bg-cream-dark animate-pulse w-1/2" />
             </div>
+        </div>
+
+        <!-- Reached by a saved link while shopping a curated affiliate shop. -->
+        <div v-else-if="hiddenByShop" class="text-center py-20 max-w-md mx-auto">
+            <p class="font-display text-lg tracking-wide mb-2">Packs aren't part of {{ shopName }}'s shop</p>
+            <p class="text-sm text-black/55 leading-relaxed mb-6">You're browsing a hand-picked collection. Packs are BLESSLUXE group-buys, available from the main shop.</p>
+            <button @click="leaveShop" class="text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold">Browse the full collection</button>
         </div>
 
         <div v-else-if="!packs.length" class="text-center py-20 max-w-md mx-auto">

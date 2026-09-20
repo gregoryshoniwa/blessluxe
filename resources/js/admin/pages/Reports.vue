@@ -87,7 +87,7 @@ export default {
                 <h1 class="text-3xl font-serif">Reports &amp; Exports</h1>
                 <p class="text-sm text-zinc-500 mt-1">Sales, customers, affiliates — and CSV downloads.</p>
             </div>
-            <div class="flex items-end gap-3">
+            <div class="flex flex-wrap items-end gap-3">
                 <label class="block">
                     <span class="text-[10px] tracking-widest uppercase text-zinc-500">From</span>
                     <input type="date" v-model="from" class="block mt-1 border border-zinc-300 px-3 py-1.5 text-sm" />

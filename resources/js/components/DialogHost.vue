@@ -61,7 +61,7 @@ export default {
                 <div class="absolute inset-0 bg-black/45 backdrop-blur-[2px]" @click="answer(false)"></div>
 
                 <div
-                    class="relative w-full max-w-md shadow-2xl"
+                    class="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl"
                     :class="isAdmin ? 'bg-white border border-zinc-200' : 'bg-white border border-gold/20'"
                 >
                     <div

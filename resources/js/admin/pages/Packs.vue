@@ -100,12 +100,12 @@ export default {
 
 <template>
     <div>
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Group buy</p>
                 <h1 class="text-2xl font-semibold">Packs</h1>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <button @click="startDef" class="border border-zinc-300 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-gold hover:text-gold">
                     New Definition
                 </button>

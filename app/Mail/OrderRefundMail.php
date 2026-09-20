@@ -30,7 +30,7 @@ class OrderRefundMail extends Mailable
                 'order'        => $this->order,
                 'amount'       => '$' . number_format($this->order->total / 100, 2),
                 'reason'       => $this->reason,
-                'blitsRefunded'=> (int) ($this->order->metadata['blits_debited'] ?? 0),
+                'beesRefunded'=> (int) ($this->order->metadata['blits_debited'] ?? 0),
             ],
         );
     }

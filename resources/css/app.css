@@ -74,3 +74,107 @@ select option {
     color: #000;
     background: #fff;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mobile standards — shared by the storefront and the admin.
+
+   Rules here fix a CLASS of problem everywhere at once. Anything that only one
+   page suffers from belongs in that page, not here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. A data table is wider than a phone. It must scroll INSIDE its own block,
+      never stretch the page — a page that pans sideways feels broken, and its
+      fixed headers and sticky bars stop lining up with the content.
+      `:has(> table)` reaches all 34 tables through the wrapper they already
+      have, instead of adding a wrapper div in 20 files and the 21st being
+      forgotten. */
+:where(div, section, article):has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+}
+
+@media (max-width: 1023px) {
+    /* Give columns room and scroll, rather than crushing them until every
+       order number wraps onto three lines. */
+    /* …unless it is showing an empty state (a single cell spanning the row):
+       "No sales yet" forced 600px wide is centred off-screen. */
+    :where(div, section, article):has(> table) > table:not(:has(td[colspan])) {
+        min-width: 38rem;
+    }
+    :where(div, section, article):has(> table) > table th {
+        white-space: nowrap;
+    }
+}
+
+/* 2. iOS Safari zooms the whole page in when a focused field's text is under
+      16px, and never zooms back out. Applied only to touch devices so desktop
+      keeps its denser type. !important because the per-field `text-sm` utility
+      would otherwise win on specificity. */
+@media (hover: none) and (pointer: coarse) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* 3. Long unbroken strings — order numbers, tracking codes, emails, URLs — are
+      the usual cause of a single element pushing a page wide. */
+.font-mono,
+code,
+kbd {
+    overflow-wrap: anywhere;
+}
+
+/* 4. Media never exceeds its container. */
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+}
+
+/* 5. Kill the grey flash on tap; our own hover/active states are the feedback. */
+a,
+button,
+[role='button'],
+label {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* 6. Horizontal strips (tabs, chips) scroll without showing a scrollbar, and
+      snap so a tab never rests half off-screen. Opt in with `.scroll-strip`. */
+.scroll-strip {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+}
+.scroll-strip::-webkit-scrollbar {
+    display: none;
+}
+.scroll-strip > * {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+}
+
+/* 7. Two chats, one corner. While a messenger is on the page, the LUXE launcher
+      would cover its Send button on any screen narrow enough for them to meet —
+      so it steps aside. (It is one tap away again the moment you leave.) */
+@media (max-width: 1279px) {
+    body.has-messenger .luxe-launcher {
+        display: none;
+    }
+}
+
+/* 3b. …except inside a table. A table scrolls sideways (rule 1), so it has the
+       room — and an order number broken across three lines can't be read or
+       compared down a column. */
+table .font-mono,
+table code {
+    overflow-wrap: normal;
+    white-space: nowrap;
+}

@@ -1,23 +1,40 @@
 <script>
 import { api } from '../../../lib/api.js';
 import { toast } from '../../../lib/dialog.js';
-import { Send, Paperclip, LoaderCircle, X, Package } from 'lucide-vue-next';
+import { markRaw } from 'vue';
+import { createConversation } from '../../../lib/conversation.js';
+import ChatThread from '../../../components/ChatThread.vue';
+import ChatShell from '../../../components/ChatShell.vue';
+import CallPanel from '../../../components/CallPanel.vue';
+import { Package, X, ImagePlus, LoaderCircle } from 'lucide-vue-next';
 
 /**
- * One conversation with BLESSLUXE, plus the form for asking them to stock
- * something. Stock requests post INTO the thread rather than living in a
- * separate list, so an affiliate reads the decision where they asked.
+ * The affiliate's conversation with BLESSLUXE.
+ *
+ * All chat behaviour — windows, deltas, ticks, presence, optimistic send —
+ * lives in lib/conversation.js, shared with the admin inbox. This component is
+ * layout plus the one thing only an affiliate does: asking for a piece.
  */
 export default {
     name: 'AffiliateInbox',
-    components: { Send, Paperclip, LoaderCircle, X, Package },
+    components: { ChatThread, ChatShell, CallPanel, Package, X, ImagePlus, LoaderCircle },
     data() {
+        // markRaw: the controller is closures and timers, not data. Only its
+        // `state` (already reactive) should be tracked.
+        const chat = markRaw(createConversation({
+            me: 'affiliate',
+            url: '/api/account/affiliate/messages',
+            readUrl: '/api/account/affiliate/messages/read',
+        }));
         return {
-            messages: [],
+            chat,
+            c: chat.state,
             loading: true,
-            body: '',
-            files: [],
-            sending: false,
+            affiliateId: null,
+            // A scrolling chat nested inside a scrolling page is the worst of
+            // both on a phone, so there it opens as its own screen — the way
+            // every phone messenger does. Minimise is one tap away.
+            fullscreen: window.matchMedia('(max-width: 639px)').matches,
             // Stock request form
             showRequest: false,
             request: { title: '', note: '' },
@@ -25,41 +42,45 @@ export default {
             requesting: false,
         };
     },
-    async mounted() { await this.load(); },
+    computed: {
+        status() {
+            if (this.c.typing) return 'typing…';
+            if (this.c.peerOnline) return 'online';
+            return 'Usually replies within a day';
+        },
+    },
+    async mounted() {
+        try {
+            const d = await this.chat.open();
+            this.affiliateId = d.affiliate_id;
+            this.chat.connect(`affiliate.${d.affiliate_id}`);
+        } catch (e) {
+            toast(e.payload?.error || 'Could not load your messages.', { tone: 'error' });
+        } finally { this.loading = false; }
+    },
+    beforeUnmount() {
+        this.chat.destroy();
+    },
     methods: {
-        async load() {
-            this.loading = true;
-            try {
-                const d = await api.get('/api/account/affiliate/messages');
-                this.messages = d.messages;
-                this.$nextTick(this.scrollToEnd);
-            } catch (e) {
-                toast(e.payload?.error || 'Could not load your messages.', { tone: 'error' });
-            } finally { this.loading = false; }
+        async send(payload) {
+            try { await this.chat.send(payload); }
+            catch (e) {
+                toast(e.status === 429
+                    ? "You're sending messages very quickly — give it a moment."
+                    : (e.payload?.error || e.payload?.message || 'Could not send that.'), { tone: 'error' });
+            }
         },
-        scrollToEnd() {
-            const el = this.$refs.thread;
-            if (el) el.scrollTop = el.scrollHeight;
-        },
-        pickFiles(e, target) { this[target] = Array.from(e.target.files || []).slice(0, 6); },
 
-        async send() {
-            if (!this.body.trim() && !this.files.length) return;
-            this.sending = true;
-            try {
-                // FormData because of the photos; the api wrapper passes it through.
-                const fd = new FormData();
-                fd.append('body', this.body);
-                this.files.forEach((f) => fd.append('images[]', f));
-                const d = await api.post('/api/account/affiliate/messages', fd);
-                this.messages = d.messages;
-                this.body = '';
-                this.files = [];
-                this.$nextTick(this.scrollToEnd);
-            } catch (e) {
-                toast(e.payload?.error || 'Could not send that.', { tone: 'error' });
-            } finally { this.sending = false; }
+        /** Where a referenced item opens for a customer: its page in the shop. */
+        refUrl(ref) {
+            return ref.type === 'pack' ? `/shop/packs/${ref.handle}` : `/shop/${ref.handle}`;
         },
+
+        /** A failed call is worth surfacing — it is usually a permission prompt
+         *  that was dismissed, or a network with no route. */
+        onCallError(message) { toast(message, { tone: 'error' }); },
+
+        pickRequestFiles(e) { this.requestFiles = Array.from(e.target.files || []).slice(0, 6); },
 
         async submitRequest() {
             if (!this.request.title.trim()) return;
@@ -73,15 +94,13 @@ export default {
                 this.request = { title: '', note: '' };
                 this.requestFiles = [];
                 this.showRequest = false;
-                await this.load();
-                toast('Sent to BLESSLUXE — you\'ll get a reply here.');
+                // The request posts INTO the thread; pull it in rather than
+                // waiting for the next poll.
+                await this.chat.open();
+                toast("Sent to BLESSLUXE — you'll get a reply here.");
             } catch (e) {
                 toast(e.payload?.error || 'Could not send that request.', { tone: 'error' });
             } finally { this.requesting = false; }
-        },
-
-        fmt(iso) {
-            return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
         },
     },
 };
@@ -89,91 +108,106 @@ export default {
 
 <template>
     <div>
-        <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h3 class="font-display text-sm tracking-widest uppercase text-gold">Messages</h3>
-            <button
-                @click="showRequest = !showRequest"
-                class="text-[10px] tracking-widest uppercase border border-gold/40 text-gold-dark px-3 py-1.5 hover:bg-gold/10 transition-colors inline-flex items-center gap-1"
-            >
-                <Package class="w-3 h-3" /> {{ showRequest ? 'Close' : 'Ask for a piece' }}
-            </button>
-        </div>
-
-        <!-- Stock request: the "send pictures of what you'd like us to carry" path. -->
-        <section v-if="showRequest" class="bg-cream-dark/40 border border-gold/20 p-4 mb-5">
-            <p class="text-xs text-black/60 mb-3">
-                Seen something your people would buy? Send it over with photos and we'll look into stocking it.
-            </p>
-            <input v-model="request.title" placeholder="What is it?" maxlength="160" class="w-full border border-black/15 px-3 py-2 text-sm mb-2" />
-            <textarea v-model="request.note" rows="3" placeholder="Where you saw it, sizes, who it's for… (optional)" class="w-full border border-black/15 px-3 py-2 text-sm mb-2"></textarea>
-            <label class="inline-flex items-center gap-2 text-[10px] tracking-widest uppercase text-black/55 cursor-pointer mb-3">
-                <Paperclip class="w-3.5 h-3.5" />
-                <span>{{ requestFiles.length ? `${requestFiles.length} photo(s)` : 'Add photos' }}</span>
-                <input type="file" accept="image/*" multiple class="hidden" @change="pickFiles($event, 'requestFiles')" />
-            </label>
-            <button
-                @click="submitRequest"
-                :disabled="requesting || !request.title.trim()"
-                class="w-full bg-gold text-white py-2.5 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-40"
-            >
-                {{ requesting ? 'Sending…' : 'Send request' }}
-            </button>
-        </section>
-
         <p v-if="loading" class="text-sm text-black/55">Loading…</p>
 
-        <template v-else>
-            <div ref="thread" class="border border-gold/10 bg-white max-h-[420px] overflow-y-auto p-4 space-y-4">
-                <p v-if="!messages.length" class="text-sm text-black/50 text-center py-8">
-                    Nothing yet. Say hello, or ask us to stock something.
-                </p>
+        <ChatShell
+            v-else
+            v-model:fullscreen="fullscreen"
+            height="min(640px, calc(100vh - 12rem))"
+        >
+            <template #thread-header>
+                <div class="w-9 h-9 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center flex-shrink-0 relative">
+                    <span class="font-display text-sm text-gold-dark">B</span>
+                    <span
+                        v-if="c.peerOnline"
+                        class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"
+                    ></span>
+                </div>
+                <div class="min-w-0">
+                    <p class="font-display text-sm tracking-widest uppercase text-gold-dark truncate">BLESSLUXE</p>
+                    <p :class="['text-[11px] truncate', c.typing || c.peerOnline ? 'text-emerald-600' : 'text-black/40']">{{ status }}</p>
+                </div>
+            </template>
 
-                <div
-                    v-for="m in messages"
-                    :key="m.id"
-                    :class="['flex', m.sender === 'affiliate' ? 'justify-end' : 'justify-start']"
+            <!-- Everything the conversation needs travels WITH it, so full
+                 screen loses nothing: calling and asking for a piece both live
+                 here rather than in the page around the chat. -->
+            <template #actions>
+                <CallPanel
+                    v-if="affiliateId"
+                    :channel="`affiliate.${affiliateId}`"
+                    ice-url="/api/account/rtc/ice"
+                    peer-name="BLESSLUXE"
+                    @call-error="onCallError"
+                />
+                <button
+                    @click="showRequest = !showRequest"
+                    :class="[
+                        'h-8 px-3 inline-flex items-center gap-1.5 rounded-full text-[10px] tracking-widest uppercase transition-colors',
+                        showRequest ? 'bg-gold text-white' : 'text-gold-dark border border-gold/40 hover:bg-gold/10',
+                    ]"
+                    title="Ask us to stock something"
                 >
-                    <div
-                        class="max-w-[80%] px-4 py-2.5"
-                        :class="m.sender === 'affiliate' ? 'bg-gold/15 border border-gold/25' : 'bg-cream-dark/50 border border-black/5'"
-                    >
-                        <p class="text-[10px] tracking-widest uppercase text-black/45 mb-1">
-                            {{ m.sender === 'affiliate' ? 'You' : 'BLESSLUXE' }} · {{ fmt(m.created_at) }}
-                        </p>
-                        <p class="text-sm whitespace-pre-line leading-relaxed">{{ m.body }}</p>
-                        <div v-if="m.attachments?.length" class="flex flex-wrap gap-2 mt-2">
-                            <a v-for="(src, i) in m.attachments" :key="i" :href="src" target="_blank" rel="noopener">
-                                <img :src="src" class="w-16 h-20 object-cover border border-black/10" alt="" />
-                            </a>
+                    <Package class="w-3.5 h-3.5" />
+                    <span class="hidden sm:inline">Ask for a piece</span>
+                </button>
+            </template>
+
+            <div class="h-full flex flex-col min-h-0 relative">
+                <!-- Stock request: a sheet over the top of the conversation. It
+                     scrolls on its own, so a long note can never push the
+                     composer off the bottom of the screen. -->
+                <section
+                    v-if="showRequest"
+                    class="absolute inset-x-0 top-0 z-20 max-h-full overflow-y-auto bg-cream border-b border-gold/30 shadow-lg"
+                >
+                    <div class="max-w-3xl mx-auto p-4">
+                        <div class="flex items-start justify-between gap-3 mb-3">
+                            <p class="text-xs text-black/60 leading-relaxed">
+                                Seen something your people would buy? Send it over with photos and we'll look into stocking it.
+                            </p>
+                            <button @click="showRequest = false" class="text-black/40 hover:text-black flex-shrink-0" aria-label="Close">
+                                <X class="w-4 h-4" />
+                            </button>
+                        </div>
+                        <input v-model="request.title" placeholder="What is it?" maxlength="160" class="w-full border border-black/15 bg-white px-3 py-2 text-sm mb-2 focus:outline-none focus:border-gold" />
+                        <textarea v-model="request.note" rows="3" placeholder="Where you saw it, sizes, who it's for… (optional)" class="w-full border border-black/15 bg-white px-3 py-2 text-sm mb-2 focus:outline-none focus:border-gold"></textarea>
+                        <div class="flex items-center justify-between gap-3 flex-wrap">
+                            <label class="inline-flex items-center gap-2 text-[10px] tracking-widest uppercase text-black/55 cursor-pointer hover:text-gold-dark">
+                                <ImagePlus class="w-4 h-4" />
+                                <span>{{ requestFiles.length ? `${requestFiles.length} photo${requestFiles.length === 1 ? '' : 's'}` : 'Add photos' }}</span>
+                                <input type="file" accept="image/*" multiple class="hidden" @change="pickRequestFiles" />
+                            </label>
+                            <button
+                                @click="submitRequest"
+                                :disabled="requesting || !request.title.trim()"
+                                class="bg-gold text-white px-6 py-2.5 text-[10px] font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-40 inline-flex items-center gap-2"
+                            >
+                                <LoaderCircle v-if="requesting" class="w-3 h-3 animate-spin" />
+                                {{ requesting ? 'Sending' : 'Send request' }}
+                            </button>
                         </div>
                     </div>
+                </section>
+
+                <div class="flex-1 min-h-0">
+                    <ChatThread
+                        :messages="c.messages"
+                        me="affiliate"
+                        their-name="BLESSLUXE"
+                        :sending="c.sending"
+                        :typing="c.typing"
+                        :first-unread-id="c.firstUnreadId"
+                        :has-more="c.hasMore"
+                        :loading-earlier="c.loadingEarlier"
+                        mentions-url="/api/account/affiliate/mentions"
+                        :ref-url="refUrl"
+                        @send="send"
+                        @typing="chat.notifyTyping()"
+                        @load-earlier="chat.loadEarlier()"
+                    />
                 </div>
             </div>
-
-            <div class="mt-3 flex items-end gap-2">
-                <textarea
-                    v-model="body"
-                    rows="2"
-                    placeholder="Write a message…"
-                    class="flex-1 border border-black/15 px-3 py-2 text-sm"
-                ></textarea>
-                <label class="cursor-pointer text-black/45 hover:text-gold p-2" title="Attach photos">
-                    <Paperclip class="w-4 h-4" />
-                    <input type="file" accept="image/*" multiple class="hidden" @change="pickFiles($event, 'files')" />
-                </label>
-                <button
-                    @click="send"
-                    :disabled="sending || (!body.trim() && !files.length)"
-                    class="bg-gold text-white px-4 py-2.5 hover:bg-gold-dark disabled:opacity-40"
-                >
-                    <LoaderCircle v-if="sending" class="w-4 h-4 animate-spin" />
-                    <Send v-else class="w-4 h-4" />
-                </button>
-            </div>
-            <p v-if="files.length" class="text-[10px] tracking-widest uppercase text-black/45 mt-1">
-                {{ files.length }} photo(s) attached
-                <button @click="files = []" class="ml-1 text-black/30 hover:text-red-500"><X class="w-3 h-3 inline" /></button>
-            </p>
-        </template>
+        </ChatShell>
     </div>
 </template>

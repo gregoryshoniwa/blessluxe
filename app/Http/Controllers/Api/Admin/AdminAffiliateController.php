@@ -261,46 +261,120 @@ class AdminAffiliateController extends Controller
     }
 
     /** GET /api/admin/affiliate-inbox — every thread with activity. */
-    public function inbox()
+    /**
+     * A page of conversations. `q` searches, `filter=unread` narrows to threads
+     * waiting on us — both server-side, because the browser only ever holds one
+     * page and can't search what it hasn't loaded.
+     */
+    public function inbox(Request $request)
     {
-        return [
-            'threads' => \App\Services\Messages::adminInbox(),
+        $page = \App\Services\Messages::adminInbox(
+            $request->query('q'),
+            $request->query('filter') === 'unread',
+            (int) $request->query('page', 1),
+        );
+
+        return $page + [
+            'unread_total'     => \App\Services\Messages::adminUnreadTotal(),
             'pending_requests' => DB::table('affiliate_product_requests')
                 ->where('status', 'pending')->count(),
         ];
     }
 
     /** GET /api/admin/affiliates/{id}/messages */
-    public function messages(string $id)
+    /** The admin's "@" search — the whole published catalogue. */
+    public function mentions(Request $request)
+    {
+        return \App\Services\MessageRefs::search(
+            null, true,
+            (string) $request->query('tab', 'all'),
+            $request->query('q'),
+            (int) $request->query('page', 1),
+        );
+    }
+
+    /**
+     * Just the number, for the sidebar badge. One covered-index COUNT, so every
+     * admin page can afford to ask for it on a timer.
+     */
+    public function inboxUnread()
+    {
+        return ['unread_total' => \App\Services\Messages::adminUnreadTotal()];
+    }
+
+    /** @see AffiliateStorefrontController::markMessagesRead */
+    public function markMessagesRead(string $id)
     {
         $a = Affiliate::findOrFail($id);
-        \App\Services\Messages::markRead($a->id, 'admin');
 
-        return [
-            'affiliate' => ['id' => $a->id, 'code' => $a->code, 'email' => $a->email],
-            'messages'  => \App\Services\Messages::thread($a->id),
+        return ['marked' => \App\Services\Messages::markRead($a->id, 'admin')];
+    }
+
+    /** @see AffiliateStorefrontController::messages for the three shapes. */
+    public function messages(Request $request, string $id)
+    {
+        $a = Affiliate::findOrFail($id);
+
+        $before = $request->query('before');
+        $after  = $request->query('after');
+
+        // Only an OPEN needs the boundary (see the storefront twin). Order
+        // matters: it has to be read before markRead erases it.
+        $unread = ($before || $after)
+            ? ['id' => null, 'count' => 0]
+            : \App\Services\Messages::unreadBoundary($a->id, 'admin');
+        if (! $request->boolean('peek') && ! $before) {
+            \App\Services\Messages::markRead($a->id, 'admin');
+        }
+
+        $payload = \App\Services\Messages::window($a->id, $before, $after) + [
+            'first_unread_id' => $unread['id'],
+            'unread_count'    => $unread['count'],
+            'read_upto_id'    => \App\Services\Messages::readUpto($a->id, 'admin'),
+        ];
+
+        // Scrollback and polls only need messages; the affiliate card and the
+        // stock requests are loaded once, when the thread is opened.
+        if ($before || $after) {
+            return $payload;
+        }
+
+        return $payload + [
+            'affiliate' => [
+                'id' => $a->id, 'code' => $a->code, 'email' => $a->email,
+                'first_name' => $a->first_name, 'last_name' => $a->last_name,
+            ],
             'requests'  => DB::table('affiliate_product_requests')
                 ->where('affiliate_id', $a->id)
                 ->orderByDesc('created_at')
+                ->limit(25)
                 ->get()
                 ->map(fn ($r) => (array) $r + ['images' => json_decode((string) $r->images, true) ?: []]),
         ];
     }
 
-    /** POST /api/admin/affiliates/{id}/messages */
     public function reply(Request $request, string $id)
     {
         $a = Affiliate::findOrFail($id);
-        $data = $request->validate(['body' => ['required', 'string', 'max:4000']]);
+        $data = $request->validate(\App\Services\Messages::sendRules());
+        $refs = \App\Services\MessageRefs::resolve(\App\Services\Messages::refsFromRequest($request), null, true);
+        $paths = \App\Services\Messages::storeImages($request->file('images', []));
+        $body = trim((string) ($data['body'] ?? ''));
 
-        \App\Services\Messages::post(
+        if ($body === '' && ! $paths && ! $refs) {
+            return response()->json(['error' => 'That message was empty.'], 422);
+        }
+
+        $messageId = \App\Services\Messages::post(
             $a->id, 'admin',
             'user:' . optional(Auth::guard('web')->user())->id,
-            $data['body'],
+            $body, $paths, null, $refs,
         );
+        $data['body'] = \App\Services\Messages::preview($body, $paths, $refs, 120);
 
-        // Tell the affiliate, since they aren't sitting on the page.
-        if ($a->customer_id) {
+        // Tell the affiliate, since they aren't sitting on the page — once per
+        // unread burst, not once per message (see sendMessage on the other side).
+        if ($a->customer_id && \App\Services\Messages::unreadFor($a->id, 'affiliate') === 1) {
             \App\Services\Notifications::forCustomer(
                 $a->customer_id,
                 'affiliate_message',
@@ -310,7 +384,7 @@ class AdminAffiliateController extends Controller
             );
         }
 
-        return ['messages' => \App\Services\Messages::thread($a->id)];
+        return ['message' => \App\Services\Messages::find($messageId)];
     }
 
     /** PUT /api/admin/affiliate-requests/{id} — accept or decline a stock request. */

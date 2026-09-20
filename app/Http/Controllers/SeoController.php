@@ -21,12 +21,12 @@ class SeoController extends Controller
 {
     /** Static page meta — title + description for the SPA's main routes. */
     private const STATIC_META = [
-        ''            => ['BLESSLUXE — Luxury Atelier', 'Curated drops, group buys and Blits loyalty for the BLESSLUXE woman.'],
+        ''            => ['BLESSLUXE — Luxury Atelier', 'Curated drops, group buys and Bees loyalty for the BLESSLUXE woman.'],
         'shop'        => ['Shop — BLESSLUXE',           'Browse the latest BLESSLUXE arrivals across dresses, tops, bags and more.'],
         'shop/packs'  => ['Packs — BLESSLUXE',          'Curated group-buy drops. Claim a slot before the pack closes.'],
         'cart'        => ['Cart — BLESSLUXE',           'Review your bag before checkout.'],
         'wishlist'    => ['Wishlist — BLESSLUXE',       'Pieces you\'ve saved for later.'],
-        'account'     => ['Account — BLESSLUXE',        'Manage your BLESSLUXE account, orders, Blits and addresses.'],
+        'account'     => ['Account — BLESSLUXE',        'Manage your BLESSLUXE account, orders, Bees and addresses.'],
         'affiliate'   => ['Affiliate Programme — BLESSLUXE', 'Earn commission on every BLESSLUXE order shopped via your code.'],
         'faq'         => ['FAQ — BLESSLUXE',            'Answers to the most-asked questions about shopping with BLESSLUXE.'],
         'track'       => ['Track Your Order — BLESSLUXE', 'Look up your BLESSLUXE order with your tracking code.'],
@@ -129,7 +129,7 @@ class SeoController extends Controller
         $base = rtrim(config('app.url', url('/')), '/');
         $defaults = [
             'title'        => 'BLESSLUXE — Luxury Atelier',
-            'description'  => 'Curated luxury women\'s fashion. Drops, group buys and Blits loyalty.',
+            'description'  => 'Curated luxury women\'s fashion. Drops, group buys and Bees loyalty.',
             'image'        => $base . '/logo.png',
             'canonical'    => $base . '/' . $path,
             'type'         => 'website',

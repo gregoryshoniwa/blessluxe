@@ -34,7 +34,8 @@ class SearchProductsTool extends AiTool
         $query = trim((string) ($params['query'] ?? ''));
         $category = trim((string) ($params['category'] ?? ''));
 
-        $q = Product::query()->where('status', 'published');
+        // LUXE must not recommend what the shop it is standing in doesn't sell.
+        $q = \App\Services\AffiliatePricing::scopeToShop(Product::query()->where('status', 'published'));
         if ($query !== '') {
             $q->where(function ($qq) use ($query) {
                 $qq->where('title', 'like', "%{$query}%")

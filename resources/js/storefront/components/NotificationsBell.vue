@@ -62,7 +62,7 @@ export default {
 
 <template>
     <div class="relative">
-        <button @click="toggle" class="p-2 hover:text-gold transition-colors relative" aria-label="Notifications">
+        <button @click="toggle" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors relative" aria-label="Notifications">
             <Bell class="w-5 h-5" stroke-width="1.5" />
             <span
                 v-if="unread > 0"
@@ -74,7 +74,7 @@ export default {
         <div v-if="open" class="fixed inset-0 z-40" @click="open = false"></div>
         <div
             v-if="open"
-            class="absolute right-0 mt-2 w-[360px] max-w-[90vw] bg-white shadow-xl border border-gold/15 z-50 max-h-[70vh] overflow-y-auto"
+            class="fixed left-2 right-2 top-[4.5rem] sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[360px] bg-white shadow-xl border border-gold/15 z-50 max-h-[70dvh] overflow-y-auto overscroll-contain"
         >
             <header class="flex items-center justify-between px-4 py-3 border-b border-gold/10">
                 <p class="font-display text-sm tracking-widest uppercase">Notifications</p>

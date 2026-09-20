@@ -8,6 +8,10 @@ export default {
     props: {
         open: { type: Boolean, default: false },
         navLinks: { type: Array, required: true },
+        // False inside a curated affiliate shop, which lists no packs.
+        showPacks: { type: Boolean, default: true },
+        // Show Room is members-only; hidden until a customer is signed in.
+        showShowroom: { type: Boolean, default: false },
     },
     emits: ['close', 'open-search'],
     data() {
@@ -70,7 +74,7 @@ export default {
 
                     <!-- Primary nav -->
                     <nav class="py-2">
-                        <router-link to="/shop/packs" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
+                        <router-link v-if="showPacks" to="/shop/packs" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
                             Packs
                         </router-link>
                         <div v-for="link in navLinks" :key="link.handle">
@@ -97,8 +101,8 @@ export default {
                             </div>
                         </div>
 
-                        <!-- Show Room -->
-                        <div>
+                        <!-- Show Room — members only -->
+                        <div v-if="showShowroom">
                             <button
                                 @click="toggle('showroom')"
                                 class="w-full text-left px-5 py-3 text-sm font-body tracking-widest uppercase flex items-center justify-between hover:text-gold transition-colors"

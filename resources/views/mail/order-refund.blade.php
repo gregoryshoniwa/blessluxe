@@ -22,9 +22,9 @@
                             {{ $reason }}
                         </p>
                     @endif
-                    @if ($blitsRefunded > 0)
+                    @if ($beesRefunded > 0)
                         <p style="line-height:1.6;color:#444;margin:0 0 16px;">
-                            <strong>{{ $blitsRefunded }} Blits</strong> have been returned to your balance.
+                            <strong>{{ $beesRefunded }} Bees</strong> have been returned to your balance.
                         </p>
                     @endif
                     <p style="line-height:1.6;color:#444;margin:0 0 16px;">

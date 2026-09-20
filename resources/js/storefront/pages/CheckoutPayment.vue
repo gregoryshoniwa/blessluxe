@@ -13,11 +13,11 @@ export default {
             submitting: false,
             error: '',
             method: 'paynow',
-            // Blits redemption state.
-            blits: null,         // { balance, recent } when signed-in customer has blits; null otherwise
-            blitsSettings: null, // { enabled, per_usd, max_discount_percent, earn_per_usd }
-            blitsToUse: 0,       // slider value
-            blitsPreview: null,  // server-confirmed { blits, discount_cents, reason }
+            // Bees redemption state.
+            bees: null,         // { balance, recent } when signed-in customer has bees; null otherwise
+            beesSettings: null, // { enabled, per_usd, max_discount_percent, earn_per_usd }
+            beesToUse: 0,       // slider value
+            beesPreview: null,  // server-confirmed { bees, discount_cents, reason }
             previewing: false,
         };
     },
@@ -25,7 +25,7 @@ export default {
         draft() { return checkoutStore.draft; },
         subtotalCents() { return this.cart?.subtotal || 0; },
         subtotal() { return (this.subtotalCents / 100).toFixed(2); },
-        discountCents() { return this.blitsPreview?.discount_cents || 0; },
+        discountCents() { return this.beesPreview?.discount_cents || 0; },
         discount() { return (this.discountCents / 100).toFixed(2); },
         totalCents() { return Math.max(0, this.subtotalCents - this.discountCents); },
         total() { return (this.totalCents / 100).toFixed(2); },
@@ -34,26 +34,26 @@ export default {
             const d = this.draft;
             return d.email && d.shipping_address?.address1 && d.shipping_address?.city;
         },
-        canUseBlits() {
-            return this.blits && this.blitsSettings?.enabled && this.blits.balance > 0 && this.subtotalCents > 0;
+        canUseBees() {
+            return this.bees && this.beesSettings?.enabled && this.bees.balance > 0 && this.subtotalCents > 0;
         },
-        maxRedeemableBlits() {
+        maxRedeemableBees() {
             // Capped by the max-discount-percent * subtotal, then by balance.
-            if (!this.blitsSettings) return 0;
-            const maxDiscountCents = Math.floor(this.subtotalCents * this.blitsSettings.max_discount_percent / 100);
-            const maxByPolicy = Math.floor(maxDiscountCents * this.blitsSettings.per_usd / 100);
-            return Math.min(this.blits.balance, maxByPolicy);
+            if (!this.beesSettings) return 0;
+            const maxDiscountCents = Math.floor(this.subtotalCents * this.beesSettings.max_discount_percent / 100);
+            const maxByPolicy = Math.floor(maxDiscountCents * this.beesSettings.per_usd / 100);
+            return Math.min(this.bees.balance, maxByPolicy);
         },
     },
     async mounted() {
         try {
-            const [cartRes, blitsRes] = await Promise.all([
+            const [cartRes, beesRes] = await Promise.all([
                 api.get('/api/store/cart'),
-                api.get('/api/account/blits').catch(() => ({ blits: null, settings: null })),
+                api.get('/api/account/bees').catch(() => ({ bees: null, settings: null })),
             ]);
             this.cart = cartRes.cart;
-            this.blits = blitsRes.blits;
-            this.blitsSettings = blitsRes.settings;
+            this.bees = beesRes.bees;
+            this.beesSettings = beesRes.settings;
             if (!this.cart?.items?.length) {
                 this.$router.replace('/cart');
                 return;
@@ -67,17 +67,17 @@ export default {
     },
     methods: {
         async refreshPreview() {
-            if (!this.canUseBlits || this.blitsToUse <= 0) {
-                this.blitsPreview = null;
+            if (!this.canUseBees || this.beesToUse <= 0) {
+                this.beesPreview = null;
                 return;
             }
             this.previewing = true;
             try {
-                const data = await api.post('/api/account/blits/preview', {
-                    blits: this.blitsToUse,
+                const data = await api.post('/api/account/bees/preview', {
+                    bees: this.beesToUse,
                     subtotal_cents: this.subtotalCents,
                 });
-                this.blitsPreview = data.preview;
+                this.beesPreview = data.preview;
             } catch { /* keep previous preview */ }
             finally { this.previewing = false; }
         },
@@ -90,7 +90,7 @@ export default {
                     auth_name: [this.draft.first_name, this.draft.last_name].filter(Boolean).join(' '),
                     auth_phone: this.draft.phone,
                     shipping_address: this.draft.shipping_address,
-                    blits_to_use: this.canUseBlits ? this.blitsToUse : 0,
+                    bees_to_use: this.canUseBees ? this.beesToUse : 0,
                 };
                 const data = await api.post('/api/store/payments/paynow/initiate', payload);
                 if (data.browser_url) {
@@ -148,27 +148,27 @@ export default {
                     <div v-if="loading" class="text-xs tracking-widest uppercase text-black/55 animate-pulse">Loading…</div>
 
                     <div v-else class="space-y-6">
-                        <!-- Blits redemption panel -->
-                        <section v-if="canUseBlits" class="bg-cream-dark/30 border border-gold/20 p-4">
+                        <!-- Bees redemption panel -->
+                        <section v-if="canUseBees" class="bg-cream-dark/30 border border-gold/20 p-4">
                             <header class="flex items-center justify-between mb-3">
                                 <p class="font-display text-base tracking-widest uppercase flex items-center gap-2">
                                     <Sparkles class="w-4 h-4 text-gold" />
-                                    Use Blits
+                                    Use Bees
                                 </p>
                                 <p class="text-xs text-black/55">
-                                    Balance: <strong>{{ blits.balance }} Blits</strong>
+                                    Balance: <strong>{{ bees.balance }} Bees</strong>
                                 </p>
                             </header>
                             <p class="text-xs text-black/60 mb-3">
-                                1 USD = {{ blitsSettings.per_usd }} Blits · up to {{ blitsSettings.max_discount_percent }}% of an order
+                                1 USD = {{ beesSettings.per_usd }} Bees · up to {{ beesSettings.max_discount_percent }}% of an order
                             </p>
                             <div class="flex items-center gap-3">
                                 <input
                                     type="range"
                                     min="0"
-                                    :max="maxRedeemableBlits"
+                                    :max="maxRedeemableBees"
                                     step="10"
-                                    v-model.number="blitsToUse"
+                                    v-model.number="beesToUse"
                                     @change="refreshPreview"
                                     @input="refreshPreview"
                                     class="flex-1 accent-gold"
@@ -176,8 +176,8 @@ export default {
                                 <input
                                     type="number"
                                     min="0"
-                                    :max="maxRedeemableBlits"
-                                    v-model.number="blitsToUse"
+                                    :max="maxRedeemableBees"
+                                    v-model.number="beesToUse"
                                     @blur="refreshPreview"
                                     class="w-24 border border-black/15 px-2 py-1 text-sm text-right"
                                 />
@@ -185,14 +185,14 @@ export default {
                             <div class="flex justify-between items-center mt-3 text-sm">
                                 <span class="text-black/60">
                                     <span v-if="previewing" class="animate-pulse">Calculating…</span>
-                                    <span v-else-if="blitsPreview?.discount_cents">
-                                        {{ blitsPreview.blits }} Blits → <strong class="text-emerald-600">${{ discount }} off</strong>
+                                    <span v-else-if="beesPreview?.discount_cents">
+                                        {{ beesPreview.bees }} Bees → <strong class="text-emerald-600">${{ discount }} off</strong>
                                     </span>
-                                    <span v-else>Drag to apply Blits</span>
+                                    <span v-else>Drag to apply Bees</span>
                                 </span>
                                 <button
-                                    v-if="blitsToUse > 0"
-                                    @click="blitsToUse = 0; blitsPreview = null"
+                                    v-if="beesToUse > 0"
+                                    @click="beesToUse = 0; beesPreview = null"
                                     class="text-[10px] tracking-widest uppercase text-black/55 hover:text-red-600"
                                 >
                                     Clear
@@ -259,7 +259,7 @@ export default {
                                 <span class="text-emerald-600">Free</span>
                             </div>
                             <div v-if="discountCents > 0" class="flex justify-between text-emerald-600">
-                                <span>Blits ({{ blitsPreview.blits }})</span>
+                                <span>Bees ({{ beesPreview.bees }})</span>
                                 <span>-${{ discount }}</span>
                             </div>
                             <div class="flex justify-between pt-2 border-t border-gold/20 text-base font-semibold">

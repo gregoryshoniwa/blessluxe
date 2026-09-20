@@ -1,12 +1,13 @@
 <script>
 import { api } from '../../lib/api.js';
-import { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown } from 'lucide-vue-next';
+import { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown, Palette } from 'lucide-vue-next';
 import StorefrontBuilder from '../components/affiliate/StorefrontBuilder.vue';
 import AffiliateInbox from '../components/affiliate/AffiliateInbox.vue';
+import ShopDesignEditor from '../components/affiliate/ShopDesignEditor.vue';
 
 export default {
     name: 'AffiliateDashboard',
-    components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown, StorefrontBuilder, AffiliateInbox },
+    components: { Copy, ExternalLink, Wallet, TrendingUp, Calendar, ShoppingBag, LayoutGrid, MessageCircle, Crown, StorefrontBuilder, AffiliateInbox, ShopDesignEditor, Palette },
     data() {
         return {
             data: null, loading: true, error: '', copied: false, needsLogin: false,
@@ -150,15 +151,21 @@ export default {
             <section class="bg-cream-dark/50 p-6 mb-10">
                 <h2 class="font-display text-lg tracking-widest uppercase mb-3">Your shareable link</h2>
                 <p class="text-xs text-black/60 mb-3">Send this to followers — every order placed in their session earns you commission.</p>
-                <div class="flex gap-2">
+                <!-- Stacked on a phone: the link gets the full width (it is the
+                     thing being read), the actions share a row beneath it. A
+                     single row only fits from `sm` up — below that the third
+                     button was pushing the whole page 72px wider than the screen. -->
+                <div class="flex flex-col sm:flex-row gap-2">
                     <input
                         :value="shopLink"
                         readonly
-                        class="flex-1 border border-black/15 px-4 py-2 bg-white font-mono text-sm"
+                        @focus="$event.target.select()"
+                        class="w-full sm:flex-1 min-w-0 border border-black/15 px-4 py-2.5 bg-white font-mono text-sm"
                     />
+                    <div class="flex gap-2">
                     <button
                         @click="copyLink"
-                        class="inline-flex items-center gap-2 bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
+                        class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 bg-gold text-white px-4 py-2.5 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark transition-colors"
                     >
                         <Copy class="w-4 h-4" />
                         {{ copied ? 'Copied ✓' : 'Copy' }}
@@ -166,28 +173,32 @@ export default {
                     <a
                         :href="shopLink"
                         target="_blank"
-                        class="inline-flex items-center gap-2 border border-black/15 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-gold hover:text-gold transition-colors"
+                        class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 border border-black/15 px-4 py-2.5 text-xs font-semibold tracking-widest uppercase hover:border-gold hover:text-gold transition-colors"
                     >
                         <ExternalLink class="w-4 h-4" />
                         Open
                     </a>
+                    </div>
                 </div>
             </section>
 
             <!-- Sections. Earnings is the default because it's what most
                  affiliates open the dashboard to check. -->
-            <nav class="flex gap-1 mb-6 border-b border-gold/15">
+            <!-- A strip that scrolls sideways rather than wrapping: four tabs
+                 don't fit a phone, and wrapped they broke "MY SHOP" onto two
+                 lines and pushed "Messages" off the edge. -->
+            <nav class="scroll-strip sm:gap-1 mb-6 border-b border-gold/15">
                 <button
                     v-for="s in [
                         { id: 'earnings', label: 'Earnings', icon: 'TrendingUp' },
                         { id: 'shop',     label: 'My shop',  icon: 'LayoutGrid' },
-                        { id: 'payouts',  label: 'Payouts',  icon: 'Wallet' },
+                        { id: 'design',   label: 'Design',   icon: 'Palette' },
                         { id: 'inbox',    label: 'Messages', icon: 'MessageCircle' },
                     ]"
                     :key="s.id"
                     @click="section = s.id"
                     :class="[
-                        'px-4 py-3 text-[10px] tracking-widest uppercase inline-flex items-center gap-2 border-b-2 -mb-px transition-colors',
+                        'flex-1 sm:flex-none justify-center px-3 sm:px-4 py-3.5 text-[11px] tracking-widest uppercase whitespace-nowrap inline-flex items-center gap-2 border-b-2 -mb-px transition-colors',
                         section === s.id ? 'border-gold text-gold-dark' : 'border-transparent text-black/50 hover:text-black/80',
                     ]"
                 >
@@ -236,6 +247,11 @@ export default {
                 </div>
 
                 <StorefrontBuilder @changed="refreshStorefront" />
+            </section>
+
+            <!-- ─── Design: colour, top bar, hero ───────────────────── -->
+            <section v-else-if="section === 'design'" class="mb-10">
+                <ShopDesignEditor :shop-url="shopLink" />
             </section>
 
             <!-- ─── Messages ────────────────────────────────────────── -->
@@ -329,10 +345,10 @@ export default {
                 </table>
             </section>
 
-            <!-- Payouts. Its own tab: money already received answers a different
-                 question from money still owed, and it was previously rendering
-                 under every other tab because it had no section guard. -->
-            <section v-if="section === 'payouts'" class="bg-white border border-gold/15">
+            <!-- Payouts live under Earnings: money owed and money received are
+                 read together, and three tabs fit a phone where four did not.
+                 The guard matters — without one this rendered under every tab. -->
+            <section v-show="section === 'earnings'" class="bg-white border border-gold/15">
                 <header class="px-5 py-3 border-b border-gold/10 flex items-center justify-between gap-3 flex-wrap">
                     <h2 class="font-display text-sm tracking-widest uppercase flex items-center gap-2"><Wallet class="w-3.5 h-3.5" /> Payouts</h2>
                     <p class="text-[10px] tracking-widest uppercase text-black/45">

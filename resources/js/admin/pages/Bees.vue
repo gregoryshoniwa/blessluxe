@@ -3,7 +3,7 @@ import { api } from '../../lib/api.js';
 import { Sparkles, TrendingUp, Users, ScrollText } from 'lucide-vue-next';
 
 export default {
-    name: 'AdminBlits',
+    name: 'AdminBees',
     components: { Sparkles, TrendingUp, Users, ScrollText },
     data() {
         return {
@@ -24,7 +24,7 @@ export default {
             return (maxCents / 100).toFixed(2);
         },
         sampleEarnOnHundred() {
-            // Blits earned on a $100 order at the current rate.
+            // Bees earned on a $100 order at the current rate.
             return Math.floor(100 * this.settings.earn_per_usd);
         },
     },
@@ -35,7 +35,7 @@ export default {
         async fetchAll() {
             this.loading = true;
             try {
-                const d = await api.get('/api/admin/blits');
+                const d = await api.get('/api/admin/bees');
                 this.settings = d.settings;
                 this.stats = d.stats;
                 this.ledger = d.recent_ledger;
@@ -46,7 +46,7 @@ export default {
             this.error = '';
             this.saved = false;
             try {
-                const d = await api.put('/api/admin/blits', this.settings);
+                const d = await api.put('/api/admin/bees', this.settings);
                 this.settings = d.settings;
                 this.saved = true;
                 setTimeout(() => { this.saved = false; }, 1800);
@@ -77,7 +77,7 @@ export default {
     <div>
         <header class="mb-8">
             <p class="text-xs tracking-widest uppercase text-zinc-500">Loyalty</p>
-            <h1 class="text-2xl font-semibold flex items-center gap-2"><Sparkles class="w-5 h-5 text-gold" /> Blits</h1>
+            <h1 class="text-2xl font-semibold flex items-center gap-2"><Sparkles class="w-5 h-5 text-gold" /> Bees</h1>
         </header>
 
         <div v-if="loading" class="text-zinc-400 text-sm">Loading…</div>
@@ -86,7 +86,7 @@ export default {
             <!-- Stats -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <div class="bg-white border border-zinc-200 p-5">
-                    <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2 flex items-center gap-1"><TrendingUp class="w-3 h-3" /> Blits in circulation</p>
+                    <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2 flex items-center gap-1"><TrendingUp class="w-3 h-3" /> Bees in circulation</p>
                     <p class="text-3xl font-semibold">{{ stats.circulating.toLocaleString() }}</p>
                     <p class="text-xs text-zinc-500 mt-1">≈ ${{ (stats.circulating / (settings.per_usd || 1)).toFixed(2) }} of latent discount</p>
                 </div>
@@ -112,19 +112,19 @@ export default {
                         </label>
                     </label>
                     <label class="flex flex-col gap-1">
-                        <span class="text-xs tracking-widest uppercase text-zinc-500">Blits per US dollar</span>
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Bees per US dollar</span>
                         <input v-model.number="settings.per_usd" type="number" min="1" max="10000" class="border border-zinc-300 px-3 py-2 font-mono" />
-                        <span class="text-xs text-zinc-500">e.g. 100 means 100 Blits = $1</span>
+                        <span class="text-xs text-zinc-500">e.g. 100 means 100 Bees = $1</span>
                     </label>
                     <label class="flex flex-col gap-1">
                         <span class="text-xs tracking-widest uppercase text-zinc-500">Max discount per order (%)</span>
                         <input v-model.number="settings.max_discount_percent" type="number" min="0" max="100" step="0.5" class="border border-zinc-300 px-3 py-2 font-mono" />
-                        <span class="text-xs text-zinc-500">On a $100 order: up to ${{ sampleDiscountOnHundred }} can be paid in Blits</span>
+                        <span class="text-xs text-zinc-500">On a $100 order: up to ${{ sampleDiscountOnHundred }} can be paid in Bees</span>
                     </label>
                     <label class="flex flex-col gap-1">
                         <span class="text-xs tracking-widest uppercase text-zinc-500">Earn per US dollar spent</span>
                         <input v-model.number="settings.earn_per_usd" type="number" min="0" max="1000" step="0.5" class="border border-zinc-300 px-3 py-2 font-mono" />
-                        <span class="text-xs text-zinc-500">$100 order earns {{ sampleEarnOnHundred }} Blits</span>
+                        <span class="text-xs text-zinc-500">$100 order earns {{ sampleEarnOnHundred }} Bees</span>
                     </label>
                 </div>
                 <p v-if="error" class="text-sm text-red-600 mt-3">{{ error }}</p>

@@ -27,7 +27,15 @@ export default {
 
 <template>
     <div>
-        <div v-if="!isFailure" class="flex justify-between gap-1 text-[10px] tracking-widest uppercase text-black/55 mb-2">
+        <!-- Narrow screens get the CURRENT step in words instead of every label:
+             five letter-spaced uppercase labels need ~350px, and squeezed onto a
+             280px row the last one ("Delivered") ran off the edge. The bar below
+             still shows how far along it is. -->
+        <p v-if="!isFailure" class="min-[440px]:hidden text-[10px] tracking-widest uppercase text-black/55 mb-2">
+            Step {{ Math.min(steps.length, (progressIndex ?? 0) + 1) }} of {{ steps.length }} ·
+            <span class="text-gold-dark">{{ steps[Math.min(steps.length - 1, progressIndex ?? 0)] }}</span>
+        </p>
+        <div v-if="!isFailure" class="hidden min-[440px]:flex justify-between gap-1 text-[10px] tracking-widest uppercase text-black/55 mb-2">
             <span
                 v-for="(step, i) in steps"
                 :key="step"

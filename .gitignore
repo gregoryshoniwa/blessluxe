@@ -25,3 +25,9 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Runtime uploads — files people send through the app, not source code.
+# (Chat attachments, affiliate hero images, AI-rendered banners.)
+/public/uploads/affiliate-messages/
+/public/uploads/affiliate-hero/
+/public/ai/affiliate-hero/

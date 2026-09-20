@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { authStore } from '../auth-store.js';
 import { confirmDialog, toast } from '../../lib/dialog.js';
 import { wishlist } from '../wishlist-store.js';
 import {
@@ -17,8 +18,8 @@ export default {
         return {
             loading: true,
             customer: null,
-            blits: null,
-            blitsSettings: null,
+            bees: null,
+            beesSettings: null,
             orders: null,
             ordersLoading: false,
             affiliate: null,
@@ -39,7 +40,7 @@ export default {
             tabs: [
                 { id: 'overview',     label: 'Overview',     icon: 'LayoutGrid' },
                 { id: 'transactions', label: 'Orders',       icon: 'Package' },
-                { id: 'blits',        label: 'Blits',        icon: 'Sparkles' },
+                { id: 'bees',        label: 'Bees',        icon: 'Sparkles' },
                 { id: 'returns',      label: 'Returns',      icon: 'RotateCcw' },
                 { id: 'affiliate',    label: 'Affiliate',    icon: 'TrendingUp' },
                 { id: 'addresses',    label: 'Addresses',    icon: 'MapPin' },
@@ -78,7 +79,7 @@ export default {
         tabCounts() {
             return {
                 transactions: this.orderCount || null,
-                blits: this.blits?.balance || null,
+                bees: this.bees?.balance || null,
                 returns: this.returns?.length || null,
                 addresses: this.addresses?.length || null,
             };
@@ -105,8 +106,14 @@ export default {
         },
     },
     async mounted() {
-        const tab = this.$route.query.tab;
+        // The points programme was renamed. Emails and notifications sent before
+        // the rename still link to the old tab key, so it keeps working.
+        const LEGACY_TABS = { ['bl' + 'its']: 'bees' };
+        const asked = this.$route.query.tab;
+        const tab = LEGACY_TABS[asked] || asked;
         if (tab && this.tabs.some((t) => t.id === tab)) this.activeTab = tab;
+        // …and don't leave the old word sitting in the address bar.
+        if (LEGACY_TABS[asked]) this.$router.replace({ query: { ...this.$route.query, tab } });
         // Show toast for verify-email landing.
         const v = this.$route.query.verify;
         if (v === 'ok') this.verifyState = 'Email verified ✓';
@@ -131,12 +138,12 @@ export default {
                     this.$router.replace(`/account/login?next=${encodeURIComponent(here)}`);
                     return;
                 }
-                // Blits panel data — independent fetch so a failure here
+                // Bees panel data — independent fetch so a failure here
                 // doesn't block the account from rendering.
                 try {
-                    const b = await api.get('/api/account/blits');
-                    this.blits = b.blits;
-                    this.blitsSettings = b.settings;
+                    const b = await api.get('/api/account/bees');
+                    this.bees = b.bees;
+                    this.beesSettings = b.settings;
                 } catch { /* leave null */ }
                 // Orders — needed for the Transactions tab + sidebar count.
                 try {
@@ -320,6 +327,9 @@ export default {
                 /* swallow — we're leaving the page anyway */
             }
             this.customer = null;
+            // Immediately — not when a cache expires. Hides the members-only
+            // menu and closes the Show Room route in the same tick.
+            authStore.clear();
             this.$router.push('/');
         },
     },
@@ -328,7 +338,7 @@ export default {
 
 <template>
     <div class="max-w-[1200px] mx-auto px-[5%] py-12 min-h-[60vh]">
-        <div v-if="loading" class="grid grid-cols-12 gap-8 animate-pulse">
+        <div v-if="loading" class="grid grid-cols-12 gap-y-8 gap-x-0 md:gap-x-8 animate-pulse">
             <div class="col-span-12 md:col-span-3 space-y-2">
                 <div v-for="n in 5" :key="n" class="h-10 bg-cream-dark" />
             </div>
@@ -365,7 +375,7 @@ export default {
             </div>
             <div v-else-if="verifyState" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm p-3 mb-6">{{ verifyState }}</div>
 
-            <div class="grid grid-cols-12 gap-8">
+            <div class="grid grid-cols-12 gap-y-8 gap-x-0 md:gap-x-8">
                 <aside class="col-span-12 md:col-span-3">
                     <nav class="space-y-0.5 md:sticky md:top-6">
                         <button
@@ -430,13 +440,13 @@ export default {
                             </button>
 
                             <button
-                                @click="activeTab = 'blits'"
+                                @click="activeTab = 'bees'"
                                 class="text-left bg-cream-dark/40 border border-gold/15 p-4 hover:border-gold/40 transition-colors"
                             >
-                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Blits</p>
-                                <p class="font-display text-2xl">{{ blits?.balance ?? '—' }}</p>
-                                <p v-if="blits && blitsSettings" class="text-[10px] tracking-widest uppercase text-black/45 mt-1">
-                                    ≈ ${{ (blits.balance / blitsSettings.per_usd).toFixed(2) }}
+                                <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Bees</p>
+                                <p class="font-display text-2xl">{{ bees?.balance ?? '—' }}</p>
+                                <p v-if="bees && beesSettings" class="text-[10px] tracking-widest uppercase text-black/45 mt-1">
+                                    ≈ ${{ (bees.balance / beesSettings.per_usd).toFixed(2) }}
                                 </p>
                             </button>
 
@@ -539,22 +549,22 @@ export default {
                             </dl>
                         </section>
                     </div>
-                    <div v-else-if="activeTab === 'blits'">
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-4">Blits</h2>
-                        <div v-if="!blits" class="text-sm text-black/65">Loading…</div>
+                    <div v-else-if="activeTab === 'bees'">
+                        <h2 class="font-display text-xl tracking-widest uppercase mb-4">Bees</h2>
+                        <div v-if="!bees" class="text-sm text-black/65">Loading…</div>
                         <div v-else>
                             <div class="bg-cream-dark/40 border border-gold/20 p-5 mb-5 flex items-center justify-between">
                                 <div>
                                     <p class="text-[10px] tracking-widest uppercase text-black/55 mb-1">Balance</p>
-                                    <p class="font-display text-3xl">{{ blits.balance }} <span class="text-base text-black/55">Blits</span></p>
-                                    <p v-if="blitsSettings" class="text-xs text-black/55 mt-1">
-                                        ≈ ${{ (blits.balance / blitsSettings.per_usd).toFixed(2) }} at checkout
+                                    <p class="font-display text-3xl">{{ bees.balance }} <span class="text-base text-black/55">Bees</span></p>
+                                    <p v-if="beesSettings" class="text-xs text-black/55 mt-1">
+                                        ≈ ${{ (bees.balance / beesSettings.per_usd).toFixed(2) }} at checkout
                                     </p>
                                 </div>
-                                <p class="text-[10px] tracking-widest uppercase bg-gold/20 text-gold-dark px-3 py-1">{{ blits.tier }}</p>
+                                <p class="text-[10px] tracking-widest uppercase bg-gold/20 text-gold-dark px-3 py-1">{{ bees.tier }}</p>
                             </div>
 
-                            <p v-if="!blits.recent.length" class="text-sm text-black/55">No activity yet.</p>
+                            <p v-if="!bees.recent.length" class="text-sm text-black/55">No activity yet.</p>
                             <table v-else class="w-full text-sm">
                                 <thead class="text-[10px] tracking-widest uppercase text-black/55 border-b border-gold/10">
                                     <tr>
@@ -565,7 +575,7 @@ export default {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="e in blits.recent" :key="e.id" class="border-b border-gold/5">
+                                    <tr v-for="e in bees.recent" :key="e.id" class="border-b border-gold/5">
                                         <td class="py-2">{{ ledgerLabel(e.reason) }}</td>
                                         <td :class="['py-2 text-right font-medium', e.delta > 0 ? 'text-emerald-600' : 'text-red-600']">
                                             {{ e.delta > 0 ? '+' : '' }}{{ e.delta }}

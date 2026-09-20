@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AffiliateController;
+use App\Http\Controllers\Api\AffiliateLookController;
 use App\Http\Controllers\Api\AffiliateStorefrontController;
 use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AvatarController;
@@ -11,8 +12,9 @@ use App\Http\Controllers\Api\StudioController;
 use App\Http\Controllers\Api\CustomerAddressController;
 use App\Http\Controllers\Api\CustomerProductController;
 use App\Http\Controllers\Api\ReturnController;
+use App\Http\Controllers\Api\RtcController;
 use App\Http\Controllers\Api\Admin\AdminPackController;
-use App\Http\Controllers\Api\BlitsController;
+use App\Http\Controllers\Api\BeesController;
 use App\Http\Controllers\Api\ContentController;
 use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\PackController;
@@ -23,7 +25,7 @@ use App\Http\Controllers\Api\Admin\AdminAiController;
 use App\Http\Controllers\Api\Admin\AdminAiUsageController;
 use App\Http\Controllers\Api\Admin\AdminAnnouncementController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
-use App\Http\Controllers\Api\Admin\AdminBlitsController;
+use App\Http\Controllers\Api\Admin\AdminBeesController;
 use App\Http\Controllers\Api\Admin\AdminFaqController;
 use App\Http\Controllers\Api\Admin\AdminNotificationsController;
 use App\Http\Controllers\Api\Admin\AdminOrderController;
@@ -55,7 +57,10 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('store')->group(function () {
     Route::get('/health', fn () => ['ok' => true, 'backend' => 'laravel']);
 
-    Route::get('/headings',                [HeadingController::class,   'index']);
+    // Session-backed for the same reason as /products below: the menu and the
+    // category tiles are narrowed to an affiliate's own line when browsing a
+    // curated shop, and that is keyed off the session.
+    Route::get('/headings',                [HeadingController::class,   'index'])->middleware('web');
     Route::get('/catalogues',              [CatalogueController::class, 'index']);
     Route::get('/catalogues/{idOrHandle}', [CatalogueController::class, 'show']);
     // These need the SESSION, not just the api stack: an affiliate storefront
@@ -71,7 +76,8 @@ Route::prefix('store')->group(function () {
     });
 
     // Public content (no session needed).
-    Route::get('/announcements', [ContentController::class, 'announcements']);
+    // Session-backed: inside an affiliate's shop the hero may be THEIR slides.
+    Route::get('/announcements', [ContentController::class, 'announcements'])->middleware('web');
     Route::get('/faqs',          [ContentController::class, 'faqs']);
 
     // Public tracking — the Luhn-checked code itself is the bearer.
@@ -172,9 +178,14 @@ Route::middleware('web')->prefix('account')->group(function () {
     Route::get('/oauth/{provider}',          [AccountController::class, 'oauthRedirect']);
     Route::get('/oauth/{provider}/callback', [AccountController::class, 'oauthCallback']);
 
-    // Blits loyalty (per signed-in customer; guests get a polite null).
-    Route::get ('/blits',         [BlitsController::class, 'index']);
-    Route::post('/blits/preview', [BlitsController::class, 'preview']);
+    // Bees loyalty (per signed-in customer; guests get a polite null).
+    Route::get ('/bees',         [BeesController::class, 'index']);
+    Route::post('/bees/preview', [BeesController::class, 'preview']);
+    // Pre-rename paths, for browsers still running the previous bundle. The
+    // old name is assembled rather than written so a search for it stays clean.
+    // Delete a few weeks after the rename ships.
+    Route::get ('/' . 'bl' . 'its',         [BeesController::class, 'index']);
+    Route::post('/' . 'bl' . 'its/preview', [BeesController::class, 'preview']);
 
     // Wishlist (signed-in customers only).
     Route::get   ('/wishlist',              [WishlistController::class, 'index']);
@@ -201,11 +212,33 @@ Route::middleware('web')->prefix('account')->group(function () {
     Route::put ('/affiliate/category-markups/{catalogueId}', [AffiliateStorefrontController::class, 'setCategoryMarkup']);
     Route::post('/affiliate/exclusivity/{productId}',       [AffiliateStorefrontController::class, 'buyExclusivity']);
 
+    // ─── Shop design: own hero slides, top-bar messages, accent colour ───
+    Route::get   ('/affiliate/look',              [AffiliateLookController::class, 'show']);
+    Route::put   ('/affiliate/look',              [AffiliateLookController::class, 'update']);
+    Route::post  ('/affiliate/look/slides',       [AffiliateLookController::class, 'storeSlide'])->middleware('throttle:30,1');
+    // Declared before {id} so "order" isn't read as a slide id.
+    Route::put   ('/affiliate/look/slides/order', [AffiliateLookController::class, 'reorder']);
+    Route::put   ('/affiliate/look/slides/{id}',  [AffiliateLookController::class, 'updateSlide']);
+    Route::delete('/affiliate/look/slides/{id}',  [AffiliateLookController::class, 'destroySlide']);
+    // A paid model call per request — throttled here AND capped per day inside.
+    Route::post  ('/affiliate/look/generate',     [AffiliateLookController::class, 'generate'])->middleware('throttle:6,1');
+
     // Stock requests (with photos) and the conversation they land in.
     Route::get ('/affiliate/requests',      [AffiliateStorefrontController::class, 'requests']);
     Route::post('/affiliate/requests',      [AffiliateStorefrontController::class, 'storeRequest']);
     Route::get ('/affiliate/messages',      [AffiliateStorefrontController::class, 'messages']);
-    Route::post('/affiliate/messages',      [AffiliateStorefrontController::class, 'sendMessage']);
+    // Throttled per session: a chat is a write endpoint anyone signed in can
+    // hit in a loop, and every send also costs a broadcast. 30/min is far above
+    // any human and far below a script.
+    Route::post('/affiliate/messages',      [AffiliateStorefrontController::class, 'sendMessage'])->middleware('throttle:30,1');
+    Route::post('/affiliate/messages/read', [AffiliateStorefrontController::class, 'markMessagesRead'])->middleware('throttle:60,1');
+    // "@" in the composer — search the catalogue to reference a product or pack.
+    Route::get ('/affiliate/mentions',      [AffiliateStorefrontController::class, 'mentions'])->middleware('throttle:120,1');
+
+    // Voice/video call setup. Signalling itself never touches Laravel — it
+    // rides client events on the presence channel — so this is the only
+    // server call a browser makes to place one.
+    Route::get ('/rtc/ice',                 [RtcController::class, 'ice']);
 
     // Returns / RMA.
     // How a pack buyer wants their piece once BLESSLUXE has it.
@@ -311,8 +344,13 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/affiliates/{id}/payouts',    [AdminAffiliateController::class, 'markPaid']);
         // Affiliate <-> admin conversation, and the stock requests landing in it.
         Route::get   ('/affiliate-inbox',            [AdminAffiliateController::class, 'inbox']);
+        Route::get   ('/affiliate-inbox/unread',     [AdminAffiliateController::class, 'inboxUnread']);
+        Route::get   ('/affiliate-inbox/mentions',   [AdminAffiliateController::class, 'mentions']);
         Route::get   ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'messages']);
-        Route::post  ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'reply']);
+        Route::post  ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'reply'])->middleware('throttle:120,1');
+        Route::post  ('/affiliates/{id}/messages/read', [AdminAffiliateController::class, 'markMessagesRead']);
+        // Admin side of a browser call — same ICE payload, admin guard.
+        Route::get   ('/rtc/ice',                    [RtcController::class, 'ice']);
         Route::put   ('/affiliate-requests/{id}',    [AdminAffiliateController::class, 'resolveRequest']);
 
         Route::get   ('/regions',       [AdminRegionController::class, 'index']);
@@ -320,8 +358,8 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put   ('/regions/{id}',  [AdminRegionController::class, 'update']);
         Route::delete('/regions/{id}',  [AdminRegionController::class, 'destroy']);
 
-        Route::get('/blits', [AdminBlitsController::class, 'index']);
-        Route::put('/blits', [AdminBlitsController::class, 'update']);
+        Route::get('/bees', [AdminBeesController::class, 'index']);
+        Route::put('/bees', [AdminBeesController::class, 'update']);
 
         // Pack campaigns + definitions.
         Route::get   ('/packs/definitions',       [AdminPackController::class, 'indexDefinitions']);

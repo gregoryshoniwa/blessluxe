@@ -21,6 +21,17 @@ class ContentController extends Controller
     public function announcements(Request $request)
     {
         $position = (string) $request->query('position', 'hero');
+
+        // Browsing an affiliate's shop whose owner made their own hero: show
+        // theirs. null means "not custom" OR "custom but nothing live yet" —
+        // either way the brand's slides show, so a shop never opens blank.
+        if ($position === 'hero') {
+            $theirs = \App\Services\AffiliateLook::heroSlides(\App\Services\AffiliatePricing::viewing($request));
+            if ($theirs !== null) {
+                return ['announcements' => $theirs, 'owner' => 'affiliate'];
+            }
+        }
+
         $rows = Announcement::query()
             ->where('position', $position)
             ->where('is_active', true)

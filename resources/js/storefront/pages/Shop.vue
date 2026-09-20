@@ -1,5 +1,6 @@
 <script>
 import ProductCard from '../components/ProductCard.vue';
+import { affiliateStore } from '../affiliate-store.js';
 
 export default {
     name: 'ShopPage',
@@ -15,6 +16,11 @@ export default {
         };
     },
     computed: {
+        curated() { return affiliateStore.isCurated(); },
+        shopName() { return affiliateStore.state.affiliate?.name || affiliateStore.state.affiliate?.code || 'This shop'; },
+        // "Nothing matches your filters" and "there is nothing here at all" are
+        // different problems with different ways out.
+        filtering() { return Object.keys(this.$route.query).length > 0; },
         catalogue() { return this.$route.query.catalogue || ''; },
         heading()   { return this.$route.query.heading   || ''; },
         sale()      { return this.$route.query.sale === 'true'; },
@@ -45,14 +51,27 @@ export default {
             deep: true,
         },
     },
+    beforeUnmount() {
+        window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
+    },
     mounted() {
+        affiliateStore.refresh();
+        window.addEventListener('blessluxe:affiliate-changed', this.reloadForShop);
         this.fetchHeadings();
         this.fetchProducts();
     },
     methods: {
         titleCase(s) { return s.replace(/\b\w/g, (m) => m.toUpperCase()); },
+        // Leaving (or entering) an affiliate's shop changes the catalogue
+        // without changing the route, so nothing else would trigger a reload.
+        reloadForShop() {
+            this.page = 1;
+            this.fetchHeadings();
+            this.fetchProducts();
+        },
+        leaveShop() { affiliateStore.clear(); },
         async fetchHeadings() {
-            const res = await fetch('/api/store/headings');
+            const res = await fetch('/api/store/headings', { credentials: 'include', cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
             this.headings = data.headings || [];
@@ -112,7 +131,7 @@ export default {
             </p>
         </div>
 
-        <div class="grid grid-cols-12 gap-8">
+        <div class="grid grid-cols-12 gap-y-8 gap-x-0 lg:gap-x-8">
             <aside class="hidden lg:block lg:col-span-3 border-r border-gold/10 pr-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-display text-sm tracking-widest uppercase text-gold">Filters</h3>
@@ -152,9 +171,24 @@ export default {
                 <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div v-for="n in 9" :key="n" class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
                 </div>
-                <div v-else-if="!products.length" class="text-center text-sm text-black/55 py-16">
-                    No products match these filters.
-                    <button @click="clearFilters" class="block mx-auto mt-4 underline hover:text-gold">Clear filters</button>
+                <div v-else-if="!products.length" class="text-center py-16 max-w-md mx-auto">
+                    <!-- Filters came up empty: the way out is to clear them. -->
+                    <template v-if="filtering">
+                        <p class="text-sm text-black/55">Nothing matches these filters.</p>
+                        <button @click="clearFilters" class="mt-4 text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold">Clear filters</button>
+                    </template>
+                    <!-- No filters and still nothing, inside an affiliate's
+                         hand-picked shop: they haven't added anything yet.
+                         "Clear filters" here was a button that did nothing. -->
+                    <template v-else-if="curated">
+                        <p class="font-display text-lg tracking-wide mb-2">{{ shopName }} is still choosing their pieces</p>
+                        <p class="text-sm text-black/55 leading-relaxed">Nothing has been added to this shop yet. Check back soon — or browse everything BLESSLUXE has to offer.</p>
+                        <button @click="leaveShop" class="mt-6 text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold">Browse the full collection</button>
+                    </template>
+                    <template v-else>
+                        <p class="font-display text-lg tracking-wide mb-2">New pieces are on their way</p>
+                        <p class="text-sm text-black/55">Our next arrivals are being prepared. Please check back soon.</p>
+                    </template>
                 </div>
                 <div v-else>
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">

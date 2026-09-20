@@ -51,8 +51,17 @@ class PackController extends Controller
      * Public catalogue of open campaigns. Closed/filled/cancelled campaigns
      * are hidden — they're stale conversion targets.
      */
-    public function index()
+    public function index(Request $request)
     {
+        // A curated affiliate shop sells only what that affiliate chose, and a
+        // pack is never something they chose — so their shop lists none. (A
+        // direct link to a pack still opens: that is someone following a link
+        // they were sent, not this shop advertising it.)
+        $viewing = \App\Services\AffiliatePricing::viewing($request);
+        if (\App\Services\AffiliatePricing::isCurated($viewing)) {
+            return ['packs' => [], 'hidden_by_storefront' => true];
+        }
+
         $campaigns = PackCampaign::query()
             ->where('status', 'open')
             ->whereNull('deleted_at')

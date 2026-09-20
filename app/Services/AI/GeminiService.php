@@ -132,7 +132,7 @@ class GeminiService
      * Nano Banana image generation. Returns base64 data + mime.
      * Returns null when the model produced no image (caller decides what to do).
      */
-    public function generateImage(string $prompt, array $referenceImages = []): ?array
+    public function generateImage(string $prompt, array $referenceImages = [], ?string $aspectRatio = null): ?array
     {
         $this->requireKey();
         // Image renders with several reference photos routinely outlast PHP's
@@ -151,6 +151,11 @@ class GeminiService
             'contents' => [['role' => 'user', 'parts' => $parts]],
             'generationConfig' => ['responseModalities' => ['TEXT', 'IMAGE']],
         ];
+        // e.g. '16:9' for a hero banner. Without it the model picks its own
+        // shape — usually square — which a wide hero then crops to nothing.
+        if ($aspectRatio) {
+            $payload['generationConfig']['imageConfig'] = ['aspectRatio' => $aspectRatio];
+        }
         $res = Http::timeout(120)->post(
             self::API_BASE . "/models/{$model}:generateContent?key={$this->apiKey}",
             $payload,

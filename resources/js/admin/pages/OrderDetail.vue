@@ -106,7 +106,7 @@ export default {
                 <h2 class="font-semibold mb-2 text-red-700">Refund this order?</h2>
                 <p class="text-sm text-zinc-600 mb-4">
                     Restocks {{ data.order.lines.length }} line item{{ data.order.lines.length === 1 ? '' : 's' }},
-                    refunds Blits if any were used, cancels any affiliate sale, and emails the customer.
+                    refunds Bees if any were used, cancels any affiliate sale, and emails the customer.
                     <strong>The money refund still has to be processed in Paynow's dashboard.</strong>
                 </p>
                 <textarea v-model="refundReason" placeholder="Reason (optional, shown to the customer)" rows="3" class="w-full border border-zinc-300 px-3 py-2 text-sm mb-3"></textarea>
@@ -120,7 +120,7 @@ export default {
             </section>
 
             <section v-if="refundResult" class="bg-emerald-50 border border-emerald-300 p-4 mb-6 text-sm text-emerald-800">
-                Refunded ✓ — restocked {{ Object.keys(refundResult.restocked).length }} variant(s)<template v-if="refundResult.blits_refunded">, refunded {{ refundResult.blits_refunded }} Blits</template><template v-if="refundResult.affiliate_reversed">, reversed ${{ (refundResult.affiliate_reversed / 100).toFixed(2) }} in affiliate earnings</template>
+                Refunded ✓ — restocked {{ Object.keys(refundResult.restocked).length }} variant(s)<template v-if="refundResult.blits_refunded">, refunded {{ refundResult.blits_refunded }} Bees</template><template v-if="refundResult.affiliate_reversed">, reversed ${{ (refundResult.affiliate_reversed / 100).toFixed(2) }} in affiliate earnings</template>
             </section>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -167,7 +167,7 @@ export default {
                         <p class="font-medium">{{ data.order.customer?.name || '—' }}</p>
                         <p class="text-sm text-zinc-600">{{ data.order.email }}</p>
                         <p v-if="data.order.customer" class="text-xs text-zinc-500 mt-2">
-                            <Sparkles class="w-3 h-3 inline -mt-0.5" /> {{ data.order.customer.loyalty_points }} Blits
+                            <Sparkles class="w-3 h-3 inline -mt-0.5" /> {{ data.order.customer.loyalty_points }} Bees
                         </p>
                     </section>
 

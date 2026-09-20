@@ -14,7 +14,7 @@ use Tests\TestCase;
  * PaynowController creates an Order for any paid session that has no order_id.
  * A forwarding fee is exactly that — a paid session with no order — so without the
  * `kind` discriminator a shipping fee would mint a second Order whose total is the
- * fee, credit Blits on it, and potentially accrue affiliate commission.
+ * fee, credit Bees on it, and potentially accrue affiliate commission.
  *
  * These assertions exist so that regression can never land silently.
  */
@@ -81,18 +81,18 @@ class PackForwardingPaymentTest extends TestCase
     }
 
     #[Test]
-    public function paying_a_forwarding_fee_creates_no_order_and_no_blits(): void
+    public function paying_a_forwarding_fee_creates_no_order_and_no_bees(): void
     {
         $this->makeSlotWithOrder();
 
         $ordersBefore = DB::table('orders')->count();
-        $blitsBefore  = DB::table('blits_ledger')->count();
+        $beesBefore  = DB::table('blits_ledger')->count();
         $affBefore    = DB::table('affiliate_sales')->count();
 
         PackForwarding::markFeePaid(\App\Models\PaymentSession::find('ps_fee1'));
 
         $this->assertSame($ordersBefore, DB::table('orders')->count(), 'A shipping fee must never create an Order.');
-        $this->assertSame($blitsBefore, DB::table('blits_ledger')->count(), 'A shipping fee must never earn Blits.');
+        $this->assertSame($beesBefore, DB::table('blits_ledger')->count(), 'A shipping fee must never earn Bees.');
         $this->assertSame($affBefore, DB::table('affiliate_sales')->count(), 'A shipping fee must never accrue affiliate commission.');
 
         $this->assertSame('paid', DB::table('pack_slots')->where('id', 'pslot_test')->value('forward_fee_status'));

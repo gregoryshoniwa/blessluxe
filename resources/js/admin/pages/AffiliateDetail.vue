@@ -81,7 +81,7 @@ export default {
 
         <div v-else>
             <!-- Header -->
-            <header class="flex items-start justify-between mb-8">
+            <header class="flex flex-wrap items-start justify-between gap-3 mb-8">
                 <div>
                     <p class="text-xs tracking-widest uppercase text-zinc-500">Affiliate</p>
                     <h1 class="text-2xl font-semibold flex items-center gap-3">

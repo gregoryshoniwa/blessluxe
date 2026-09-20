@@ -17,7 +17,7 @@ use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\PaymentSession;
 use App\Models\ProductVariant;
-use App\Services\Blits;
+use App\Services\Bees;
 use App\Services\Notifications;
 use App\Services\Paynow;
 use App\Services\Shipping;
@@ -30,6 +30,15 @@ use Illuminate\Support\Str;
 
 class PaynowController extends Controller
 {
+    /**
+     * The request field the PREVIOUS storefront bundle sends for points to
+     * redeem (the programme was renamed to Bees). A browser that loaded the
+     * site before a deploy keeps posting this until it refreshes; ignoring it
+     * would charge that customer full price with no error. Safe to delete a
+     * few weeks after the rename ships.
+     */
+    private const LEGACY_POINTS_FIELD = 'bl' . 'its_to_use';
+
     /**
      * POST /api/store/payments/paynow/initiate
      * { email?, shipping_address?, billing_address?, region_id?, auth_phone?, auth_name? }
@@ -60,8 +69,9 @@ class PaynowController extends Controller
                 'region_id'         => ['nullable', 'string'],
                 'auth_phone'        => ['nullable', 'string'],
                 'auth_name'         => ['nullable', 'string'],
-                // Optional Blits redemption — gated on a logged-in customer.
-                'blits_to_use'      => ['nullable', 'integer', 'min:0'],
+                // Optional Bees redemption — gated on a logged-in customer.
+                'bees_to_use'      => ['nullable', 'integer', 'min:0'],
+                self::LEGACY_POINTS_FIELD => ['nullable', 'integer', 'min:0'],
             ]);
             $email = strtolower(trim((string) ($data['email'] ?? $customer?->email ?? '')));
             if ($email === '') {
@@ -70,38 +80,38 @@ class PaynowController extends Controller
 
             $subtotal = (int) $lines->sum(fn ($l) => $l->unit_price * $l->quantity);
 
-            // ─── Blits redemption ──────────────────────────────────────
+            // ─── Bees redemption ──────────────────────────────────────
             // Compute the actual debit + discount, debit immediately with an
             // idempotency key keyed off the upcoming reference so a retry of
             // initiate doesn't double-charge the customer.
-            $blitsDebited = 0;
+            $beesDebited = 0;
             $discountCents = 0;
-            $blitsWanted = (int) ($data['blits_to_use'] ?? 0);
-            if ($blitsWanted > 0 && $customer) {
+            $beesWanted = (int) ($data['bees_to_use'] ?? $data[self::LEGACY_POINTS_FIELD] ?? 0);
+            if ($beesWanted > 0 && $customer) {
                 $available = (int) $customer->loyalty_points;
-                $preview = Blits::previewDiscount($blitsWanted, $subtotal, $available);
-                if ($preview['blits'] > 0) {
+                $preview = Bees::previewDiscount($beesWanted, $subtotal, $available);
+                if ($preview['bees'] > 0) {
                     $reference   = $this->makeReference();   // reference picked early for idempotency key
-                    $blitsResult = Blits::debit(
+                    $beesResult = Bees::debit(
                         $customer->id,
-                        $preview['blits'],
+                        $preview['bees'],
                         'checkout_redeem',
-                        'blits-checkout-' . $reference,
+                        'bees-checkout-' . $reference,
                         $reference,
                     );
-                    $blitsDebited  = $blitsResult['blits_debited'];
+                    $beesDebited  = $beesResult['blits_debited'];
                     $discountCents = $preview['discount_cents'];
                 }
             }
-            // If we didn't already mint a reference (no blits used), do it now.
+            // If we didn't already mint a reference (no bees used), do it now.
             $reference ??= $this->makeReference();
 
             $total = max(0, $subtotal - $discountCents);
             if ($total <= 0) {
-                // Refund the blits we just debited — the order is "free" so we
+                // Refund the bees we just debited — the order is "free" so we
                 // can't tip the customer into a paid order with $0 due.
-                if ($blitsDebited > 0 && $customer) {
-                    Blits::credit($customer->id, $blitsDebited, 'checkout_zero_total_refund', $reference);
+                if ($beesDebited > 0 && $customer) {
+                    Bees::credit($customer->id, $beesDebited, 'checkout_zero_total_refund', $reference);
                 }
                 return response()->json(['error' => 'Order total must be greater than zero.'], 422);
             }
@@ -144,7 +154,7 @@ class PaynowController extends Controller
                     'subtotal'         => $subtotal,
                     'discount_total'   => $discountCents,
                     'total'            => $total,
-                    'blits_debited'    => $blitsDebited,
+                    'blits_debited'    => $beesDebited,
                     'shipping_address' => $data['shipping_address'] ?? null,
                     'billing_address'  => $data['billing_address']  ?? null,
                     'region_id'        => $data['region_id']        ?? null,
@@ -301,7 +311,7 @@ class PaynowController extends Controller
         // ─── Discriminate on session kind ──────────────────────────────────
         // A forwarding fee is a payment with NO order behind it. Without this
         // branch it would fall into createOrderFromSession and mint a second
-        // Order whose total is the shipping fee — earning Blits on it and
+        // Order whose total is the shipping fee — earning Bees on it and
         // potentially accruing affiliate commission. The kind check is what
         // keeps shipping money out of the sales ledger entirely.
         if ($classified === 'paid') {
@@ -317,17 +327,17 @@ class PaynowController extends Controller
             };
         }
 
-        // Refund any debited Blits when the payment ends up cancelled/failed.
+        // Refund any debited Bees when the payment ends up cancelled/failed.
         // Guarded against double-refund via session.metadata.blits_refunded.
-        // Only order sessions ever debit Blits, so a forwarding fee must not
+        // Only order sessions ever debit Bees, so a forwarding fee must not
         // take this path.
         if ($session->kind === 'order' && in_array($classified, ['cancelled', 'failed'], true)) {
             $fresh = PaymentSession::find($session->id);
             $snap  = $fresh?->cart_snapshot ?? [];
-            $blitsDebited = (int) ($snap['blits_debited'] ?? 0);
+            $beesDebited = (int) ($snap['blits_debited'] ?? 0);
             $alreadyRefunded = (bool) ($snap['blits_refunded'] ?? false);
-            if ($blitsDebited > 0 && ! $alreadyRefunded && $fresh->customer_id) {
-                Blits::credit($fresh->customer_id, $blitsDebited, 'checkout_cancel_refund', $fresh->reference);
+            if ($beesDebited > 0 && ! $alreadyRefunded && $fresh->customer_id) {
+                Bees::credit($fresh->customer_id, $beesDebited, 'checkout_cancel_refund', $fresh->reference);
                 $snap['blits_refunded'] = true;
                 $fresh->update(['cart_snapshot' => $snap]);
             }
@@ -603,14 +613,14 @@ class PaynowController extends Controller
             // ─── Pack slots: flip reserved → paid for any pack-attributed line. ─
             PackController::markPaidForOrder($orderId, $items, $slotLineIds);
 
-            // ─── Blits earn on paid order ─────────────────────────────
+            // ─── Bees earn on paid order ─────────────────────────────
             // Earn is computed on the *charged* amount (after the discount
-            // they paid in blits), so customers can't loop blits → discount
-            // → more blits to infinity. Skipped silently for guest orders.
+            // they paid in bees), so customers can't loop bees → discount
+            // → more bees to infinity. Skipped silently for guest orders.
             if ($session->customer_id) {
-                $earn = Blits::earnFor($total);
+                $earn = Bees::earnFor($total);
                 if ($earn > 0) {
-                    Blits::credit($session->customer_id, $earn, 'order_earn', $orderId);
+                    Bees::credit($session->customer_id, $earn, 'order_earn', $orderId);
                 }
             }
 

@@ -117,7 +117,11 @@ export default {
                      one — the old map sent returned/cancelled to the last step, which
                      read as "delivered" for a parcel that never arrived. -->
                 <div class="mt-6">
-                    <div v-if="!isFailure" class="flex justify-between text-[10px] tracking-widest uppercase text-black/55 mb-2">
+                    <p v-if="!isFailure" class="min-[440px]:hidden text-[10px] tracking-widest uppercase text-black/55 mb-2">
+                        Step {{ Math.min(steps.length, (progressIndex ?? 0) + 1) }} of {{ steps.length }} ·
+                        <span class="text-gold-dark">{{ steps[Math.min(steps.length - 1, progressIndex ?? 0)] }}</span>
+                    </p>
+                    <div v-if="!isFailure" class="hidden min-[440px]:flex justify-between text-[10px] tracking-widest uppercase text-black/55 mb-2">
                         <span v-for="(step, i) in steps" :key="step" :class="progressIndex >= i ? 'text-gold-dark' : ''">{{ step }}</span>
                     </div>
                     <p v-else class="text-[10px] tracking-widest uppercase text-red-600 mb-2">{{ statusLabel }} — this parcel did not complete its journey</p>

@@ -356,41 +356,110 @@ class AffiliateStorefrontController extends Controller
     // ─── Inbox ──────────────────────────────────────────────────────────
 
     /** GET /api/account/affiliate/messages */
-    public function messages()
+    /**
+     * Acknowledge the other side's messages without refetching the thread.
+     *
+     * Called when a message lands over the socket while the tab is actually
+     * visible. Without it, reading is only ever recorded by the next full poll,
+     * which is 30s once realtime connects — so the admin watches a single tick
+     * long after their message was read.
+     */
+    public function markMessagesRead()
     {
         $me = $this->mustBeActive();
-        Messages::markRead($me->id, 'affiliate');
 
-        return ['messages' => Messages::thread($me->id)];
+        return ['marked' => Messages::markRead($me->id, 'affiliate')];
     }
 
-    /** POST /api/account/affiliate/messages */
+    /**
+     * The thread, in three shapes (see Messages::window):
+     *
+     *   (none)      newest window — opening the inbox
+     *   ?before=ID  the window older than ID — scrolling back
+     *   ?after=ID   only what is newer than ID — the poll. Usually empty.
+     *
+     * `peek=1` reads without marking anything read. The poll keeps running in
+     * a background tab, and a tab nobody is looking at must not tell the other
+     * side their message was seen.
+     */
+    public function messages(Request $request)
+    {
+        $me = $this->mustBeActive();
+
+        $before = $request->query('before');
+        $after  = $request->query('after');
+
+        // Only an OPEN needs to know where the unread began; a poll or a
+        // scrollback never redraws that line, so they don't pay for the lookup.
+        // Order matters: the boundary has to be read before markRead erases it.
+        $unread = ($before || $after)
+            ? ['id' => null, 'count' => 0]
+            : Messages::unreadBoundary($me->id, 'affiliate');
+
+        if (! $request->boolean('peek') && ! $before) {
+            Messages::markRead($me->id, 'affiliate');
+        }
+
+        return Messages::window($me->id, $before, $after) + [
+            // The realtime channel name is derived from this.
+            'affiliate_id'    => $me->id,
+            'first_unread_id' => $unread['id'],
+            'unread_count'    => $unread['count'],
+            // Ticks, for clients with no socket: my newest message they've read.
+            'read_upto_id'    => Messages::readUpto($me->id, 'affiliate'),
+        ];
+    }
+
+    /**
+     * What an "@" in the composer searches: the catalogue, by tab and text.
+     * Scoped to what THIS affiliate may see — see MessageRefs.
+     */
+    public function mentions(Request $request)
+    {
+        $me = $this->mustBeActive();
+
+        return \App\Services\MessageRefs::search(
+            $me, false,
+            (string) $request->query('tab', 'all'),
+            $request->query('q'),
+            (int) $request->query('page', 1),
+        );
+    }
+
     public function sendMessage(Request $request)
     {
         $me = $this->mustBeActive();
 
-        $data = $request->validate([
-            'body'     => ['required', 'string', 'max:4000'],
-            'images'   => ['nullable', 'array', 'max:6'],
-            'images.*' => ['image', 'max:6144'],
-        ]);
+        $data = $request->validate(Messages::sendRules());
+        $refs = \App\Services\MessageRefs::resolve(Messages::refsFromRequest($request), $me, false);
+        $paths = Messages::storeImages($request->file('images', []));
+        $body = trim((string) ($data['body'] ?? ''));
 
-        $paths = [];
-        foreach ($request->file('images', []) as $file) {
-            $name = 'msg_' . Str::random(18) . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('uploads/affiliate-messages'), $name);
-            $paths[] = '/uploads/affiliate-messages/' . $name;
+        // Every ref the client sent was dropped (unknown / not theirs to see)
+        // and there was nothing else — don't save an empty bubble.
+        if ($body === '' && ! $paths && ! $refs) {
+            return response()->json(['error' => 'That message was empty.'], 422);
         }
 
-        Messages::post($me->id, 'affiliate', 'cust_' . Auth::guard('customer')->id(), $data['body'], $paths);
+        $id = Messages::post($me->id, 'affiliate', 'cust_' . Auth::guard('customer')->id(), $body, $paths, null, $refs);
+        $data['body'] = Messages::preview($body, $paths, $refs, 120);
 
-        Notifications::forAllAdmins(
-            'affiliate_message',
-            "Message from {$me->code}",
-            Str::limit($data['body'], 120),
-            '/admin/affiliates',
-        );
+        // One bell per unread burst, not per message. Each notification is a
+        // row for EVERY admin, so someone typing ten short messages would
+        // otherwise write ten rows per staff member to say one thing: "this
+        // thread is waiting". The first unread message says it; the rest are
+        // already covered until an admin reads the thread.
+        if (Messages::unreadFor($me->id, 'admin') === 1) {
+            Notifications::forAllAdmins(
+                'affiliate_message',
+                "Message from {$me->code}",
+                $data['body'],
+                "/admin/affiliate-inbox/{$me->id}",
+            );
+        }
 
-        return ['messages' => Messages::thread($me->id)];
+        // Just the new message. Returning the whole thread made every send
+        // cost as much as the conversation was long.
+        return ['message' => Messages::find($id)];
     }
 }

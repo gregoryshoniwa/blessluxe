@@ -136,15 +136,15 @@ export default {
     <div>
         <!-- List view -->
         <template v-if="tab === 'list'">
-            <header class="flex items-center justify-between mb-8">
+            <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
                 <div>
                     <p class="text-xs tracking-widest uppercase text-zinc-500">Fulfilment</p>
                     <h1 class="text-2xl font-semibold flex items-center gap-2"><Truck class="w-5 h-5 text-gold" /> Packages</h1>
                 </div>
             </header>
 
-            <div class="mb-4 flex gap-2 items-center">
-                <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code, order #, email…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+            <div class="mb-4 flex flex-wrap gap-2 items-center">
+                <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code, order #, email…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
                 <select v-model="statusFilter" @change="page = 1; fetchAll()" class="border border-zinc-300 px-3 py-2 text-sm">
                     <option value="">All statuses</option>
                     <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
@@ -202,7 +202,7 @@ export default {
                 <ArrowLeft class="w-3 h-3" /> All packages
             </button>
 
-            <header class="flex items-start justify-between mb-6">
+            <header class="flex flex-wrap items-start justify-between gap-3 mb-6">
                 <div>
                     <p class="text-xs tracking-widest uppercase text-zinc-500">Package</p>
                     <h1 class="text-2xl font-semibold font-mono text-gold-dark">{{ selected.package_code }}</h1>

@@ -1,7 +1,7 @@
 @php
     $defaultMeta = [
         'title'       => 'BLESSLUXE — Luxury Atelier',
-        'description' => 'Curated luxury women\'s fashion. Drops, group buys and Blits loyalty.',
+        'description' => 'Curated luxury women\'s fashion. Drops, group buys and Bees loyalty.',
         'image'       => rtrim(config('app.url', url('/')), '/') . '/logo.png',
         'canonical'   => url()->current(),
         'type'        => 'website',

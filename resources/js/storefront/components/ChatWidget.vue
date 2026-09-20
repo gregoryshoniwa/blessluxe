@@ -248,11 +248,16 @@ export default {
 </script>
 
 <template>
-    <!-- Floating launcher -->
+    <!-- Floating launcher.
+         `luxe-launcher` lets the page move it out of the way: a floating
+         button in the bottom-right corner sits exactly on top of a messenger's
+         Send button (see app.css). On a phone it also hides while the panel is
+         open — the panel is full-screen there and has its own close button. -->
     <button
         @click="toggle"
-        :class="['fixed bottom-5 right-5 z-50 rounded-full shadow-lg flex items-center justify-center transition-all',
-                 open ? 'w-12 h-12 bg-black text-white' : 'w-14 h-14 bg-gold text-white hover:bg-gold-dark']"
+        :style="{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }"
+        :class="['luxe-launcher fixed right-5 z-50 rounded-full shadow-lg items-center justify-center transition-all',
+                 open ? 'hidden sm:flex w-12 h-12 bg-black text-white' : 'flex w-14 h-14 bg-gold text-white hover:bg-gold-dark']"
         aria-label="Chat with LUXE"
     >
         <X v-if="open" class="w-5 h-5" />
@@ -261,7 +266,12 @@ export default {
 
     <transition name="luxe-panel">
         <div v-if="open"
-             class="fixed bottom-24 right-5 z-50 w-[min(380px,calc(100vw-2rem))] h-[min(620px,calc(100vh-7rem))] bg-white shadow-2xl border border-gold/15 flex flex-col">
+             class="fixed z-50 bg-white shadow-2xl border-gold/15 flex flex-col
+                    inset-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]
+                    sm:inset-auto sm:p-0 sm:bottom-24 sm:right-5 sm:border sm:w-[380px] sm:h-[min(620px,calc(100dvh-7rem))]">
+            <!-- A full-screen sheet on a phone. A 380px card floating over a
+                 390px screen is a full-screen sheet with worse margins — and
+                 sized with `100vh` it ran underneath mobile Safari's toolbar. -->
             <!-- Header -->
             <header class="px-4 py-3 border-b border-gold/10 flex items-center justify-between bg-gradient-to-r from-cream-dark/50 to-cream">
                 <div>
@@ -284,6 +294,11 @@ export default {
                             :title="liveState === 'connected' ? 'End voice chat' : 'Start voice chat'">
                         <Mic v-if="liveState !== 'connected'" class="w-4 h-4" />
                         <MicOff v-else class="w-4 h-4" />
+                    </button>
+                    <button @click="toggle"
+                            class="sm:hidden w-10 h-10 -mr-1 inline-flex items-center justify-center rounded-full text-black/60 hover:text-gold"
+                            aria-label="Close LUXE">
+                        <X class="w-5 h-5" />
                     </button>
                 </div>
             </header>

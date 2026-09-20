@@ -96,7 +96,7 @@ app/
   Mail/                          Mailables
   Services/
     AI/                          LUXE agent: ShoppingAgent, GeminiService, AiConfig, Tools/
-    Blits.php                    Loyalty points
+    Bees.php                    Loyalty points
     Paynow.php                   Payment provider
     Shipping.php                 Packages + tracking
     Notifications.php            Customer/admin notifications
@@ -133,7 +133,7 @@ Two guards: `customer` for the storefront and `web` for admin. Admin users have 
 
 ### Admin
 
-Dashboard, products, inventory, catalogues, headings, packs, orders, returns, packages, customers, affiliates, reviews, Blits, regions, content, FAQs, reports (with the LUXE advisor), the AI studio, AI usage, and users.
+Dashboard, products, inventory, catalogues, headings, packs, orders, returns, packages, customers, affiliates, reviews, Bees, regions, content, FAQs, reports (with the LUXE advisor), the AI studio, AI usage, and users.
 
 ### LUXE
 
@@ -141,7 +141,7 @@ Gemini handles text and tool use, Gemini Live handles voice over WebSocket, and 
 
 ### Payments, loyalty, returns
 
-Paynow web integration with SHA512-signed requests and an IPN + return-URL flow; paid orders accrue Blits. Returns can be filed within 30 days of payment from the customer's account and are reviewed at `/admin/returns`; a full refund marks the order `refunded`.
+Paynow web integration with SHA512-signed requests and an IPN + return-URL flow; paid orders accrue Bees. Returns can be filed within 30 days of payment from the customer's account and are reviewed at `/admin/returns`; a full refund marks the order `refunded`.
 
 ## Troubleshooting
 

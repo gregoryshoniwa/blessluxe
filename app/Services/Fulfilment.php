@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Where a pack consignment ships to, and where buyers collect from.
  *
- * Mirrors App\Services\Blits: settings live in the `settings` key/value table and
+ * Mirrors App\Services\Bees: settings live in the `settings` key/value table and
  * self-seed on first read, so an admin screen always has something to render.
  *
  * Deliberately NOT config/env. The hub address has to be editable without a deploy,

@@ -43,7 +43,7 @@ export default {
         </header>
 
         <div class="mb-4 flex gap-2 items-center flex-wrap">
-            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search order # or email…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search order # or email…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
             <select v-model="statusFilter" @change="page = 1; fetchAll()" class="border border-zinc-300 px-3 py-2 text-sm">
                 <option value="">All statuses</option>
                 <option value="pending">Pending</option>

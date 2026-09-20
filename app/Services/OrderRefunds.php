@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  * What this DOES do, atomically, when an order is refunded:
  *
  *   1. Restock variants we'd decremented at order time
- *   2. Credit Blits back to the customer if they redeemed any
+ *   2. Credit Bees back to the customer if they redeemed any
  *   3. Cancel any AffiliateSale for the order + reverse the affiliate's
  *      total_earnings (preventing payout of a refunded sale)
  *   4. Cancel the package + record a "cancelled" event on the timeline
@@ -49,7 +49,7 @@ class OrderRefunds
 
         return DB::transaction(function () use ($order, $reason) {
             $restocked = [];
-            $blitsRefunded = 0;
+            $beesRefunded = 0;
             $affReversed = 0;
 
             // 1. Restock inventory-managed variants line-by-line.
@@ -74,11 +74,11 @@ class OrderRefunds
                 ]);
             }
 
-            // 2. Refund Blits if any were debited at checkout.
-            $blitsDebited = (int) ($order->metadata['blits_debited'] ?? 0);
-            if ($blitsDebited > 0 && $order->customer_id) {
-                Blits::credit($order->customer_id, $blitsDebited, 'order_refund', $order->id);
-                $blitsRefunded = $blitsDebited;
+            // 2. Refund Bees if any were debited at checkout.
+            $beesDebited = (int) ($order->metadata['blits_debited'] ?? 0);
+            if ($beesDebited > 0 && $order->customer_id) {
+                Bees::credit($order->customer_id, $beesDebited, 'order_refund', $order->id);
+                $beesRefunded = $beesDebited;
             }
 
             // 3. Cancel affiliate sales for this order. Reverse the
@@ -133,7 +133,7 @@ class OrderRefunds
             return [
                 'order_id'          => $order->id,
                 'restocked'         => $restocked,
-                'blits_refunded'    => $blitsRefunded,
+                'blits_refunded'    => $beesRefunded,
                 'affiliate_reversed'=> $affReversed,
                 'already_refunded'  => false,
             ];

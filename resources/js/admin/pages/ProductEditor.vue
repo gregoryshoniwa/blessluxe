@@ -226,7 +226,7 @@ export default {
         </div>
 
         <div v-else-if="product">
-            <header class="flex items-start justify-between mb-8">
+            <header class="flex flex-wrap items-start justify-between gap-3 mb-8">
                 <div>
                     <p class="text-xs tracking-widest uppercase text-zinc-500">Edit product</p>
                     <h1 class="text-2xl font-semibold">{{ product.title }}</h1>
@@ -319,7 +319,7 @@ export default {
 
             <!-- Images -->
             <section class="bg-white border border-zinc-200 p-5 mb-6">
-                <header class="flex items-center justify-between mb-4">
+                <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <h2 class="font-semibold flex items-center gap-2"><ImageIcon class="w-4 h-4" /> Images</h2>
                     <label class="bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark cursor-pointer inline-flex items-center gap-2">
                         <Upload class="w-4 h-4" />
@@ -352,7 +352,7 @@ export default {
 
             <!-- Video -->
             <section class="bg-white border border-zinc-200 p-5 mb-6">
-                <header class="flex items-center justify-between mb-4">
+                <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <h2 class="font-semibold">Video</h2>
                     <label class="bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark cursor-pointer inline-flex items-center gap-2">
                         <Upload class="w-4 h-4" />

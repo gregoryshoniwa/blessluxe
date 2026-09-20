@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { authStore } from './auth-store.js';
 
 const routes = [
     { path: '/', name: 'home', component: () => import('./pages/Home.vue') },
@@ -51,28 +52,14 @@ const router = createRouter({
 });
 
 /**
- * Auth gate for members-only surfaces (Show Room). The check is cached for
- * 30s so switching tabs inside /showroom doesn't refetch on every hop;
- * signing out flips the session cookie, so the short TTL keeps it honest.
+ * Auth gate for members-only surfaces (Show Room). The answer comes from the
+ * shared auth store — the same one the menu reads — so the link and the route
+ * can never disagree, and signing out closes the door immediately instead of
+ * after a cache expires.
  */
-let authCache = { signedIn: false, at: 0 };
-async function isSignedIn() {
-    // Only positive results are cached — a cached "signed out" would bounce
-    // freshly logged-in users straight back to the login page.
-    if (authCache.signedIn && Date.now() - authCache.at < 30_000) return true;
-    try {
-        const res = await fetch('/api/account/me', { credentials: 'include', headers: { Accept: 'application/json' } });
-        const data = res.ok ? await res.json() : null;
-        authCache = { signedIn: !!data?.customer, at: Date.now() };
-    } catch {
-        authCache = { signedIn: false, at: Date.now() };
-    }
-    return authCache.signedIn;
-}
-
 router.beforeEach(async (to) => {
     if (!to.meta.requiresAuth) return true;
-    if (await isSignedIn()) return true;
+    if (await authStore.check()) return true;
     return { path: '/account/login', query: { next: to.fullPath } };
 });
 

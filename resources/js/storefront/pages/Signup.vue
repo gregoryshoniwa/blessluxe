@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { authStore } from '../auth-store.js';
 import { wishlist } from '../wishlist-store.js';
 
 export default {
@@ -33,6 +34,7 @@ export default {
                     marketing_consent: this.marketing_consent,
                 });
                 try { await wishlist.boot(); } catch { /* don't block signup */ }
+                await authStore.refresh();
                 this.$router.push(this.nextPath);
             } catch (e) {
                 this.error = e.payload?.error

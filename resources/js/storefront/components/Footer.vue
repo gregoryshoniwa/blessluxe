@@ -79,9 +79,9 @@ export default {
                     <h4 class="font-display text-sm tracking-widest uppercase text-gold mb-6">
                         {{ section.title }}
                     </h4>
-                    <ul class="space-y-3">
+                    <ul class="space-y-0 sm:space-y-3">
                         <li v-for="link in section.links" :key="link.href">
-                            <a :href="link.href" class="text-white/70 text-sm hover:text-gold transition-colors">
+                            <a :href="link.href" class="block py-3 sm:py-0 sm:inline text-white/70 text-sm hover:text-gold transition-colors">
                                 {{ link.label }}
                             </a>
                         </li>

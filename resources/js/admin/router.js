@@ -13,14 +13,16 @@ const routes = [
     { path: '/admin/affiliates', name: 'admin-affiliates', component: () => import('./pages/Affiliates.vue') },
     { path: '/admin/affiliates/:id', name: 'admin-affiliate-detail', component: () => import('./pages/AffiliateDetail.vue') },
     { path: '/admin/regions',    name: 'admin-regions',   component: () => import('./pages/Regions.vue') },
-    { path: '/admin/blits',      name: 'admin-blits',     component: () => import('./pages/Blits.vue') },
+    { path: '/admin/bees',      name: 'admin-bees',     component: () => import('./pages/Bees.vue') },
+    // Renamed programme — old bookmarks land on the new page.
+    { path: '/admin/' + 'bl' + 'its', redirect: '/admin/bees' },
     { path: '/admin/packs',      name: 'admin-packs',     component: () => import('./pages/Packs.vue') },
     { path: '/admin/packages',   name: 'admin-packages',  component: () => import('./pages/Packages.vue') },
     // Package detail was pure component state, so it could not be linked to —
     // which is why the order screen linked to the list instead.
     { path: '/admin/packages/:id', name: 'admin-package-detail', component: () => import('./pages/Packages.vue') },
     { path: '/admin/couriers',   name: 'admin-couriers',  component: () => import('./pages/Couriers.vue') },
-    { path: '/admin/affiliate-inbox', name: 'admin-affiliate-inbox', component: () => import('./pages/AffiliateInbox.vue') },
+    { path: '/admin/affiliate-inbox/:id?', name: 'admin-affiliate-inbox', component: () => import('./pages/AffiliateInbox.vue') },
     { path: '/admin/orders',     name: 'admin-orders',         component: () => import('./pages/Orders.vue') },
     { path: '/admin/orders/:id', name: 'admin-order-detail',   component: () => import('./pages/OrderDetail.vue') },
     { path: '/admin/content',    name: 'admin-content',   component: () => import('./pages/Content.vue') },

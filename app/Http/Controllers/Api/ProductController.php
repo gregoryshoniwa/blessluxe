@@ -299,10 +299,6 @@ class ProductController extends Controller
      */
     private function viewingAffiliate(\Illuminate\Http\Request $request): ?\App\Models\Affiliate
     {
-        if (! $request->hasSession()) return null;
-        $code = $request->session()->get('affiliate_code');
-        if (! $code) return null;
-
-        return \App\Models\Affiliate::where('code', $code)->where('status', 'active')->first();
+        return \App\Services\AffiliatePricing::viewing($request);
     }
 }

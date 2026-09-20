@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { authStore } from '../auth-store.js';
 import { wishlist } from '../wishlist-store.js';
 
 export default {
@@ -34,6 +35,9 @@ export default {
                 // Re-detect auth so any guest wishlist items get merged into
                 // the customer's account before we navigate away.
                 try { await wishlist.boot(); } catch { /* don't block login */ }
+                // The header outlives this page; tell it a member just arrived
+                // so members-only menu entries appear without a reload.
+                await authStore.refresh();
                 this.$router.push(this.nextPath);
             } catch (e) {
                 this.error = e.payload?.error

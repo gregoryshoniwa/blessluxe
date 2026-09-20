@@ -54,15 +54,15 @@ export default {
 
 <template>
     <div>
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Stock</p>
                 <h1 class="text-2xl font-semibold">Inventory</h1>
             </div>
         </header>
 
-        <div class="mb-4 flex gap-2 items-center">
-            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search SKU or product…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+        <div class="mb-4 flex flex-wrap gap-2 items-center">
+            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search SKU or product…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
             <label class="flex items-center gap-1 text-sm"><input type="checkbox" v-model="lowOnly" @change="page = 1; fetchAll()" /> Low stock only</label>
             <button @click="page = 1; fetchAll()" class="border border-zinc-300 px-4 py-2 text-xs tracking-widest uppercase hover:bg-zinc-100">Search</button>
         </div>

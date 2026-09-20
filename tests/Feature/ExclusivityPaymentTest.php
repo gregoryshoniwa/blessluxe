@@ -16,7 +16,7 @@ use Tests\TestCase;
  *
  * Same hazard as the pack-forwarding fee: PaynowController mints an Order for
  * any paid session without one, so an exclusivity fee must be discriminated by
- * `kind` or a $50 payment becomes a $50 "sale" that earns Blits.
+ * `kind` or a $50 payment becomes a $50 "sale" that earns Bees.
  */
 class ExclusivityPaymentTest extends TestCase
 {
@@ -67,20 +67,20 @@ class ExclusivityPaymentTest extends TestCase
     }
 
     #[Test]
-    public function paying_the_fee_creates_no_order_and_no_blits(): void
+    public function paying_the_fee_creates_no_order_and_no_bees(): void
     {
         [, $aff] = $this->setup2();
         $excl = Exclusivity::beginPurchase('prod_a', $aff);
         $session = $this->paidSession($excl['id']);
 
         $ordersBefore = DB::table('orders')->count();
-        $blitsBefore  = DB::table('blits_ledger')->count();
+        $beesBefore  = DB::table('blits_ledger')->count();
 
         // What the IPN branch does on `paid`.
         Exclusivity::activate($excl['id'], $session->id);
 
         $this->assertSame($ordersBefore, DB::table('orders')->count(), 'A right is not a sale.');
-        $this->assertSame($blitsBefore, DB::table('blits_ledger')->count());
+        $this->assertSame($beesBefore, DB::table('blits_ledger')->count());
         $this->assertSame(Exclusivity::ACTIVE, DB::table('product_exclusivities')->where('id', $excl['id'])->value('status'));
     }
 

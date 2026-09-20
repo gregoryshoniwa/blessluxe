@@ -57,7 +57,7 @@ export default {
         </button>
         <div v-if="open" class="fixed inset-0 z-40" @click="open = false"></div>
         <!-- Opens rightwards over the content area — the sidebar is narrower than the panel. -->
-        <div v-if="open" class="absolute left-full top-0 ml-3 w-[360px] max-w-[80vw] bg-white text-zinc-900 shadow-xl border border-zinc-200 z-50 max-h-[70vh] overflow-y-auto">
+        <div v-if="open" class="fixed left-2 right-2 top-16 lg:absolute lg:left-full lg:right-auto lg:top-0 lg:ml-3 lg:w-[360px] bg-white text-zinc-900 shadow-xl border border-zinc-200 z-50 max-h-[70dvh] overflow-y-auto overscroll-contain">
             <header class="flex items-center justify-between px-4 py-3 border-b border-zinc-200">
                 <p class="font-semibold tracking-widest uppercase text-xs">Notifications</p>
                 <button @click="open = false" class="text-zinc-500 hover:text-black"><X class="w-4 h-4" /></button>

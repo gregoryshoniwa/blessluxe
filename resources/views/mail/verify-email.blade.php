@@ -15,7 +15,7 @@
                 <tr><td style="padding:36px 48px;">
                     <h2 style="font-family:'Georgia',serif;font-size:26px;font-weight:500;color:#000;margin:0 0 16px;">Confirm it's you, {{ $firstName }}.</h2>
                     <p style="line-height:1.6;color:#444;margin:0 0 28px;">
-                        Tap the button below to confirm this email address. Verified accounts can recover lost passwords and receive Blits gifts.
+                        Tap the button below to confirm this email address. Verified accounts can recover lost passwords and receive Bees gifts.
                     </p>
                     <p style="margin:0 0 28px;">
                         <a href="{{ $verifyUrl }}" style="display:inline-block;background:#C9A84C;color:#fff;text-decoration:none;padding:14px 36px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;font-weight:600;">Confirm email</a>

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Blits;
+use App\Services\Bees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -12,18 +12,18 @@ use Illuminate\Support\Facades\DB;
  * Storefront-facing loyalty endpoints. Tightly scoped to the signed-in
  * customer — guests get a polite null response so the UI can branch.
  */
-class BlitsController extends Controller
+class BeesController extends Controller
 {
     /**
-     * GET /api/account/blits
+     * GET /api/account/bees
      *
      * Balance + last 15 ledger rows + public config (so the checkout
-     * panel knows what 1 blit is worth without a second roundtrip).
+     * panel knows what 1 bee is worth without a second roundtrip).
      */
     public function index(Request $request)
     {
         $customer = Auth::guard('customer')->user();
-        if (! $customer) return ['blits' => null, 'settings' => Blits::settings()];
+        if (! $customer) return ['bees' => null, 'settings' => Bees::settings()];
 
         $entries = DB::table('blits_ledger')
             ->where('customer_id', $customer->id)
@@ -33,8 +33,8 @@ class BlitsController extends Controller
             ->get(['id', 'delta', 'balance_after', 'reason', 'reference', 'created_at']);
 
         return [
-            'settings' => Blits::settings(),
-            'blits' => [
+            'settings' => Bees::settings(),
+            'bees' => [
                 'balance'      => (int) $customer->loyalty_points,
                 'tier'         => $customer->loyalty_tier,
                 'recent'       => $entries->map(fn ($e) => [
@@ -50,25 +50,25 @@ class BlitsController extends Controller
     }
 
     /**
-     * POST /api/account/blits/preview
-     * { blits: int, subtotal_cents: int }
+     * POST /api/account/bees/preview
+     * { bees: int, subtotal_cents: int }
      *
      * Returns the actual discount the customer would get if they spent the
-     * requested blits on an order of the given subtotal. Lets the SPA
-     * render "Use 500 Blits → $5 off" live as the slider moves.
+     * requested bees on an order of the given subtotal. Lets the SPA
+     * render "Use 500 Bees → $5 off" live as the slider moves.
      */
     public function preview(Request $request)
     {
         $customer = Auth::guard('customer')->user();
         $data = $request->validate([
-            'blits'          => ['required', 'integer', 'min:0'],
+            'bees'          => ['required', 'integer', 'min:0'],
             'subtotal_cents' => ['required', 'integer', 'min:0'],
         ]);
         $available = (int) ($customer?->loyalty_points ?? 0);
         return [
             'available' => $available,
-            'preview'   => Blits::previewDiscount(
-                (int) $data['blits'],
+            'preview'   => Bees::previewDiscount(
+                (int) $data['bees'],
                 (int) $data['subtotal_cents'],
                 $available
             ),

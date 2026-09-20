@@ -1,5 +1,7 @@
 <script>
 import SearchOverlay from './SearchOverlay.vue';
+import { affiliateStore } from '../affiliate-store.js';
+import { authStore } from '../auth-store.js';
 import MobileNavDrawer from './MobileNavDrawer.vue';
 import NotificationsBell from './NotificationsBell.vue';
 
@@ -13,7 +15,10 @@ export default {
             headings: [],
             cartCount: 0,
             wishCount: 0,
-            affiliate: null,
+            // Shared, so the menu, Home and the Packs page all agree on whose
+            // shop this is (see affiliate-store.js).
+            shop: affiliateStore.state,
+            auth: authStore.state,
             searchOpen: false,
             mobileNavOpen: false,
             showroomMenu: [
@@ -26,6 +31,10 @@ export default {
         };
     },
     computed: {
+        affiliate() { return this.shop.affiliate; },
+        curated() { return affiliateStore.isCurated(); },
+        // Members-only menu entries (Show Room) are only offered to members.
+        signedIn() { return this.auth.signedIn; },
         navLinks() {
             // Map API headings into the same shape the template used to hardcode.
             return this.headings.map((h) => ({
@@ -42,8 +51,9 @@ export default {
     },
     mounted() {
         window.addEventListener('scroll', this.handleScroll, { passive: true });
+        authStore.refresh();
         window.addEventListener('blessluxe:cart-updated', this.fetchCartCount);
-        window.addEventListener('blessluxe:affiliate-changed', this.fetchAffiliate);
+        window.addEventListener('blessluxe:affiliate-changed', this.onAffiliateChanged);
         window.addEventListener('blessluxe:wishlist-updated', this.syncWishCount);
         window.addEventListener('blessluxe:search-open', this.openSearch);
         this.handleScroll();
@@ -55,7 +65,7 @@ export default {
     beforeUnmount() {
         window.removeEventListener('scroll', this.handleScroll);
         window.removeEventListener('blessluxe:cart-updated', this.fetchCartCount);
-        window.removeEventListener('blessluxe:affiliate-changed', this.fetchAffiliate);
+        window.removeEventListener('blessluxe:affiliate-changed', this.onAffiliateChanged);
         window.removeEventListener('blessluxe:wishlist-updated', this.syncWishCount);
         window.removeEventListener('blessluxe:search-open', this.openSearch);
     },
@@ -91,15 +101,16 @@ export default {
                 this.cartCount = 0;
             }
         },
-        async fetchAffiliate() {
-            try {
-                const res = await fetch('/api/store/affiliate/active', { cache: 'no-store', credentials: 'include' });
-                if (!res.ok) return;
-                const data = await res.json();
-                this.affiliate = data.affiliate || null;
-            } catch {
-                this.affiliate = null;
-            }
+        fetchAffiliate() { return affiliateStore.refresh(); },
+        /**
+         * The shop changed (an affiliate link was opened, or × was pressed).
+         * The server narrows the menu to a curated shop's own categories, so
+         * the menu has to be asked for again — but only now, not on first load,
+         * where the first request already carried the session.
+         */
+        async onAffiliateChanged() {
+            await affiliateStore.refresh();
+            this.fetchHeadings();
         },
         syncWishCount() {
             // Lazy require so we don't pull the store before boot.
@@ -111,27 +122,14 @@ export default {
         closeSearch() { this.searchOpen = false; },
         openMobileNav() { this.mobileNavOpen = true; },
         closeMobileNav() { this.mobileNavOpen = false; },
-        async clearAffiliate() {
-            try {
-                await fetch('/api/store/affiliate/clear', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-XSRF-TOKEN': decodeURIComponent((document.cookie.match(/XSRF-TOKEN=([^;]+)/) || [])[1] || ''),
-                    },
-                });
-            } catch { /* swallow */ }
-            this.affiliate = null;
-            window.dispatchEvent(new CustomEvent('blessluxe:affiliate-changed'));
-        },
+        clearAffiliate() { return affiliateStore.clear(); },
     },
 };
 </script>
 
 <template>
     <SearchOverlay :open="searchOpen" @close="closeSearch" />
-    <MobileNavDrawer :open="mobileNavOpen" :nav-links="navLinks" @close="closeMobileNav" @open-search="openSearch" />
+    <MobileNavDrawer :open="mobileNavOpen" :nav-links="navLinks" :show-packs="!curated" :show-showroom="signedIn" @close="closeMobileNav" @open-search="openSearch" />
 
     <header
         :class="[
@@ -146,7 +144,7 @@ export default {
                 <span class="hidden sm:inline">Shopping via</span>
                 <span class="font-mono font-semibold">{{ affiliate.code }}</span>
                 <span v-if="affiliate.name && affiliate.name !== affiliate.code" class="hidden sm:inline">· {{ affiliate.name }}</span>
-                <button @click="clearAffiliate" class="ml-2 text-black/40 hover:text-black transition-colors" title="Stop shopping via this affiliate">×</button>
+                <button @click="clearAffiliate" class="ml-1 -my-3 w-11 h-11 inline-flex items-center justify-center text-base text-black/40 hover:text-black transition-colors" title="Stop shopping via this affiliate" aria-label="Stop shopping via this affiliate">×</button>
             </div>
         </div>
 
@@ -170,7 +168,10 @@ export default {
                 </router-link>
 
                 <nav class="hidden lg:flex items-center gap-8">
+                    <!-- Not in a curated affiliate shop: packs are BLESSLUXE's
+                         own drops, never part of someone's hand-picked line. -->
                     <router-link
+                        v-if="!curated"
                         to="/shop/packs"
                         active-class="text-gold"
                         class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
@@ -215,8 +216,10 @@ export default {
                         </div>
                     </div>
 
-                    <!-- Show Room -->
+                    <!-- Show Room — members only. Offering it to a visitor who
+                         isn't signed in just walks them into a login wall. -->
                     <div
+                        v-if="signedIn"
                         class="relative"
                         @mouseenter="activeMenu = 'showroom'"
                         @mouseleave="activeMenu = null"
@@ -251,19 +254,19 @@ export default {
                     </div>
                 </nav>
 
-                <div class="flex items-center gap-1.5">
-                    <button @click="openSearch" class="p-2 hover:text-gold transition-colors" aria-label="Search">
+                <div class="flex items-center gap-0 sm:gap-1.5">
+                    <button @click="openSearch" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors" aria-label="Search">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                     </button>
                     <NotificationsBell />
-                    <router-link to="/account" class="p-2 hover:text-gold transition-colors" aria-label="Account">
+                    <router-link to="/account" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors" aria-label="Account">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                         </svg>
                     </router-link>
-                    <router-link to="/wishlist" class="p-2 hover:text-gold transition-colors relative" aria-label="Wishlist">
+                    <router-link to="/wishlist" class="p-2 min-w-10 min-h-11 hidden min-[360px]:inline-flex items-center justify-center hover:text-gold transition-colors relative" aria-label="Wishlist">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
                         </svg>
@@ -274,7 +277,7 @@ export default {
                             {{ wishCount > 99 ? '99+' : wishCount }}
                         </span>
                     </router-link>
-                    <router-link to="/cart" class="p-2 hover:text-gold transition-colors relative" aria-label="Cart">
+                    <router-link to="/cart" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors relative" aria-label="Cart">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                         </svg>

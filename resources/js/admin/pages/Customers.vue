@@ -53,7 +53,7 @@ export default {
 
 <template>
     <div>
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">People</p>
                 <h1 class="text-2xl font-semibold">Customers</h1>
@@ -61,13 +61,13 @@ export default {
         </header>
 
         <div class="mb-4 flex gap-2">
-            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search email, name or phone…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search email, name or phone…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
             <button @click="page = 1; fetchAll()" class="border border-zinc-300 px-4 py-2 text-xs tracking-widest uppercase hover:bg-zinc-100">Search</button>
         </div>
 
         <div v-if="adjusting" class="bg-white border border-gold/30 p-5 mb-6">
             <h2 class="font-semibold mb-1">{{ displayName(adjusting) }}</h2>
-            <p class="text-xs text-zinc-500 mb-3">{{ adjusting.email }} · {{ adjusting.loyalty_points }} Blits ({{ adjusting.loyalty_tier }})</p>
+            <p class="text-xs text-zinc-500 mb-3">{{ adjusting.email }} · {{ adjusting.loyalty_points }} Bees ({{ adjusting.loyalty_tier }})</p>
             <div class="grid grid-cols-2 gap-3">
                 <input v-model.number="delta" type="number" placeholder="Delta (e.g. +100, -50)" class="border border-zinc-300 px-3 py-2" />
                 <input v-model="reason" placeholder="Reason (e.g. goodwill_gesture)" class="border border-zinc-300 px-3 py-2" />
@@ -89,7 +89,7 @@ export default {
                         <th class="px-5 py-3 text-left">Email</th>
                         <th class="px-5 py-3 text-left">Phone</th>
                         <th class="px-5 py-3 text-left">Orders</th>
-                        <th class="px-5 py-3 text-left">Blits</th>
+                        <th class="px-5 py-3 text-left">Bees</th>
                         <th class="px-5 py-3 text-left">Joined</th>
                         <th class="px-5 py-3"></th>
                     </tr>
@@ -105,7 +105,7 @@ export default {
                         <td class="px-5 py-3">{{ c.loyalty_points }} <span class="text-[10px] text-zinc-400 uppercase">{{ c.loyalty_tier }}</span></td>
                         <td class="px-5 py-3 text-zinc-500 text-xs">{{ new Date(c.created_at).toLocaleDateString() }}</td>
                         <td class="px-5 py-3 text-right">
-                            <IconButton label="Adjust Blits" @click="startAdjust(c)">
+                            <IconButton label="Adjust Bees" @click="startAdjust(c)">
                                 <Sparkles class="w-4 h-4" />
                             </IconButton>
                         </td>

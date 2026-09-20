@@ -21,7 +21,7 @@
                         Your BLESSLUXE account is ready. You'll be the first to know when limited drops, new arrivals and member-only events land.
                     </p>
                     <p style="line-height:1.6;color:#444;margin:0 0 28px;">
-                        Save pieces you love to your wishlist, earn Blits on every order, and join curated group buys ("Packs") whenever they open.
+                        Save pieces you love to your wishlist, earn Bees on every order, and join curated group buys ("Packs") whenever they open.
                     </p>
                     <p style="margin:0 0 32px;">
                         <a href="{{ $storeUrl }}" style="display:inline-block;background:#C9A84C;color:#fff;text-decoration:none;padding:14px 36px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;font-weight:600;">Begin shopping</a>

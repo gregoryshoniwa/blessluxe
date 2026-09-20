@@ -107,7 +107,7 @@ export default {
 
 <template>
     <div>
-        <header class="flex items-center justify-between mb-8">
+        <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Partners</p>
                 <h1 class="text-2xl font-semibold">Affiliates</h1>
@@ -120,7 +120,7 @@ export default {
         <p v-if="error && !showForm" class="bg-red-50 border border-red-200 text-sm text-red-700 p-3 mb-4">{{ error }}</p>
 
         <div class="mb-4 flex gap-2">
-            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code or email…" class="border border-zinc-300 px-3 py-2 text-sm w-72" />
+            <input v-model="q" @keyup.enter="page = 1; fetchAll()" placeholder="Search code or email…" class="border border-zinc-300 px-3 py-2 text-sm w-full sm:w-72" />
             <button @click="page = 1; fetchAll()" class="border border-zinc-300 px-4 py-2 text-xs tracking-widest uppercase hover:bg-zinc-100">Search</button>
         </div>
 

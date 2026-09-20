@@ -50,12 +50,7 @@ class AffiliateController extends Controller
 
         $request->session()->put('affiliate_code', $affiliate->code);
 
-        return [
-            'affiliate' => [
-                'code' => $affiliate->code,
-                'name' => trim(($affiliate->first_name ?? '') . ' ' . ($affiliate->last_name ?? '')) ?: $affiliate->code,
-            ],
-        ];
+        return ['affiliate' => $this->storefrontShape($affiliate)];
     }
 
     /**
@@ -75,12 +70,7 @@ class AffiliateController extends Controller
             $request->session()->forget('affiliate_code');
             return ['affiliate' => null];
         }
-        return [
-            'affiliate' => [
-                'code' => $affiliate->code,
-                'name' => trim(($affiliate->first_name ?? '') . ' ' . ($affiliate->last_name ?? '')) ?: $affiliate->code,
-            ],
-        ];
+        return ['affiliate' => $this->storefrontShape($affiliate)];
     }
 
     /**
@@ -472,6 +462,33 @@ class AffiliateController extends Controller
             ],
             'recent_sales'  => $sales,
             'recent_payouts'=> $payouts,
+        ];
+    }
+
+    /**
+     * How the storefront sees the affiliate it is shopping via.
+     *
+     * One builder for `resolve` (a link was just opened) and `active` (every
+     * later page load) — they were two copies of the same array, and the copy
+     * that wasn't updated is the one that would have shipped without `curated`.
+     */
+    private function storefrontShape(Affiliate $affiliate): array
+    {
+        $curated = \App\Services\AffiliatePricing::curatedProductIds($affiliate);
+
+        return [
+            'code' => $affiliate->code,
+            'name' => trim(($affiliate->first_name ?? '') . ' ' . ($affiliate->last_name ?? '')) ?: $affiliate->code,
+            // A curated shop sells ONLY what this affiliate picked. The
+            // storefront uses this to drop everything that isn't theirs — packs,
+            // empty categories — and to explain an empty shop honestly instead
+            // of looking broken.
+            'curated'       => $curated !== null,
+            'product_count' => $curated === null ? null : count($curated),
+            // Accent colour + top-bar messages, when they've set their own.
+            // Rides on this payload because every page already fetches it —
+            // theming the shop costs no extra request.
+            'look'          => \App\Services\AffiliateLook::forStorefront($affiliate),
         ];
     }
 }

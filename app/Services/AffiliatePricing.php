@@ -114,6 +114,43 @@ class AffiliatePricing
         return (int) round($baseTotal * $rate / 100);
     }
 
+    /**
+     * The affiliate whose storefront this request is browsing, if any.
+     *
+     * ONE definition, because every surface of a curated shop has to agree on
+     * it. It used to live privately inside ProductController, which is exactly
+     * how the product grid came to be curated while the Packs tile, the Packs
+     * menu link and the category tiles carried on showing the whole shop.
+     *
+     * Needs a session, so the route must be in the `web` group — without one
+     * this quietly returns null and the shop shows everything.
+     */
+    public static function viewing(?\Illuminate\Http\Request $request = null): ?Affiliate
+    {
+        $request ??= request();
+        if (! $request->hasSession()) return null;
+
+        $code = $request->session()->get('affiliate_code');
+        if (! $code) return null;
+
+        return Affiliate::where('code', $code)->where('status', 'active')->first();
+    }
+
+    /**
+     * Narrow a product query to the shop being browsed.
+     *
+     * For anything that ADVERTISES products — a grid, search, the LUXE
+     * assistant's suggestions. Inside a curated affiliate shop that is only
+     * their chosen pieces; anywhere else it is a no-op. Opening one specific
+     * product by link is deliberately not routed through here.
+     */
+    public static function scopeToShop($query, ?\Illuminate\Http\Request $request = null)
+    {
+        $ids = self::curatedProductIds(self::viewing($request));
+
+        return $ids === null ? $query : $query->whereIn($query->getModel()->getTable() . '.id', $ids);
+    }
+
     /** True when this affiliate sells a hand-picked line rather than the whole shop. */
     public static function isCurated(?Affiliate $affiliate): bool
     {

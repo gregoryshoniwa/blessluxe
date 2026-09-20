@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Services\Blits;
+use App\Services\Bees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-class AdminBlitsController extends Controller
+class AdminBeesController extends Controller
 {
     public function index()
     {
@@ -23,7 +23,7 @@ class AdminBlitsController extends Controller
             ->get(['id', 'customer_id', 'delta', 'balance_after', 'reason', 'reference', 'created_at']);
 
         return [
-            'settings' => Blits::settings(),
+            'settings' => Bees::settings(),
             'stats'    => $stats,
             'recent_ledger' => $ledger,
         ];
@@ -38,10 +38,10 @@ class AdminBlitsController extends Controller
             'enabled'              => ['sometimes', 'boolean'],
         ]);
         $patch = [];
-        if (isset($data['per_usd']))              $patch[Blits::KEY_PER_USD]              = (int) $data['per_usd'];
-        if (isset($data['max_discount_percent'])) $patch[Blits::KEY_MAX_DISCOUNT_PERCENT] = (string) $data['max_discount_percent'];
-        if (isset($data['earn_per_usd']))         $patch[Blits::KEY_EARN_PER_USD]         = (string) $data['earn_per_usd'];
-        if (isset($data['enabled']))              $patch[Blits::KEY_ENABLED]              = $data['enabled'] ? 'true' : 'false';
-        return ['settings' => Blits::setConfig($patch)];
+        if (isset($data['per_usd']))              $patch[Bees::KEY_PER_USD]              = (int) $data['per_usd'];
+        if (isset($data['max_discount_percent'])) $patch[Bees::KEY_MAX_DISCOUNT_PERCENT] = (string) $data['max_discount_percent'];
+        if (isset($data['earn_per_usd']))         $patch[Bees::KEY_EARN_PER_USD]         = (string) $data['earn_per_usd'];
+        if (isset($data['enabled']))              $patch[Bees::KEY_ENABLED]              = $data['enabled'] ? 'true' : 'false';
+        return ['settings' => Bees::setConfig($patch)];
     }
 }
