@@ -17,7 +17,7 @@ export default {
     data() {
         return {
             // Live counts for items that carry a `badge` key.
-            badges: { inbox: 0 },
+            badges: { inbox: 0, hive: 0 },
             badgeTimer: null,
             sections: [
                 {
@@ -44,6 +44,8 @@ export default {
                     items: [
                         { to: '/admin/customers', label: 'Customers' },
                         { to: '/admin/reviews',   label: 'Reviews' },
+                        { to: '/admin/hive',      label: 'Hive reports', badge: 'hive' },
+                        { to: '/admin/hive/challenges', label: 'Hive challenges' },
                     ],
                 },
                 {
@@ -106,6 +108,7 @@ export default {
             try {
                 const d = await api.get('/api/admin/affiliate-inbox/unread');
                 this.badges.inbox = d.unread_total || 0;
+                this.badges.hive = d.hive_reports_open || 0;
             } catch { /* signed out or offline — keep the last number */ }
             this.badgeTimer = setTimeout(this.refreshBadges, document.hidden ? 60000 : 30000);
         },

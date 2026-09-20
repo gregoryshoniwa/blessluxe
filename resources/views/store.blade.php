@@ -16,6 +16,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="/icon.png">
+    {{-- Bless Hive installs as an app ("Add to Home Screen"). --}}
+    <link rel="manifest" href="/hive.webmanifest">
+    <meta name="theme-color" content="#FDF8F3">
+    <link rel="apple-touch-icon" href="/hive-icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Bless Hive">
     <title>{{ $meta['title'] }}</title>
     <meta name="description" content="{{ $meta['description'] }}">
     <link rel="canonical" href="{{ $meta['canonical'] }}">

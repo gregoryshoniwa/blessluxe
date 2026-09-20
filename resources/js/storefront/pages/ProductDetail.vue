@@ -1,11 +1,12 @@
 <script>
 import { api } from '../../lib/api.js';
 import ProductStrip from '../components/ProductStrip.vue';
+import ProductTryOns from '../components/hive/ProductTryOns.vue';
 import { recentlyViewed } from '../recently-viewed.js';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip },
+    components: { ProductStrip, ProductTryOns },
     data() {
         return {
             product: null,
@@ -229,6 +230,9 @@ export default {
                 </router-link>
             </div>
         </div>
+
+        <!-- How it fits — try-ons from buyers on Bless Hive (hidden until there is one). -->
+        <ProductTryOns v-if="product && !notFound" :product="product.id" />
 
         <!-- Related products: same catalogue with fallback to heading. -->
         <ProductStrip

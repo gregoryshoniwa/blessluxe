@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\AffiliateStorefrontController;
 use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AvatarController;
 use App\Http\Controllers\Api\GenerationController;
+use App\Http\Controllers\Api\HiveController;
+use App\Http\Controllers\Api\HiveTalkController;
+use App\Http\Controllers\Api\Admin\AdminHiveController;
 use App\Http\Controllers\Api\LogoController;
 use App\Http\Controllers\Api\StudioController;
 use App\Http\Controllers\Api\CustomerAddressController;
@@ -73,6 +76,22 @@ Route::prefix('store')->group(function () {
         Route::post('/products/batch',            [ProductController::class, 'batch']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
         Route::get ('/products/{handle}',         [ProductController::class, 'show']);
+    });
+
+    // ─── Bless Hive — reading is public, so a page can be shared and opened
+    // without an account. Session-backed so a signed-in viewer sees their own
+    // likes, follows and fit-twin match.
+    Route::middleware('web')->prefix('hive')->group(function () {
+        Route::get('/feed',           [HiveController::class, 'feed']);
+        Route::get('/pages/{handle}', [HiveController::class, 'page']);
+        Route::get('/looks/{id}',          [HiveController::class, 'look']);
+        Route::get('/looks/{id}/comments', [HiveTalkController::class, 'comments']);
+        Route::get('/discover',            [HiveController::class, 'discover'])->middleware('throttle:hive-read');
+        Route::get('/products/{productId}/tryons', [HiveController::class, 'productTryOns']);
+        Route::get('/challenges',          [HiveController::class, 'challenges']);
+        Route::get('/challenges/{slug}',   [HiveController::class, 'challenge']);
+        Route::get('/asks',                [HiveTalkController::class, 'asks']);
+        Route::get('/asks/{id}',           [HiveTalkController::class, 'ask']);
     });
 
     // Public content (no session needed).
@@ -212,6 +231,36 @@ Route::middleware('web')->prefix('account')->group(function () {
     Route::put ('/affiliate/category-markups/{catalogueId}', [AffiliateStorefrontController::class, 'setCategoryMarkup']);
     Route::post('/affiliate/exclusivity/{productId}',       [AffiliateStorefrontController::class, 'buyExclusivity']);
 
+    // ─── Bless Hive — my page, fit, looks, follows ─────────────────────
+    Route::prefix('hive')->group(function () {
+        Route::get   ('/me',                 [HiveController::class, 'mine']);
+        Route::post  ('/me',                 [HiveController::class, 'update']);      // POST: carries an avatar file
+        Route::put   ('/me',                 [HiveController::class, 'update']);
+        Route::get   ('/handle-available',   [HiveController::class, 'handleAvailable'])->middleware('throttle:hive-read');
+        Route::get   ('/twins',              [HiveController::class, 'twins']);
+        Route::get   ('/tryons/eligible',    [HiveController::class, 'eligibleTryOns']);
+        Route::get   ('/earnings',           [HiveController::class, 'earnings']);
+        Route::get   ('/mentions',           [HiveController::class, 'mentions'])->middleware('throttle:hive-read');
+        Route::post  ('/looks',              [HiveController::class, 'storeLook'])->middleware('throttle:hive-post');
+        Route::delete('/looks/{id}',         [HiveController::class, 'destroyLook']);
+        Route::post  ('/looks/{id}/like',    [HiveController::class, 'like'])->middleware('throttle:hive-tap');
+        Route::delete('/looks/{id}/like',    [HiveController::class, 'unlike']);
+        Route::post  ('/follow/{handle}',    [HiveController::class, 'follow'])->middleware('throttle:hive-tap');
+        Route::delete('/follow/{handle}',    [HiveController::class, 'unfollow']);
+        Route::post  ('/reports',            [HiveController::class, 'report'])->middleware('throttle:hive-post');
+
+        Route::post  ('/looks/{id}/comments', [HiveTalkController::class, 'storeComment'])->middleware('throttle:hive-talk');
+        Route::delete('/comments/{id}',       [HiveTalkController::class, 'destroyComment']);
+        Route::post  ('/asks',                [HiveTalkController::class, 'storeAsk'])->middleware('throttle:hive-post');
+        Route::delete('/asks/{id}',           [HiveTalkController::class, 'destroyAsk']);
+        Route::post  ('/asks/{id}/vote',      [HiveTalkController::class, 'vote'])->middleware('throttle:hive-tap');
+        Route::post  ('/asks/{id}/answers',   [HiveTalkController::class, 'storeAnswer'])->middleware('throttle:hive-talk');
+        Route::post  ('/asks/{id}/accept',    [HiveTalkController::class, 'accept'])->middleware('throttle:hive-talk');
+        Route::delete('/answers/{id}',        [HiveTalkController::class, 'destroyAnswer']);
+        Route::get   ('/activity',            [HiveTalkController::class, 'activity']);
+        Route::post  ('/activity/read',       [HiveTalkController::class, 'activityRead']);
+    });
+
     // ─── Shop design: own hero slides, top-bar messages, accent colour ───
     Route::get   ('/affiliate/look',              [AffiliateLookController::class, 'show']);
     Route::put   ('/affiliate/look',              [AffiliateLookController::class, 'update']);
@@ -344,6 +393,14 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/affiliates/{id}/payouts',    [AdminAffiliateController::class, 'markPaid']);
         // Affiliate <-> admin conversation, and the stock requests landing in it.
         Route::get   ('/affiliate-inbox',            [AdminAffiliateController::class, 'inbox']);
+        // Bless Hive moderation.
+        Route::get   ('/hive/reports',               [AdminHiveController::class, 'reports']);
+        Route::put   ('/hive/reports/{id}',          [AdminHiveController::class, 'resolve']);
+        Route::get   ('/hive/challenges',              [AdminHiveController::class, 'challenges']);
+        Route::post  ('/hive/challenges',              [AdminHiveController::class, 'saveChallenge']);
+        Route::put   ('/hive/challenges/{id}',         [AdminHiveController::class, 'saveChallenge']);
+        Route::get   ('/hive/challenges/{id}/entries', [AdminHiveController::class, 'entries']);
+        Route::post  ('/hive/challenges/{id}/award',   [AdminHiveController::class, 'award']);
         Route::get   ('/affiliate-inbox/unread',     [AdminAffiliateController::class, 'inboxUnread']);
         Route::get   ('/affiliate-inbox/mentions',   [AdminAffiliateController::class, 'mentions']);
         Route::get   ('/affiliates/{id}/messages',   [AdminAffiliateController::class, 'messages']);

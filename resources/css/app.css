@@ -178,3 +178,8 @@ table code {
     overflow-wrap: normal;
     white-space: nowrap;
 }
+
+/* Inside Bless Hive a phone has a bottom tab bar; toasts sit above it, not on it. */
+@media (max-width: 1023px) {
+    body.in-hive .dlg-toasts { bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+}

@@ -101,6 +101,10 @@ export default {
                             </div>
                         </div>
 
+                        <router-link to="/hive" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
+                            Hive
+                        </router-link>
+
                         <!-- Show Room — members only -->
                         <div v-if="showShowroom">
                             <button

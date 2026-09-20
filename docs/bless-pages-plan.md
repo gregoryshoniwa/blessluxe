@@ -177,9 +177,15 @@ Each phase ends with a **gate**. If the gate isn't met, fix or stop — do not b
 ### Phase 1 — Pages + Fit · 6–8 weeks · ~$20–30/month
 Bless Pages for everyone (profile, follow, photo Looks tagged to products — reusing the @product cards); fit profile + Fit Twins; try-on / "ordered vs got" reviews that earn Bees; WhatsApp share cards; report button + moderation queue; installable PWA.
 - **Gate:** 30 of the 50 creators post weekly · 20% of orders get a try-on review · day-7 retention ≥ 30%.
+- **Built (20 Sep 2026):** `/hive` feed (Everyone / Following), a page for every customer at `/@handle` (Looks · Fit · Shop), fit profile with three privacy levels, Fit Twins, photo Looks with product tags, follow, hearts (count visible to the author only), one-time 18+ confirmation, report + staff queue at `/admin/hive`, WhatsApp share cards, in-browser photo shrinking.
+- **Added 20 Sep 2026:** the Hive became its own full-screen app (no shop header/footer; left rail on desktop, bottom tabs on phones), comments, Discover (people search, occasions, twins).
+- **Added later on 20 Sep 2026:** try-on reviews tied to paid orders (50 Bees, once per purchased item) with "How it fits" on product pages · installable app (manifest + offline page). **Phase 1 is feature-complete** — what remains is the gate: real creators posting weekly.
 
 ### Phase 2 — Ask + Feed + short video · 6–8 weeks · ~$70–110/month at 5k users
 Ask (polls, occasion boards, accepted answers); ranked feed; notifications; tap-to-play clips with the data label; creator earnings dashboard; weekly Bees challenges.
+- **Built (20 Sep 2026):** Ask — questions, *which one?* photo votes (tally hidden until you vote), answers that tag shop pieces, accepted answers that pay 25 Bees with anti-farming caps; Activity (hearts, comments, follows, answers, Bees earned); occasion filters on the feed.
+- **Added later on 20 Sep 2026:** weekly Bees challenges (staff create, judge and pay) · "Earned" statement on every page.
+- **Still to build in this phase:** ranked feed · tap-to-play clips with the data label (needs a video storage/transcoding decision and budget).
 - **Gate:** 1,000 weekly actives · questions answered in under 1 hour · measurable lift in conversion for shoppers who use Fit or Ask.
 
 ### Phase 3 — Trusted sellers + Closet · 8–10 weeks

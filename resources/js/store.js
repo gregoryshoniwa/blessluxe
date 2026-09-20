@@ -13,4 +13,11 @@ if (root) {
     // merge happen on the first paint so badges show the right count.
     void wishlist.boot();
     createApp(App).use(router).mount(root);
+
+    // Makes Bless Hive installable and gives it an offline page. The worker
+    // caches nothing else (see public/hive-sw.js). Production only, so a dev
+    // server never ends up behind a worker.
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+        window.addEventListener('load', () => { navigator.serviceWorker.register('/hive-sw.js').catch(() => {}); });
+    }
 }

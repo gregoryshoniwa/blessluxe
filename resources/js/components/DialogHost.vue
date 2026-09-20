@@ -120,7 +120,7 @@ export default {
         </Transition>
 
         <!-- ─── Toasts ──────────────────────────────────────────────── -->
-        <div class="fixed z-[110] bottom-4 right-4 left-4 sm:left-auto flex flex-col items-stretch sm:items-end gap-2 pointer-events-none">
+        <div class="dlg-toasts fixed z-[110] bottom-4 right-4 left-4 sm:left-auto flex flex-col items-stretch sm:items-end gap-2 pointer-events-none">
             <TransitionGroup name="dlg-toast">
                 <div
                     v-for="t in state.toasts"

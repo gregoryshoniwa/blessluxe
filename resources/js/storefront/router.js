@@ -21,6 +21,15 @@ const routes = [
     { path: '/account/reset/:token', name: 'reset-password', component: () => import('./pages/ResetPassword.vue') },
     { path: '/account/orders/:number', name: 'order-detail', component: () => import('./pages/OrderDetail.vue') },
     { path: '/showroom/:tab?', name: 'showroom', component: () => import('./pages/ShowRoom.vue'), meta: { requiresAuth: true } },
+    // Bless Hive — the community. Open to read; acting needs an account.
+    // `shell: 'hive'` swaps the shop's chrome for the Hive's own frame (App.vue).
+    { path: '/hive',          name: 'hive',          component: () => import('./pages/Hive.vue'),         meta: { shell: 'hive' } },
+    { path: '/hive/discover', name: 'hive-discover', component: () => import('./pages/HiveDiscover.vue'), meta: { shell: 'hive' } },
+    { path: '/hive/ask',      name: 'hive-ask',      component: () => import('./pages/HiveAsk.vue'),      meta: { shell: 'hive' } },
+    { path: '/hive/ask/:id',  name: 'hive-ask-one',  component: () => import('./pages/HiveAskDetail.vue'), meta: { shell: 'hive' } },
+    { path: '/hive/challenge/:slug', name: 'hive-challenge', component: () => import('./pages/HiveChallenge.vue'), meta: { shell: 'hive' } },
+    { path: '/hive/activity', name: 'hive-activity', component: () => import('./pages/HiveActivity.vue'), meta: { shell: 'hive', requiresAuth: true } },
+    { path: '/@:handle',      name: 'hive-page',     component: () => import('./pages/HiveProfile.vue'),  meta: { shell: 'hive' } },
     { path: '/faq', name: 'faq', component: () => import('./pages/Faq.vue') },
     { path: '/track', name: 'track', component: () => import('./pages/Track.vue') },
     { path: '/track/:code', name: 'track-code', component: () => import('./pages/Track.vue') },

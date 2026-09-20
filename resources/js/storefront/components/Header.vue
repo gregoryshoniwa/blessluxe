@@ -216,6 +216,14 @@ export default {
                         </div>
                     </div>
 
+                    <router-link
+                        to="/hive"
+                        active-class="text-gold"
+                        class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
+                    >
+                        Hive
+                    </router-link>
+
                     <!-- Show Room — members only. Offering it to a visitor who
                          isn't signed in just walks them into a login wall. -->
                     <div

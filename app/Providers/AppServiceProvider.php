@@ -27,6 +27,19 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         /**
+         * Bless Hive rate limits — one bucket PER KIND OF ACTION, per member.
+         *
+         * Plain `throttle:10,1` keeps a single counter per visitor across every
+         * throttled route (the key is just domain + IP, because customers aren't
+         * on the default guard). Ten hearts would then use up the allowance for
+         * posting a look. Named limiters with the action in the key fix that.
+         */
+        foreach (['hive-post' => 12, 'hive-talk' => 40, 'hive-tap' => 180, 'hive-read' => 180] as $name => $perMinute) {
+            \Illuminate\Support\Facades\RateLimiter::for($name, fn (\Illuminate\Http\Request $request) => \Illuminate\Cache\RateLimiting\Limit::perMinute($perMinute)
+                ->by($name . '|' . (Auth::guard('customer')->id() ?: $request->ip())));
+        }
+
+        /**
          * Identity for broadcast channel auth.
          *
          * Laravel resolves a channel's user from a guard list BEFORE the channel

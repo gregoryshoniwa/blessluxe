@@ -299,7 +299,11 @@ class AdminAffiliateController extends Controller
      */
     public function inboxUnread()
     {
-        return ['unread_total' => \App\Services\Messages::adminUnreadTotal()];
+        return [
+            'unread_total' => \App\Services\Messages::adminUnreadTotal(),
+            // Rides the same poll so the sidebar needs no second request.
+            'hive_reports_open' => \Illuminate\Support\Facades\DB::table('hive_reports')->where('status', 'open')->count(),
+        ];
     }
 
     /** @see AffiliateStorefrontController::markMessagesRead */

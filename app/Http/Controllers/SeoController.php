@@ -6,6 +6,7 @@ use App\Models\Catalogue;
 use App\Models\Heading;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Str;
 
@@ -28,6 +29,7 @@ class SeoController extends Controller
         'wishlist'    => ['Wishlist — BLESSLUXE',       'Pieces you\'ve saved for later.'],
         'account'     => ['Account — BLESSLUXE',        'Manage your BLESSLUXE account, orders, Bees and addresses.'],
         'affiliate'   => ['Affiliate Programme — BLESSLUXE', 'Earn commission on every BLESSLUXE order shopped via your code.'],
+        'hive'        => ['Bless Hive — real people, real fits', 'See how BLESSLUXE pieces look on people built like you. Share your looks, find your fit twins, follow the styles you love.'],
         'faq'         => ['FAQ — BLESSLUXE',            'Answers to the most-asked questions about shopping with BLESSLUXE.'],
         'track'       => ['Track Your Order — BLESSLUXE', 'Look up your BLESSLUXE order with your tracking code.'],
     ];
@@ -58,7 +60,7 @@ class SeoController extends Controller
 
         // Static priorities.
         $urls[] = ['loc' => $base . '/',              'lastmod' => $now, 'priority' => '1.0', 'changefreq' => 'daily'];
-        foreach (['shop', 'shop/packs', 'affiliate', 'faq', 'track'] as $path) {
+        foreach (['shop', 'shop/packs', 'hive', 'affiliate', 'faq', 'track'] as $path) {
             $urls[] = ['loc' => $base . '/' . $path,  'lastmod' => $now, 'priority' => '0.8', 'changefreq' => 'weekly'];
         }
 
@@ -176,6 +178,48 @@ class SeoController extends Controller
                 }
             }
         }
+
+        // Bless Hive page: /@handle. Links travel by WhatsApp, so the preview
+        // card — her name, her photo — is most of what gets a page opened.
+        if (Str::startsWith($path, '@')) {
+            $page = \App\Services\Hive::byHandle(Str::after($path, '@'));
+            if ($page) {
+                // A local-disk URL is host-less (/storage/…); a preview needs absolute.
+                $abs = fn (?string $u) => $u ? (Str::startsWith($u, '/') ? $base . $u : $u) : null;
+                $cover = DB::table('hive_looks')->where('customer_id', $page->customer_id)->where('status', 'published')
+                    ->orderByDesc('created_at')->value('images');
+                $cover = $cover ? (json_decode((string) $cover, true)[0] ?? null) : null;
+
+                return [
+                    'title'       => "{$page->display_name} (@{$page->handle}) · Bless Hive",
+                    'description' => Str::limit($page->bio ?: "See {$page->display_name}'s looks on Bless Hive — real people, real fits, from BLESSLUXE.", 160),
+                    'image'       => $abs($cover) ?: $abs($page->avatar_url) ?: $defaults['image'],
+                    'canonical'   => $base . '/@' . $page->handle,
+                    'type'        => 'profile',
+                    'json_ld'     => null,
+                ];
+            }
+        }
+
+        // A shared question: the question itself is the headline.
+        if (Str::startsWith($path, 'hive/ask/')) {
+            $ask = DB::table('hive_asks as a')->join('hive_profiles as p', 'p.customer_id', '=', 'a.customer_id')
+                ->where('a.id', Str::after($path, 'hive/ask/'))->where('a.status', 'published')->whereNull('p.suspended_at')
+                ->first(['a.id', 'a.question', 'a.images', 'p.display_name']);
+            if ($ask) {
+                $img = json_decode((string) ($ask->images ?? ''), true)[0] ?? null;
+
+                return [
+                    'title'       => Str::limit($ask->question, 90) . ' · Bless Hive',
+                    'description' => "{$ask->display_name} is asking the Hive. Vote, or answer with a piece from BLESSLUXE.",
+                    'image'       => $img ? (Str::startsWith($img, '/') ? $base . $img : $img) : $defaults['image'],
+                    'canonical'   => $base . '/hive/ask/' . $ask->id,
+                    'type'        => 'article',
+                    'json_ld'     => null,
+                ];
+            }
+        }
+        if (Str::startsWith($path, 'hive/')) $path = 'hive';
 
         if (isset(self::STATIC_META[$path])) {
             [$title, $description] = self::STATIC_META[$path];

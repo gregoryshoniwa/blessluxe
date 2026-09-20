@@ -1,0 +1,17 @@
+{
+  "name": "Bless Hive",
+  "short_name": "Bless Hive",
+  "description": "Real people, real fits — the BLESSLUXE community.",
+  "id": "/hive",
+  "start_url": "/hive?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDF8F3",
+  "theme_color": "#FDF8F3",
+  "icons": [
+    { "src": "/hive-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/hive-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/hive-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

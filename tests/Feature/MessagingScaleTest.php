@@ -334,7 +334,8 @@ class MessagingScaleTest extends TestCase
         $this->actingAs(User::factory()->create(), 'web')
             ->getJson('/api/admin/affiliate-inbox/unread')
             ->assertOk()
-            ->assertExactJson(['unread_total' => 2]);
+            // The Hive moderation badge rides the same poll rather than adding a second one.
+            ->assertExactJson(['unread_total' => 2, 'hive_reports_open' => 0]);
 
         // A signed-in CUSTOMER is not staff.
         \Illuminate\Support\Facades\Auth::forgetGuards();
