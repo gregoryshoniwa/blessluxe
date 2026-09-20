@@ -185,6 +185,7 @@ class HiveController extends Controller
             'image_urls'   => ['nullable', 'array', 'max:' . Hive::MAX_IMAGES],
             'image_urls.*' => ['string', 'max:2000', 'starts_with:https://'],
             'embed_url'    => ['nullable', 'string', 'max:500'],
+            'shape'        => ['nullable', Rule::in(Hive::SHAPES_OF_FRAME)],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
             'caption'  => ['nullable', 'string', 'max:500'],
             'occasion' => ['nullable', Rule::in(Hive::OCCASIONS)],
@@ -258,6 +259,7 @@ class HiveController extends Controller
                 'caption' => ($c = trim(strip_tags((string) ($data['caption'] ?? '')))) === '' ? null : $c,
                 'images' => json_encode($urls), 'refs' => $refs ? json_encode($refs) : null,
                 'embed_provider' => $embed['provider'] ?? null, 'embed_ref' => $embed['ref'] ?? null,
+                'shape' => ($embed || $video) ? ($data['shape'] ?? null) : null,
                 'video_url' => $videoUrl, 'video_bytes' => $video?->getSize(),
                 'video_seconds' => $video ? (int) round((float) $data['video_seconds']) : null,
                 'occasion' => $data['occasion'] ?? null, 'status' => 'published',
@@ -349,7 +351,7 @@ class HiveController extends Controller
         $url = trim((string) $request->validate(['url' => ['required', 'string', 'max:2000']])['url']);
 
         if ($embed = HiveEmbeds::parse($url)) {
-            return ['kind' => 'embed', 'embed' => HiveEmbeds::present($embed['provider'], $embed['ref'])];
+            return ['kind' => 'embed', 'embed' => HiveEmbeds::present($embed['provider'], $embed['ref']), 'shapes' => Hive::SHAPES_OF_FRAME];
         }
         // A platform's PAGE isn't a picture, and copying it would just fail later with a vaguer message.
         if (preg_match('~^https://([\w-]+\.)*(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.watch)/~i', $url)) {
@@ -362,6 +364,22 @@ class HiveController extends Controller
         }
 
         return ['kind' => 'image', 'url' => $url];
+    }
+
+    /** PUT /api/account/hive/looks/{id}/shape { shape } — fix how my video or linked post is framed. */
+    public function reshape(Request $request, string $id)
+    {
+        $me = $this->mustBeMember(requireAdult: false);
+        $shape = $request->validate(['shape' => ['required', Rule::in(Hive::SHAPES_OF_FRAME)]])['shape'];
+
+        $changed = DB::table('hive_looks')->where('id', $id)->where('customer_id', $me->customer_id)
+            ->where(fn ($q) => $q->whereNotNull('embed_provider')->orWhereNotNull('video_url'))
+            ->update(['shape' => $shape, 'updated_at' => now()]);
+        if (! $changed && ! DB::table('hive_looks')->where('id', $id)->where('customer_id', $me->customer_id)->where('shape', $shape)->exists()) {
+            return response()->json(['error' => 'Look not found.'], 404);
+        }
+
+        return ['look' => Hive::look($id, $me)];
     }
 
     /** DELETE /api/account/hive/looks/{id} — the owner takes their look down. */

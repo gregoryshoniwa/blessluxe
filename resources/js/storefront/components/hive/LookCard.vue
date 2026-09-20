@@ -3,7 +3,7 @@ import { api } from '../../../lib/api.js';
 import { confirmDialog, toast, toastError } from '../../../lib/dialog.js';
 import { hiveStore, timeAgo, occasionLabel, whatsappShare } from '../../hive-store.js';
 import LookComments from './LookComments.vue';
-import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink } from 'lucide-vue-next';
+import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions } from 'lucide-vue-next';
 
 /**
  * One look: who, the photos, what she's wearing, and the three things you can
@@ -16,7 +16,7 @@ import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, Me
  */
 export default {
     name: 'LookCard',
-    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink },
+    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions },
     props: {
         look: { type: Object, required: true },
         // On someone's own page the author row is repetition.
@@ -26,11 +26,19 @@ export default {
     },
     emits: ['removed', 'report'],
     data() {
-        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false };
+        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false, reshaping: false };
     },
     computed: {
         when() { return timeAgo(this.look.created_at); },
         occasion() { return this.look.occasion ? occasionLabel(this.look.occasion) : null; },
+        shape() { return this.look.embed?.shape || this.look.video?.shape || 'post'; },
+        /**
+         * The frame. Tall is capped in width rather than height, so a phone-shaped
+         * clip keeps its true 9:16 on a desktop instead of becoming a letterbox.
+         */
+        frameClass() {
+            return { tall: 'aspect-[9/16] w-full max-w-[24.75rem] mx-auto', wide: 'aspect-video w-full', post: 'aspect-[4/5] w-full' }[this.shape];
+        },
         fitLabel() { return { small: 'Runs small', true: 'True to size', large: 'Runs large' }[this.look.try_on?.fit] || null; },
         shareHref() {
             const who = this.look.author.display_name || 'this look';
@@ -53,6 +61,16 @@ export default {
                 this.watcher = new IntersectionObserver(([e]) => { if (!e.isIntersecting) v.pause(); }, { threshold: 0.25 });
                 this.watcher.observe(v);
             });
+        },
+
+        async setShape(shape) {
+            this.reshaping = false;
+            if (shape === this.shape) return;
+            const was = this.shape;
+            const target = this.look.embed || this.look.video;
+            target.shape = shape;                        // show it at once; put it back if the save fails
+            try { await api.put(`/api/account/hive/looks/${this.look.id}/shape`, { shape }); }
+            catch (e) { target.shape = was; toastError(e, "That didn't save — try again."); }
         },
 
         refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
@@ -126,6 +144,9 @@ export default {
                 </button>
                 <div v-if="menuOpen" class="fixed inset-0 z-10" @click="menuOpen = false"></div>
                 <div v-if="menuOpen" class="absolute right-0 top-full z-20 bg-white border border-black/10 rounded-xl shadow-xl py-1.5 min-w-[11rem]">
+                    <button v-if="look.is_mine && (look.embed || look.video)" @click="menuOpen = false; reshaping = true" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-cream text-left">
+                        <Proportions class="w-4 h-4" /> Change shape
+                    </button>
                     <button v-if="look.is_mine" @click="remove" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left">
                         <Trash2 class="w-4 h-4" /> Take down
                     </button>
@@ -136,12 +157,24 @@ export default {
             </div>
         </header>
 
+        <!-- Owner only: fix a clip or linked post that's showing in the wrong shape. -->
+        <div v-if="reshaping" class="flex items-center gap-2 px-3.5 pb-3">
+            <button
+                v-for="sh in [{ k: 'tall', l: 'Portrait', i: 'RectangleVertical' }, { k: 'wide', l: 'Landscape', i: 'RectangleHorizontal' }, { k: 'post', l: 'Square', i: 'Square' }]"
+                :key="sh.k"
+                @click="setShape(sh.k)"
+                :class="['flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-full text-xs border transition-colors', shape === sh.k ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/60']"
+            >
+                <component :is="sh.i" class="w-4 h-4" /> {{ sh.l }}
+            </button>
+        </div>
+
         <!-- The photos. Double-tap to heart, swipe for more. -->
         <div class="relative bg-cream-dark">
             <!-- A post on another platform. Nothing is requested from that platform
                  until the tap: it costs data, and they will see the visit. The
                  frame's address was built by our server, never typed by a member. -->
-            <div v-if="look.embed" :class="[look.embed.shape === 'wide' ? 'aspect-video' : look.embed.shape === 'tall' ? 'aspect-[9/16] max-h-[44rem] mx-auto' : 'aspect-[4/5]', 'w-full bg-black']">
+            <div v-if="look.embed" class="bg-black"><div :class="frameClass">
                 <iframe
                     v-if="loaded"
                     :src="look.embed.url"
@@ -162,16 +195,16 @@ export default {
                         <span class="text-[11px] text-white/75 drop-shadow max-w-[16rem]">Uses your data. {{ look.embed.label }} will know you viewed it.</span>
                     </span>
                 </button>
-            </div>
+            </div></div>
             <!-- Video: a cover with its size until tapped; then the clip, with controls. -->
-            <div v-else-if="look.video" class="aspect-[4/5] bg-black">
+            <div v-else-if="look.video" class="bg-black"><div :class="frameClass">
                 <video v-if="playing" ref="video" :src="look.video.url" :poster="look.images[0]" controls playsinline loop preload="auto" class="w-full h-full object-contain bg-black"></video>
                 <button v-else @click="play" class="relative block w-full h-full" :aria-label="`Play video, ${look.video.size_label || ''}`">
                     <img :src="look.images[0]" :alt="look.caption || `Video by ${look.author.display_name}`" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                     <span class="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/55 text-white flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
                     <span class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-black/70 text-white text-[11px]">Video · {{ look.video.seconds }}s<template v-if="look.video.size_label"> · {{ look.video.size_label }}</template></span>
                 </button>
-            </div>
+            </div></div>
             <div
                 v-else
                 class="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

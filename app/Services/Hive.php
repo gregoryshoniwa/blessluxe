@@ -26,6 +26,7 @@ class Hive
     /** "For you" ranks the newest RANK_WINDOW looks from the last RANK_DAYS; older ones follow in date order. */
     public const RANK_WINDOW = 300;
     public const RANK_DAYS = 21;
+    public const SHAPES_OF_FRAME = ['tall', 'wide', 'post'];
     public const VIDEO_MAX_SECONDS = 30;
     public const VIDEO_MAX_BYTES = 12 * 1024 * 1024;
     public const MAX_IMAGES = 4;
@@ -371,11 +372,11 @@ class Hive
             // "Ordered vs got": set only when this look is about a real purchase.
             // The clip is fetched only on tap; the label says what that tap costs.
             'video'      => ! empty($l->video_url) ? [
-                'url' => $l->video_url, 'seconds' => (int) $l->video_seconds,
+                'url' => $l->video_url, 'seconds' => (int) $l->video_seconds, 'shape' => ($l->shape ?? null) ?: 'post',
                 'size_label' => $l->video_bytes ? (($mb = $l->video_bytes / 1048576) >= 1 ? number_format($mb, 1) . ' MB' : max(1, (int) round($l->video_bytes / 1024)) . ' KB') : null,
             ] : null,
             // A post on another platform, framed only after a tap. The address is built by us.
-            'embed'      => HiveEmbeds::present($l->embed_provider ?? null, $l->embed_ref ?? null),
+            'embed'      => HiveEmbeds::present($l->embed_provider ?? null, $l->embed_ref ?? null, $l->shape ?? null),
             'try_on'     => ! empty($l->line_item_id) ? ['fit' => $l->fit, 'size_worn' => $l->size_worn, 'rating' => $l->rating ? (int) $l->rating : null] : null,
             'challenge_id' => $l->challenge_id ?? null,
             'won'        => ! empty($l->won_at),

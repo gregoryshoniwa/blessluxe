@@ -243,6 +243,7 @@ Route::middleware('web')->prefix('account')->group(function () {
         Route::get   ('/mentions',           [HiveController::class, 'mentions'])->middleware('throttle:hive-read');
         Route::post  ('/links/inspect',      [HiveController::class, 'inspectLink'])->middleware('throttle:hive-talk');
         Route::post  ('/looks',              [HiveController::class, 'storeLook'])->middleware('throttle:hive-post');
+        Route::put   ('/looks/{id}/shape',   [HiveController::class, 'reshape'])->middleware('throttle:hive-talk');
         Route::delete('/looks/{id}',         [HiveController::class, 'destroyLook']);
         Route::post  ('/looks/{id}/like',    [HiveController::class, 'like'])->middleware('throttle:hive-tap');
         Route::delete('/looks/{id}/like',    [HiveController::class, 'unlike']);

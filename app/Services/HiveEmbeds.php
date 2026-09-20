@@ -89,7 +89,7 @@ class HiveEmbeds
         };
     }
 
-    public static function present(?string $provider, ?string $ref): ?array
+    public static function present(?string $provider, ?string $ref, ?string $shape = null): ?array
     {
         if (! $provider || ! $ref || ! isset(self::PROVIDERS[$provider])) return null;
 
@@ -98,9 +98,15 @@ class HiveEmbeds
             'label'    => self::PROVIDERS[$provider],
             'url'      => self::embedUrl($provider, $ref),
             'source'   => self::sourceUrl($provider, $ref),
-            // Tall for phone-shaped video, wide for ordinary YouTube, in between for posts.
-            'shape'    => $provider === 'tiktok' || $ref[0] === 's' || str_starts_with($ref, 'reel/') ? 'tall' : ($provider === 'youtube' || str_starts_with($ref, 'v|') ? 'wide' : 'post'),
+            // The member's choice wins: a post can't be measured from outside, so ours is
+            // only a first guess — tall for phone-shaped video, wide for ordinary YouTube.
+            'shape'    => in_array($shape, Hive::SHAPES_OF_FRAME, true) ? $shape : self::guessShape($provider, $ref),
         ];
+    }
+
+    public static function guessShape(string $provider, string $ref): string
+    {
+        return $provider === 'tiktok' || $ref[0] === 's' || str_starts_with($ref, 'reel/') ? 'tall' : ($provider === 'youtube' || str_starts_with($ref, 'v|') ? 'wide' : 'post');
     }
 
     /**

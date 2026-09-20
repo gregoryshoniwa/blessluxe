@@ -5,7 +5,7 @@ import { resizeImage } from '../../../lib/image-resize.js';
 import { prepareClip, megabytes } from '../../../lib/video-compress.js';
 import { hiveStore, occasionLabel } from '../../hive-store.js';
 import MentionPicker from '../../../components/MentionPicker.vue';
-import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink } from 'lucide-vue-next';
+import { X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink, RectangleVertical, RectangleHorizontal, Square } from 'lucide-vue-next';
 
 const MAX_IMAGES = 4;
 const MAX_REFS = 6;
@@ -19,7 +19,7 @@ const MAX_REFS = 6;
  */
 export default {
     name: 'LookComposer',
-    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink },
+    components: { MentionPicker, X, ImagePlus, Tag, LoaderCircle, Package, ImageOff, Star, Trophy, ShoppingBag, Video, Play, Link2, ExternalLink, RectangleVertical, RectangleHorizontal, Square },
     emits: ['close', 'posted'],
     data() {
         return {
@@ -39,6 +39,12 @@ export default {
             linkBusy: false,
             linkError: null,
             embed: null,         // { provider, label, source, shape } + the link that made it
+            // We can't see inside another app's post, so its shape is the member's call.
+            shapes: [
+                { key: 'tall', label: 'Portrait', hint: 'phone video · 9:16', icon: 'RectangleVertical' },
+                { key: 'wide', label: 'Landscape', hint: 'wide video · 16:9', icon: 'RectangleHorizontal' },
+                { key: 'post', label: 'Square', hint: 'photo post · 4:5', icon: 'Square' },
+            ],
             // A short clip instead of photos. Shrunk on this phone before upload.
             clip: null,          // { video, poster, posterUrl, seconds, compressed }
             clipProgress: null,  // 0..1 while shrinking
@@ -180,8 +186,10 @@ export default {
                 form.append('images[]', this.clip.poster);
                 form.append('video', this.clip.video);
                 form.append('video_seconds', String(this.clip.seconds));
+                if (this.clip.shape) form.append('shape', this.clip.shape);
             } else if (this.embed) {
                 form.append('embed_url', this.embed.link);
+                form.append('shape', this.embed.shape);
             } else {
                 this.photos.forEach((p) => (p.remote ? form.append('image_urls[]', p.remote) : form.append('images[]', p.file)));
             }
@@ -237,7 +245,8 @@ export default {
                     </div>
 
                     <!-- A post from another platform -->
-                    <div v-else-if="embed" class="flex items-center gap-3 rounded-xl border border-black/10 bg-cream/60 p-3.5">
+                    <template v-else-if="embed">
+                    <div class="flex items-center gap-3 rounded-xl border border-black/10 bg-cream/60 p-3.5">
                         <span class="w-11 h-11 rounded-full bg-black text-white flex items-center justify-center flex-shrink-0"><Play class="w-4 h-4 fill-white" /></span>
                         <span class="min-w-0 flex-1">
                             <span class="block text-sm font-medium">{{ embed.label }} post</span>
@@ -245,6 +254,25 @@ export default {
                         </span>
                         <button @click="embed = null" class="w-10 h-10 inline-flex items-center justify-center text-black/40 hover:text-black" aria-label="Remove link"><X class="w-4 h-4" /></button>
                     </div>
+
+                    <div class="mt-3">
+                        <p class="text-xs text-black/60 mb-1.5">How is it shaped? <span class="text-black/40">So it shows properly, not squashed or cropped.</span></p>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button
+                                v-for="sh in shapes"
+                                :key="sh.key"
+                                type="button"
+                                @click="embed.shape = sh.key"
+                                :aria-pressed="embed.shape === sh.key"
+                                :class="['rounded-xl border py-2.5 px-1 flex flex-col items-center gap-1 transition-colors', embed.shape === sh.key ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/55 hover:border-black/25']"
+                            >
+                                <component :is="sh.icon" :class="['w-5 h-5', embed.shape === sh.key ? 'text-gold-dark' : '']" />
+                                <span class="text-xs font-medium leading-tight">{{ sh.label }}</span>
+                                <span class="text-[10px] text-black/40 leading-tight">{{ sh.hint }}</span>
+                            </button>
+                        </div>
+                    </div>
+                    </template>
 
                     <div v-else-if="clipProgress !== null" class="rounded-xl border border-gold/40 bg-cream/60 p-4 text-center">
                         <p class="text-sm font-medium">Shrinking your video… {{ Math.round(clipProgress * 100) }}%</p>

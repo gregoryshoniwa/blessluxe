@@ -129,6 +129,30 @@ class HiveLinksTest extends TestCase
         $this->assertSame(1, DB::table('hive_looks')->count());
     }
 
+    #[Test]
+    public function the_member_chooses_the_frame_because_a_post_cannot_be_measured_from_outside(): void
+    {
+        $rudo = $this->member('rudo');
+        Http::fake();
+
+        // Facebook video: we guess wide, she knows it's phone-shaped.
+        $guess = $this->share(['embed_url' => 'https://www.facebook.com/watch/?v=987654321'])->assertOk()->json('look');
+        $this->assertSame('wide', $guess['embed']['shape']);
+        $told = $this->share(['embed_url' => 'https://www.facebook.com/watch/?v=123456789', 'shape' => 'tall'])->assertOk()->json('look');
+        $this->assertSame('tall', $told['embed']['shape']);
+        $this->share(['embed_url' => 'https://youtu.be/dQw4w9WgXcQ', 'shape' => 'circle'])->assertStatus(422);
+
+        // …and she can fix one she already posted. Nobody else can, and a photo look has no frame to change.
+        $this->putJson("/api/account/hive/looks/{$guess['id']}/shape", ['shape' => 'tall'])->assertOk()->assertJsonPath('look.embed.shape', 'tall');
+        $photo = $this->share(['images' => [UploadedFile::fake()->image('a.jpg')], 'shape' => 'tall'])->assertOk()->json('look.id');
+        $this->assertNull(DB::table('hive_looks')->where('id', $photo)->value('shape'));
+        $this->putJson("/api/account/hive/looks/$photo/shape", ['shape' => 'wide'])->assertStatus(404);
+
+        $this->member('chipo');
+        $this->putJson("/api/account/hive/looks/{$guess['id']}/shape", ['shape' => 'wide'])->assertStatus(404);
+        $this->assertSame('tall', DB::table('hive_looks')->where('id', $guess['id'])->value('shape'));
+    }
+
     // ─── Pictures from a link ──────────────────────────────────────────────
 
     #[Test]

@@ -133,9 +133,11 @@ export async function prepareClip(file, { maxSeconds = 30, maxBytes = 12 * 1024 
         const w = Math.round((v.videoWidth * scale) / 2) * 2;
         const h = Math.round((v.videoHeight * scale) / 2) * 2;
         const poster = await posterOf(v, w, h);
+        const ratio = v.videoWidth / v.videoHeight;
+        const shape = ratio < 0.85 ? 'tall' : ratio > 1.2 ? 'wide' : 'post';
 
         const fits = file.size <= Math.min(SMALL_ENOUGH, maxBytes) && v.duration <= maxSeconds + 0.5 && /mp4|webm/.test(file.type);
-        if (fits) return { video: file, poster, seconds, compressed: false };
+        if (fits) return { video: file, poster, seconds, shape, compressed: false };
 
         if (!canCompress()) {
             throw new Error(`This browser can't shrink videos. Pick a clip under ${Math.floor(Math.min(SMALL_ENOUGH, maxBytes) / 1048576)} MB and ${maxSeconds} seconds, or post from Chrome.`);
@@ -218,7 +220,7 @@ export async function prepareClip(file, { maxSeconds = 30, maxBytes = 12 * 1024 
         if (blob.size > maxBytes) throw new Error('That clip is still too large after shrinking. Try a shorter one.');
 
         onProgress(1);
-        return { video: new File([blob], `clip.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type }), poster, seconds, compressed: true };
+        return { video: new File([blob], `clip.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type }), poster, seconds, shape, compressed: true };
     } finally {
         URL.revokeObjectURL(v.src);
     }
