@@ -30,13 +30,49 @@ class Media
 {
     public static function disk(): Filesystem
     {
-        return Storage::disk(config('media.disk', 'public'));
+        return Storage::disk(self::diskName());
+    }
+
+    /**
+     * Which disk media lives on — worked out, not just read.
+     *
+     * Laravel Cloud lets whoever attaches a bucket type ANY disk name, and it
+     * can even reuse the name "public", replacing the local disk of that name.
+     * A setting that has to match that exactly is a setting that will one day
+     * not match — and then every upload in production fails. So:
+     *
+     *   1. MEDIA_DISK, if it names a disk that actually exists
+     *   2. otherwise the app's DEFAULT disk, when that is a bucket — which is
+     *      what Laravel Cloud makes of the first bucket attached
+     *   3. otherwise the local `public` disk (development)
+     *
+     * Resolved at call time, because Laravel Cloud injects its disks while the
+     * app boots — after config/media.php has already been read.
+     */
+    public static function diskName(): string
+    {
+        $wanted = config('media.disk');
+        if ($wanted && $wanted !== 'public' && config("filesystems.disks.$wanted.driver")) {
+            return $wanted;
+        }
+
+        $default = config('filesystems.default');
+        if ($default && self::driverIsRemote(config("filesystems.disks.$default.driver"))) {
+            return $default;
+        }
+
+        return 'public';
     }
 
     /** True when files go to a bucket rather than this machine's disk. */
     public static function isRemote(): bool
     {
-        return ! in_array(config('filesystems.disks.' . config('media.disk', 'public') . '.driver'), ['local', null], true);
+        return self::driverIsRemote(config('filesystems.disks.' . self::diskName() . '.driver'));
+    }
+
+    private static function driverIsRemote(?string $driver): bool
+    {
+        return ! in_array($driver, ['local', 'scoped', null], true);
     }
 
     // ─── Writing ───────────────────────────────────────────────────────────

@@ -19,14 +19,21 @@ class MediaCheck extends Command
 
     public function handle(): int
     {
-        $disk = config('media.disk');
+        $disk = Media::diskName();
         $driver = config("filesystems.disks.$disk.driver");
+
+        // Say so when the setting and reality disagree, instead of quietly
+        // falling back — that mismatch is worth fixing even though it now works.
+        $wanted = config('media.disk');
+        if ($wanted && $wanted !== $disk) {
+            $this->warn("MEDIA_DISK is \"$wanted\" but no such disk exists — using \"$disk\" instead. Remove MEDIA_DISK or set it to \"$disk\".");
+        }
 
         $this->line("Media disk : <info>$disk</info> (driver: " . ($driver ?? 'NOT CONFIGURED') . ')');
         $this->line('Location   : ' . (Media::isRemote() ? '<info>object storage</info> — survives deploys' : '<comment>this machine\'s disk</comment> — fine locally, LOST on every deploy in Laravel Cloud'));
 
-        if (! $driver) {
-            $this->error("No disk named \"$disk\". In Laravel Cloud, attach a bucket with that disk name, redeploy, and check MEDIA_DISK.");
+        if (! Media::isRemote() && app()->environment('production')) {
+            $this->error('This is PRODUCTION and files are going to the app\'s own disk, which is wiped on every deploy. Attach a bucket to this environment in Laravel Cloud and redeploy.');
             return self::FAILURE;
         }
 

@@ -216,4 +216,65 @@ class MediaTest extends TestCase
 
         $this->artisan('media:push')->assertFailed();
     }
+
+    // ─── Finding the bucket, whatever it was named ─────────────────────────
+
+    /** What Laravel Cloud does when a bucket is attached: define a disk, make it the default. */
+    private function attachCloudBucket(string $diskName): void
+    {
+        Storage::fake($diskName);
+        config([
+            "filesystems.disks.$diskName.driver" => 's3',
+            'filesystems.default' => $diskName,
+            'media.url' => 'https://bucket.example.test',
+        ]);
+    }
+
+    #[Test]
+    public function a_bucket_that_was_named_public_is_found_with_no_setting_at_all(): void
+    {
+        // Exactly the production setup: the bucket took the name "public"
+        // (replacing the local disk of that name) and MEDIA_DISK is not set.
+        config(['media.disk' => null]);
+        $this->attachCloudBucket('public');
+
+        $this->assertSame('public', Media::diskName());
+        $this->assertTrue(Media::isRemote());
+        $this->assertStringStartsWith('https://bucket.example.test/products/', Media::upload(UploadedFile::fake()->image('a.jpg'), 'products'));
+    }
+
+    #[Test]
+    public function a_media_disk_setting_that_matches_nothing_does_not_break_uploads(): void
+    {
+        // MEDIA_DISK=media was the documented instruction — but the bucket was
+        // named something else. That must not take production uploads down.
+        config(['media.disk' => 'media']);
+        $this->attachCloudBucket('public');
+
+        $this->assertSame('public', Media::diskName());
+        $this->assertTrue(Media::isRemote());
+        $this->artisan('media:check')->expectsOutputToContain('no such disk exists');
+    }
+
+    #[Test]
+    public function any_other_bucket_name_works_too_and_an_explicit_setting_still_wins(): void
+    {
+        config(['media.disk' => null]);
+        $this->attachCloudBucket('r2-uploads');
+        $this->assertSame('r2-uploads', Media::diskName());
+
+        // Two buckets: say which one.
+        Storage::fake('media');
+        config(['filesystems.disks.media.driver' => 's3', 'media.disk' => 'media']);
+        $this->assertSame('media', Media::diskName());
+    }
+
+    #[Test]
+    public function on_a_developers_machine_it_is_the_local_public_disk(): void
+    {
+        config(['media.disk' => null, 'filesystems.default' => 'local']);
+
+        $this->assertSame('public', Media::diskName());
+        $this->assertFalse(Media::isRemote());
+    }
 }

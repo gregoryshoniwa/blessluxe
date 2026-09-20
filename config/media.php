@@ -25,7 +25,10 @@ return [
     |
     */
 
-    'disk' => env('MEDIA_DISK', 'public'),
+    // Usually leave this unset. Media finds the bucket by itself: Laravel Cloud
+    // makes the first bucket you attach the app's default disk, whatever it is
+    // named. Set it only to force a specific disk (see Media::diskName()).
+    'disk' => env('MEDIA_DISK'),
 
     /*
     | Only needed for a bucket that Laravel Cloud did NOT configure for you

@@ -26,7 +26,7 @@ class MediaPush extends Command
     public function handle(): int
     {
         if (! Media::isRemote()) {
-            $this->error('MEDIA_DISK points at this machine\'s disk, so there is nowhere to push to. Set MEDIA_DISK to the bucket\'s disk name first (then run media:check).');
+            $this->error('Files are being stored on this machine\'s disk, so there is no bucket to push to. This command is meant to run where a bucket is attached — in Laravel Cloud, use the environment\'s Commands tab.');
             return self::FAILURE;
         }
 
