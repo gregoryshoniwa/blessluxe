@@ -190,6 +190,8 @@ Ask (polls, occasion boards, accepted answers); ranked feed; notifications; tap-
 
 ### Phase 3 — Trusted sellers + Closet · 8–10 weeks
 **Decided 20 Sep 2026:** a seller is an **approved affiliate** — no separate seller sign-up or verification track. **Commission and payment are the existing affiliate process** — same commission rates, same Paynow checkout, same payouts. Phase 3 adds nothing new to how money moves; it adds trust signals and seller-facing features on top of affiliates.
+- **Built (21 Sep 2026):** verified-seller badge · reputation from real buyers' try-ons · a shop tab on the seller's Hive page at their prices · sales credited when someone taps a piece a seller tagged · "looks that sold" for sellers · trusted-sellers list in Discover · a private Closet of everything you've bought · product pages now show a seller's price inside their shop (it used to change at the cart).
+- **Deliberately not built:** held payments/escrow, a separate seller type, member-to-member resale — each needs a new way of moving money, which was ruled out. Disputes stay with the existing Returns process.
 Verified tailors/designers/runners with held payment and PIN collection; deadlines and dispute handling; resale, starting with kidswear and uniforms.
 - **Gate:** 50 verified sellers · dispute rate under 3% · commission covers the platform's running cost.
 

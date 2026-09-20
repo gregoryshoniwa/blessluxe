@@ -25,6 +25,23 @@ export default {
             <p class="text-sm text-white/60 mt-1">Worth {{ s.worth_label }} at checkout · your balance is {{ s.balance }} Bees</p>
         </div>
 
+        <div v-if="s.seller" class="bg-white border border-gold/40 rounded-2xl p-5">
+            <p class="flex items-center gap-2 text-[10px] tracking-[0.25em] uppercase text-gold-dark"><Store class="w-4 h-4" /> Your shop · {{ s.seller.commission_rate }}% commission</p>
+            <div class="grid grid-cols-2 gap-4 mt-3">
+                <div><p class="font-display text-2xl">{{ s.seller.earnings_label }}</p><p class="text-[11px] text-black/50">commission earned, all sales</p></div>
+                <div><p class="font-display text-2xl">{{ s.seller.hive_sales_label }}</p><p class="text-[11px] text-black/50">{{ s.seller.hive_items_sold }} {{ s.seller.hive_items_sold === 1 ? 'piece' : 'pieces' }} sold from your looks</p></div>
+            </div>
+            <div v-if="s.seller.looks_that_sold.length" class="mt-4 pt-4 border-t border-black/6">
+                <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Looks that sold</p>
+                <router-link v-for="l in s.seller.looks_that_sold" :key="l.id" :to="{ query: { look: l.id } }" class="flex items-center gap-3 py-1.5 group">
+                    <span class="w-10 h-12 rounded-md overflow-hidden bg-cream-dark flex-shrink-0"><img v-if="l.image" :src="l.image" alt="" loading="lazy" class="w-full h-full object-cover" /></span>
+                    <span class="min-w-0 flex-1 text-sm truncate group-hover:text-gold-dark">{{ l.caption || 'Look' }}</span>
+                    <span class="text-xs text-black/55 whitespace-nowrap">{{ l.items }} sold · {{ l.sales_label }}</span>
+                </router-link>
+            </div>
+            <p v-else class="text-xs text-black/50 mt-4 pt-4 border-t border-black/6 leading-relaxed">Tag pieces in your looks. When someone taps one and buys, the sale is yours and the look shows up here.</p>
+        </div>
+
         <div>
             <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2.5">Ways to earn</p>
             <div class="space-y-2">

@@ -77,6 +77,9 @@ class CartController extends Controller
             $metadata = null;
             if ($affiliateCode) {
                 $metadata = ['affiliate_code' => $affiliateCode, 'base_price' => $priced['base']];
+                // Came from a seller's look in Bless Hive: kept on the line so the
+                // seller can see which looks sell. Changes nothing about price or commission.
+                if ($lookId = $request->session()->get('hive_look_id')) $metadata['hive_look_id'] = (string) $lookId;
                 if ($priced['markup'] > 0) {
                     $metadata['markup_amount'] = $priced['markup'];
                     $metadata['markup_type']   = $priced['markup_type'];

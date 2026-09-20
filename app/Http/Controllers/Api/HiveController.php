@@ -7,6 +7,7 @@ use App\Models\Affiliate;
 use App\Services\Hive;
 use App\Services\HiveEmbeds;
 use App\Services\HiveRewards;
+use App\Services\HiveSellers;
 use App\Services\HiveTalk;
 use App\Services\Media;
 use App\Services\MessageRefs;
@@ -54,11 +55,14 @@ class HiveController extends Controller
         $me = $this->me();
         $following = $me && DB::table('hive_follows')->where('follower_id', $me->customer_id)->where('followed_id', $page->customer_id)->exists();
 
-        // A page whose owner is an active affiliate also has a shop to visit.
-        $aff = Affiliate::where('customer_id', $page->customer_id)->where('status', 'active')->first(['code']);
+        // A page whose owner is an approved affiliate is a SELLER's page: a shop, and a reputation.
+        $aff = HiveSellers::forCustomer($page->customer_id);
 
         return [
-            'page' => Hive::present($page, $me, (bool) $following) + ['shop_code' => $aff?->code],
+            'page' => Hive::present($page, $me, (bool) $following) + [
+                'shop_code'  => $aff?->code,
+                'reputation' => $aff ? HiveSellers::reputation($aff) : null,
+            ],
         ] + Hive::looks('page', $me, $page->customer_id, $request->query('before'));
     }
 
@@ -282,6 +286,69 @@ class HiveController extends Controller
         return ['look' => Hive::presentLook($look, $me), 'earned' => $earned];
     }
 
+    // ─── Sellers ───────────────────────────────────────────────────────────
+
+    /** GET /api/store/hive/pages/{handle}/shop — the seller's line, and what their buyers posted. */
+    public function shop(string $handle)
+    {
+        $page = Hive::byHandle($handle);
+        $seller = $page ? HiveSellers::forCustomer($page->customer_id) : null;
+        if (! $seller) return response()->json(['error' => "This page doesn't have a shop."], 404);
+
+        return HiveSellers::products($seller) + [
+            'code' => $seller->code, 'title' => $seller->storefront_title, 'intro' => $seller->storefront_intro,
+            'reputation' => HiveSellers::reputation($seller),
+            'buyer_tryons' => HiveSellers::buyerTryOns($seller, $this->me()),
+        ];
+    }
+
+    /**
+     * POST /api/store/hive/shop-via { look_id | answer_id | handle }
+     *
+     * Someone tapped a product under a seller's look (or answer, or on their
+     * page). Put them in that seller's shop — the SAME session attribution a
+     * shop link sets, so pricing, the cart and commission follow the affiliate
+     * process untouched. The server works out whose it is; the browser can't
+     * name a seller. `hive_look_id` rides along so the seller can see which of
+     * their looks sell.
+     */
+    public function shopVia(Request $request)
+    {
+        $data = $request->validate(['look_id' => ['nullable', 'string', 'max:64'], 'answer_id' => ['nullable', 'string', 'max:64'], 'handle' => ['nullable', 'string', 'max:40']]);
+
+        $lookId = null;
+        $ownerId = match (true) {
+            ! empty($data['look_id'])   => DB::table('hive_looks')->where('id', $data['look_id'])->where('status', 'published')->value('customer_id'),
+            ! empty($data['answer_id']) => DB::table('hive_answers')->where('id', $data['answer_id'])->where('status', 'published')->value('customer_id'),
+            ! empty($data['handle'])    => Hive::byHandle($data['handle'])?->customer_id,
+            default                     => null,
+        };
+        if ($ownerId && ! empty($data['look_id'])) $lookId = $data['look_id'];
+
+        $seller = $ownerId ? HiveSellers::forCustomer($ownerId) : null;
+        // Not a seller's: nothing changes — an ordinary member's tag is just a link.
+        if (! $seller) return ['seller' => null];
+
+        $request->session()->put('affiliate_code', $seller->code);
+        $lookId ? $request->session()->put('hive_look_id', $lookId) : $request->session()->forget('hive_look_id');
+
+        return ['seller' => ['code' => $seller->code]];
+    }
+
+    /** GET /api/store/hive/sellers — trusted sellers, for Discover. */
+    public function sellers()
+    {
+        return ['sellers' => HiveSellers::directory($this->me())];
+    }
+
+    /** GET /api/account/hive/closet — everything I've bought. */
+    public function closet()
+    {
+        $me = $this->mustBeMember(requireAdult: false);
+
+        return ['items' => HiveSellers::closet($me->customer_id), 'reward' => HiveRewards::TRY_ON_BEES];
+    }
+
     // ─── Try-ons, challenges, earnings ─────────────────────────────────────
 
     /** GET /api/account/hive/tryons/eligible — what I've bought and not shown yet. */
@@ -321,9 +388,9 @@ class HiveController extends Controller
     public function earnings()
     {
         $me = $this->mustBeMember(requireAdult: false);
-        $aff = Affiliate::where('customer_id', $me->customer_id)->where('status', 'active')->first(['code']);
+        $seller = HiveSellers::forCustomer($me->customer_id);
 
-        return HiveRewards::statement($me->customer_id) + ['shop_code' => $aff?->code];
+        return HiveRewards::statement($me->customer_id) + ['shop_code' => $seller?->code, 'seller' => $seller ? HiveSellers::dashboard($seller) : null];
     }
 
     /** GET /api/account/hive/mentions — the product picker for tagging a look. */

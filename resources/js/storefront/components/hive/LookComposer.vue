@@ -69,7 +69,13 @@ export default {
         occasions() { return this.hive.options.occasions.map((k) => ({ key: k, label: occasionLabel(k) })); },
     },
     mounted() {
-        api.get('/api/account/hive/tryons/eligible').then((d) => { this.lines = d.lines; this.reward = d.reward; }).catch(() => {});
+        api.get('/api/account/hive/tryons/eligible').then((d) => {
+            this.lines = d.lines; this.reward = d.reward;
+            // Opened from "Try-on" in the closet: that piece is already chosen.
+            const want = hiveStore.state.composerPreset?.lineItemId;
+            const hit = want && d.lines.find((l) => l.line_item_id === want);
+            if (hit) this.pickLine(hit);
+        }).catch(() => {});
         api.get('/api/store/hive/challenges').then((d) => { this.challenges = d.challenges; }).catch(() => {});
         document.body.style.overflow = 'hidden';
         window.addEventListener('keydown', this.onKey);

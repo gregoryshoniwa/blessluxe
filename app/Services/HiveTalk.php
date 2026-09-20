@@ -153,7 +153,7 @@ class HiveTalk
             'answers' => $answers->map(fn ($n) => [
                 'id' => $n->id, 'body' => $n->body, 'refs' => json_decode((string) ($n->refs ?? ''), true) ?: [],
                 'created_at' => self::iso($n->created_at),
-                'author' => ['handle' => $n->handle, 'display_name' => $n->display_name, 'avatar_url' => $n->avatar_url],
+                'author' => ['handle' => $n->handle, 'display_name' => $n->display_name, 'avatar_url' => $n->avatar_url, 'seller' => HiveSellers::isSeller($n->customer_id)],
                 'accepted' => $n->accepted_at !== null,
                 'bees' => (int) $n->bees_awarded,
                 'is_mine' => $viewer && $viewer->customer_id === $n->customer_id,

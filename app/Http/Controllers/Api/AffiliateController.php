@@ -44,11 +44,12 @@ class AffiliateController extends Controller
             ->where('status', 'active')
             ->first();
         if (! $affiliate) {
-            $request->session()->forget('affiliate_code');
+            $request->session()->forget(['affiliate_code', 'hive_look_id']);
             return response()->json(['error' => 'Affiliate code not found or not active.'], 404);
         }
 
         $request->session()->put('affiliate_code', $affiliate->code);
+        $request->session()->forget('hive_look_id');      // arrived by a shop link, not from a look
 
         return ['affiliate' => $this->storefrontShape($affiliate)];
     }
@@ -67,7 +68,7 @@ class AffiliateController extends Controller
 
         $affiliate = Affiliate::query()->where('code', $code)->where('status', 'active')->first();
         if (! $affiliate) {
-            $request->session()->forget('affiliate_code');
+            $request->session()->forget(['affiliate_code', 'hive_look_id']);
             return ['affiliate' => null];
         }
         return ['affiliate' => $this->storefrontShape($affiliate)];
@@ -80,7 +81,7 @@ class AffiliateController extends Controller
      */
     public function clear(Request $request)
     {
-        $request->session()->forget('affiliate_code');
+        $request->session()->forget(['affiliate_code', 'hive_look_id']);
         return ['ok' => true];
     }
 

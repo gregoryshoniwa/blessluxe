@@ -6,12 +6,13 @@ import { hiveStore, timeAgo } from '../hive-store.js';
 import AskCard from '../components/hive/AskCard.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
 import MentionPicker from '../../components/MentionPicker.vue';
+import SellerBadge from '../components/hive/SellerBadge.vue';
 import { ArrowLeft, UserRound, BadgeCheck, Tag, X, SendHorizontal, LoaderCircle, Package, ImageOff, Flag, Trash2 } from 'lucide-vue-next';
 
 /** One question and its answers. The asker accepts the answer that helped; that helper earns Bees. */
 export default {
     name: 'HiveAskDetail',
-    components: { AskCard, ReportSheet, MentionPicker, ArrowLeft, UserRound, BadgeCheck, Tag, X, SendHorizontal, LoaderCircle, Package, ImageOff, Flag, Trash2 },
+    components: { AskCard, ReportSheet, MentionPicker, SellerBadge, ArrowLeft, UserRound, BadgeCheck, Tag, X, SendHorizontal, LoaderCircle, Package, ImageOff, Flag, Trash2 },
     data() {
         return { auth: authStore.state, ask: null, answers: [], reward: 0, loading: true, notFound: false, draft: '', refs: [], picking: false, sending: false, accepting: null, reporting: null };
     },
@@ -24,6 +25,11 @@ export default {
     methods: {
         timeAgo,
         refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
+        openRef(e, a, r) {
+            if (!a.author.seller || e.metaKey || e.ctrlKey) return;
+            e.preventDefault();
+            hiveStore.shopVia(this.$router, { answer_id: a.id }, this.refPath(r));
+        },
         apply(d) { this.ask = d.ask; this.answers = d.answers; this.reward = d.reward ?? this.reward; },
         async load() {
             this.loading = true;
@@ -99,11 +105,11 @@ export default {
                             <UserRound v-else class="w-4 h-4 text-black/30" />
                         </router-link>
                         <div class="min-w-0 flex-1">
-                            <p class="text-sm"><router-link :to="`/@${a.author.handle}`" class="font-medium hover:text-gold-dark">{{ a.author.display_name }}</router-link> <span class="text-[11px] text-black/40">· {{ timeAgo(a.created_at) }}</span></p>
+                            <p class="text-sm"><router-link :to="`/@${a.author.handle}`" class="font-medium hover:text-gold-dark">{{ a.author.display_name }}</router-link> <SellerBadge v-if="a.author.seller" label /> <span class="text-[11px] text-black/40">· {{ timeAgo(a.created_at) }}</span></p>
                             <p v-if="a.body" class="text-sm text-black/80 leading-relaxed mt-0.5 whitespace-pre-line break-words">{{ a.body }}</p>
 
                             <div v-if="a.refs.length" class="flex flex-col gap-1.5 mt-2">
-                                <router-link v-for="r in a.refs" :key="`${r.type}:${r.id}`" :to="refPath(r)" class="group flex items-center gap-3 p-1.5 pr-3 rounded-xl border border-black/8 hover:border-gold/60 transition-colors">
+                                <router-link v-for="r in a.refs" :key="`${r.type}:${r.id}`" :to="refPath(r)" @click="openRef($event, a, r)" class="group flex items-center gap-3 p-1.5 pr-3 rounded-xl border border-black/8 hover:border-gold/60 transition-colors">
                                     <span class="w-11 h-14 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                                         <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
                                         <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />

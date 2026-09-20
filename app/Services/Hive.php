@@ -140,6 +140,8 @@ class Hive
             'looks'        => (int) $p->looks_count,
             'is_me'        => $mine,
             'i_follow'     => $following,
+            // An approved affiliate. The badge is earned by approval, not claimed.
+            'seller'       => HiveSellers::isSeller($p->customer_id),
             'fit'          => null,
         ];
 
@@ -360,7 +362,7 @@ class Hive
             'refs'       => json_decode((string) ($l->refs ?? ''), true) ?: [],
             'occasion'   => $l->occasion,
             'created_at' => Carbon::parse($l->created_at, config('app.timezone'))->toIso8601String(),
-            'author'     => ['handle' => $l->handle ?? null, 'display_name' => $l->display_name ?? null, 'avatar_url' => $l->avatar_url ?? null],
+            'author'     => ['handle' => $l->handle ?? null, 'display_name' => $l->display_name ?? null, 'avatar_url' => $l->avatar_url ?? null, 'seller' => HiveSellers::isSeller($l->customer_id)],
             'liked'      => $liked,
             'is_mine'    => $mine,
             // Only the author sees the number. A public tally turns "does this

@@ -3,14 +3,15 @@ import { api } from '../../lib/api.js';
 import { toastError } from '../../lib/dialog.js';
 import { authStore } from '../auth-store.js';
 import { hiveStore, occasionLabel } from '../hive-store.js';
-import { Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag } from 'lucide-vue-next';
+import SellerBadge from '../components/hive/SellerBadge.vue';
+import { Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck } from 'lucide-vue-next';
 
 /** Find people (by name or @handle), your fit twins, and looks by occasion. */
 export default {
     name: 'HiveDiscover',
-    components: { Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag },
+    components: { SellerBadge, Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck },
     data() {
-        return { auth: authStore.state, hive: hiveStore.state, q: '', people: [], searching: false, loading: true, occasions: [], twins: [], twinsReady: true, timer: null, ticket: 0, busy: null };
+        return { auth: authStore.state, hive: hiveStore.state, q: '', people: [], searching: false, loading: true, occasions: [], twins: [], twinsReady: true, sellers: [], timer: null, ticket: 0, busy: null };
     },
     watch: {
         q() {
@@ -22,6 +23,7 @@ export default {
         document.title = 'Discover · Bless Hive';
         this.search();
         this.loadTwins();
+        api.get('/api/store/hive/sellers').then((d) => { this.sellers = d.sellers; }).catch(() => {});
     },
     beforeUnmount() { clearTimeout(this.timer); },
     methods: {
@@ -81,6 +83,21 @@ export default {
                 </div>
             </section>
 
+            <!-- Trusted sellers -->
+            <section v-if="sellers.length" class="mt-8">
+                <h2 class="flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3"><BadgeCheck class="w-3.5 h-3.5" /> Trusted sellers</h2>
+                <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-3 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <router-link v-for="sl in sellers" :key="sl.handle" :to="`/@${sl.handle}?tab=shop`" class="w-28 flex-shrink-0 bg-white border border-black/8 rounded-2xl p-3 text-center hover:border-gold transition-colors">
+                        <span class="block w-14 h-14 mx-auto rounded-full overflow-hidden bg-cream-dark border-2 border-gold/40 flex items-center justify-center">
+                            <img v-if="sl.avatar_url" :src="sl.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
+                            <UserRound v-else class="w-5 h-5 text-black/25" />
+                        </span>
+                        <span class="flex items-center justify-center gap-1 text-xs mt-2"><span class="truncate">{{ sl.display_name }}</span><SellerBadge /></span>
+                        <span class="block text-[11px] text-black/45">{{ sl.looks }} {{ sl.looks === 1 ? 'look' : 'looks' }}</span>
+                    </router-link>
+                </div>
+            </section>
+
             <!-- Fit twins -->
             <section v-if="hive.me" class="mt-8">
                 <h2 class="flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3"><Ruler class="w-3.5 h-3.5" /> Your fit twins</h2>
@@ -113,7 +130,7 @@ export default {
                             <UserRound v-else class="w-5 h-5 text-black/25" />
                         </span>
                         <span class="min-w-0">
-                            <span class="block text-sm font-medium truncate">{{ p.display_name }}</span>
+                            <span class="flex items-center gap-1 text-sm font-medium"><span class="truncate">{{ p.display_name }}</span><SellerBadge v-if="p.seller" /></span>
                             <span class="block text-xs text-black/45 truncate">@{{ p.handle }} · {{ p.looks }} {{ p.looks === 1 ? 'look' : 'looks' }}<template v-if="p.twin_match"> · <span class="text-gold-dark">{{ p.twin_match }}% match</span></template></span>
                         </span>
                     </router-link>

@@ -84,6 +84,9 @@ Route::prefix('store')->group(function () {
     Route::middleware('web')->prefix('hive')->group(function () {
         Route::get('/feed',           [HiveController::class, 'feed']);
         Route::get('/pages/{handle}', [HiveController::class, 'page']);
+        Route::get('/pages/{handle}/shop', [HiveController::class, 'shop']);
+        Route::get('/sellers',             [HiveController::class, 'sellers']);
+        Route::post('/shop-via',           [HiveController::class, 'shopVia'])->middleware('throttle:hive-tap');
         Route::get('/looks/{id}',          [HiveController::class, 'look']);
         Route::get('/looks/{id}/comments', [HiveTalkController::class, 'comments']);
         Route::get('/discover',            [HiveController::class, 'discover'])->middleware('throttle:hive-read');
@@ -240,6 +243,7 @@ Route::middleware('web')->prefix('account')->group(function () {
         Route::get   ('/twins',              [HiveController::class, 'twins']);
         Route::get   ('/tryons/eligible',    [HiveController::class, 'eligibleTryOns']);
         Route::get   ('/earnings',           [HiveController::class, 'earnings']);
+        Route::get   ('/closet',             [HiveController::class, 'closet']);
         Route::get   ('/mentions',           [HiveController::class, 'mentions'])->middleware('throttle:hive-read');
         Route::post  ('/links/inspect',      [HiveController::class, 'inspectLink'])->middleware('throttle:hive-talk');
         Route::post  ('/looks',              [HiveController::class, 'storeLook'])->middleware('throttle:hive-post');

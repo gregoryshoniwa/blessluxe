@@ -94,9 +94,27 @@ async function refreshUnread() {
     try { state.unread = (await api.get('/api/account/hive/activity')).unread || 0; } catch { /* keep the last number */ }
 }
 
+/**
+ * Go to a product that a SELLER tagged (or listed). The server decides whose
+ * content it is and, if they're an approved seller, puts this shopper in that
+ * seller's shop — exactly what opening their shop link does — so the sale is
+ * credited by the normal affiliate route. For anyone else it's just a link.
+ *   from: { look_id } | { answer_id } | { handle }
+ */
+async function shopVia(router, from, path) {
+    try {
+        const d = await api.post('/api/store/hive/shop-via', from);
+        if (d.seller) {
+            const { affiliateStore } = await import('./affiliate-store.js');
+            await affiliateStore.refresh();
+        }
+    } catch { /* attribution is a bonus; never block the shopper */ }
+    router.push(path);
+}
+
 function reset() { state.me = null; state.unread = 0; }
 
-export const hiveStore = { state, load, setMe, ready, confirmAdult, settleGate, compose, posted, refreshUnread, reset };
+export const hiveStore = { state, load, setMe, ready, confirmAdult, settleGate, compose, posted, refreshUnread, reset, shopVia };
 
 /** "3h", "2d", "14 Sep" — short, because it sits beside a name on a phone. */
 export function timeAgo(iso) {

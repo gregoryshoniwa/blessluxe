@@ -212,7 +212,7 @@ class ProductController extends Controller
      */
     private function summarise(Product $p): array
     {
-        $price = optional($p->variants->first()?->prices->first())->amount;
+        $price = $this->shopPrice($p->id, optional($p->variants->first()?->prices->first())->amount);
 
         return [
             'id'        => $p->id,
@@ -277,7 +277,7 @@ class ProductController extends Controller
                 'sku'                => $v->sku,
                 'inventory_quantity' => $v->inventory_quantity,
                 'manage_inventory'   => (bool) $v->manage_inventory,
-                'price' => optional($v->prices->first())->amount,
+                'price' => $this->shopPrice($p->id, optional($v->prices->first())->amount),
             ]),
             'catalogues' => $p->catalogues->map(fn ($c) => [
                 'name'    => $c->name,
@@ -300,5 +300,23 @@ class ProductController extends Controller
     private function viewingAffiliate(\Illuminate\Http\Request $request): ?\App\Models\Affiliate
     {
         return \App\Services\AffiliatePricing::viewing($request);
+    }
+
+    /**
+     * The price a shopper will actually pay HERE. Inside a seller's shop that is
+     * the seller's price (base + their markup) — the same sum the cart charges
+     * (CartController uses the same AffiliatePricing::priceFor). Without this a
+     * page said $549 and the cart then charged $554. Outside a shop it is the base.
+     */
+    private function shopPrice(string $productId, $base): ?int
+    {
+        if ($base === null) return null;
+        // Resolved once per REQUEST (kept on it, not in a static — a static would
+        // leak one shopper's seller into the next request on a long-lived worker).
+        $req = request();
+        if (! $req->attributes->has('shop.viewing')) $req->attributes->set('shop.viewing', $this->viewingAffiliate($req));
+        $viewing = $req->attributes->get('shop.viewing');
+
+        return $viewing ? (int) \App\Services\AffiliatePricing::priceFor($viewing, $productId, (int) $base)['total'] : (int) $base;
     }
 }

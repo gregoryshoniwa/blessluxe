@@ -8,7 +8,10 @@ import FitEditor from '../components/hive/FitEditor.vue';
 import PageEditor from '../components/hive/PageEditor.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
 import EarningsPanel from '../components/hive/EarningsPanel.vue';
-import { UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images, Coins, Play } from 'lucide-vue-next';
+import SellerShop from '../components/hive/SellerShop.vue';
+import ClosetPanel from '../components/hive/ClosetPanel.vue';
+import SellerBadge from '../components/hive/SellerBadge.vue';
+import { UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images, Coins, Play, Shirt, Star } from 'lucide-vue-next';
 
 const FIT_LABELS = {
     body_shape: 'Shape', size_top: 'Tops', size_bottom: 'Bottoms', size_dress: 'Dresses', size_shoe: 'Shoes',
@@ -23,7 +26,7 @@ const FIT_LABELS = {
  */
 export default {
     name: 'HiveProfilePage',
-    components: { LookCard, FitEditor, PageEditor, ReportSheet, EarningsPanel, Coins, Play, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
+    components: { LookCard, FitEditor, PageEditor, ReportSheet, EarningsPanel, SellerShop, ClosetPanel, SellerBadge, Coins, Play, Shirt, Star, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
     data() {
         return {
             auth: authStore.state,
@@ -47,7 +50,7 @@ export default {
         tabs() {
             const t = [{ key: 'looks', label: 'Looks', icon: 'Images' }, { key: 'fit', label: 'Fit', icon: 'Ruler' }];
             if (this.page?.shop_code || this.page?.is_me) t.push({ key: 'shop', label: 'Shop', icon: 'ShoppingBag' });
-            if (this.page?.is_me) t.push({ key: 'earned', label: 'Earned', icon: 'Coins' });
+            if (this.page?.is_me) t.push({ key: 'closet', label: 'Closet', icon: 'Shirt' }, { key: 'earned', label: 'Earned', icon: 'Coins' });
             return t;
         },
         fitRows() {
@@ -191,7 +194,7 @@ export default {
                     <UserRound v-else class="w-8 h-8 text-black/25" />
                 </span>
                 <div class="min-w-0 flex-1">
-                    <h1 class="font-display text-xl sm:text-2xl tracking-wide break-words">{{ page.display_name }}</h1>
+                    <h1 class="font-display text-xl sm:text-2xl tracking-wide break-words">{{ page.display_name }} <SellerBadge v-if="page.seller" label /></h1>
                     <p class="text-sm text-black/50 break-all">@{{ page.handle }}</p>
                     <div class="flex gap-5 mt-3 text-sm">
                         <span><strong class="font-medium">{{ page.looks }}</strong> <span class="text-black/50">looks</span></span>
@@ -201,6 +204,11 @@ export default {
                 </div>
             </header>
 
+            <p v-if="page.reputation" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mb-2">
+                <span v-if="page.reputation.rating" class="inline-flex items-center gap-1 font-medium"><Star class="w-3.5 h-3.5 text-gold fill-gold" /> {{ page.reputation.rating }} <span class="font-normal text-black/50">from {{ page.reputation.reviews }} {{ page.reputation.reviews === 1 ? 'buyer' : 'buyers' }}</span></span>
+                <span class="text-black/50">{{ page.reputation.sales_label }}</span>
+                <button @click="tab = 'shop'" class="text-gold-dark underline underline-offset-4">Visit the shop</button>
+            </p>
             <p v-if="page.city" class="flex items-center gap-1.5 text-xs text-black/50 mb-1.5"><MapPin class="w-3.5 h-3.5" /> {{ page.city }}</p>
             <p v-if="page.bio" class="text-sm text-black/75 leading-relaxed whitespace-pre-line break-words mb-3">{{ page.bio }}</p>
 
@@ -226,14 +234,14 @@ export default {
             </div>
 
             <!-- ─── Tabs ────────────────────────────────────────────── -->
-            <nav class="flex border-b border-black/10 mb-5" role="tablist">
+            <nav class="scroll-strip flex border-b border-black/10 mb-5 overflow-x-auto [scrollbar-width:none]" role="tablist">
                 <button
                     v-for="t in tabs"
                     :key="t.key"
                     role="tab"
                     :aria-selected="tab === t.key"
                     @click="tab = t.key"
-                    :class="['flex-1 min-w-0 py-3.5 inline-flex items-center justify-center gap-1.5 text-[11px] sm:text-xs tracking-[0.1em] sm:tracking-[0.2em] uppercase border-b-2 -mb-px transition-colors', tab === t.key ? 'border-gold text-black' : 'border-transparent text-black/45 hover:text-black']"
+                    :class="['flex-1 min-w-[5.25rem] px-2 py-3.5 inline-flex items-center justify-center gap-1.5 text-[11px] sm:text-xs tracking-[0.1em] sm:tracking-[0.18em] uppercase whitespace-nowrap border-b-2 -mb-px transition-colors', tab === t.key ? 'border-gold text-black' : 'border-transparent text-black/45 hover:text-black']"
                 >
                     <component :is="t.icon" class="w-4 h-4" /> {{ t.label }}
                 </button>
@@ -277,22 +285,21 @@ export default {
                 </div>
             </section>
 
+            <!-- Closet (mine only) -->
+            <section v-else-if="tab === 'closet' && page.is_me"><ClosetPanel /></section>
+
             <!-- Earned (mine only) -->
             <section v-else-if="tab === 'earned' && page.is_me"><EarningsPanel /></section>
 
-            <!-- Shop -->
-            <section v-else-if="tab === 'shop'" class="text-center py-12 px-4">
-                <ShoppingBag class="w-8 h-8 text-gold mx-auto mb-4" />
-                <template v-if="page.shop_code">
-                    <h2 class="font-display text-xl tracking-widest uppercase mb-2">{{ page.is_me ? 'Your shop' : `${page.display_name}'s shop` }}</h2>
-                    <p class="text-sm text-black/55 mb-6 max-w-sm mx-auto">Pieces hand-picked from BLESSLUXE. {{ page.is_me ? 'You earn on every sale.' : `Shopping here supports ${page.display_name}.` }}</p>
-                    <router-link :to="`/affiliate/shop/${page.shop_code}`" class="inline-block bg-gold text-white px-10 py-3.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Visit the shop</router-link>
-                </template>
-                <template v-else>
-                    <h2 class="font-display text-xl tracking-widest uppercase mb-2">Earn from your page</h2>
-                    <p class="text-sm text-black/55 mb-6 max-w-sm mx-auto">Open a shop on your page, pick the pieces you love, and earn commission whenever someone buys through you.</p>
-                    <router-link to="/affiliate" class="inline-block bg-gold text-white px-10 py-3.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">See how it works</router-link>
-                </template>
+            <!-- Shop: a seller's line; for everyone else (own page only), how to become one. -->
+            <section v-else-if="tab === 'shop'">
+                <SellerShop v-if="page.shop_code" :handle="page.handle" :name="page.display_name" :mine="page.is_me" />
+                <div v-else class="text-center py-12 px-4">
+                    <ShoppingBag class="w-8 h-8 text-gold mx-auto mb-4" />
+                    <h2 class="font-display text-xl tracking-widest uppercase mb-2">Sell from your page</h2>
+                    <p class="text-sm text-black/55 mb-6 max-w-sm mx-auto">Approved sellers get a verified badge, a shop on their page, and commission whenever someone buys what they tag in a look.</p>
+                    <router-link to="/affiliate" class="inline-block bg-gold text-white px-10 py-3.5 rounded-full text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Apply to sell</router-link>
+                </div>
             </section>
         </template>
 

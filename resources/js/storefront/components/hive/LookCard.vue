@@ -3,6 +3,7 @@ import { api } from '../../../lib/api.js';
 import { confirmDialog, toast, toastError } from '../../../lib/dialog.js';
 import { hiveStore, timeAgo, occasionLabel, whatsappShare } from '../../hive-store.js';
 import LookComments from './LookComments.vue';
+import SellerBadge from './SellerBadge.vue';
 import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions } from 'lucide-vue-next';
 
 /**
@@ -16,7 +17,7 @@ import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, Me
  */
 export default {
     name: 'LookCard',
-    components: { LookComments, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions },
+    components: { LookComments, SellerBadge, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions },
     props: {
         look: { type: Object, required: true },
         // On someone's own page the author row is repetition.
@@ -71,6 +72,13 @@ export default {
             target.shape = shape;                        // show it at once; put it back if the save fails
             try { await api.put(`/api/account/hive/looks/${this.look.id}/shape`, { shape }); }
             catch (e) { target.shape = was; toastError(e, "That didn't save — try again."); }
+        },
+
+        /** A seller's tag is a sale in waiting: enter their shop first, then open the piece. */
+        openRef(e, r) {
+            if (!this.look.author.seller || e.metaKey || e.ctrlKey) return;      // ordinary link, or "open in new tab"
+            e.preventDefault();
+            hiveStore.shopVia(this.$router, { look_id: this.look.id }, this.refPath(r));
         },
 
         refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
@@ -130,7 +138,7 @@ export default {
                     <UserRound v-else class="w-4 h-4 text-black/30" />
                 </span>
                 <span class="min-w-0">
-                    <span class="block text-sm font-medium truncate group-hover:text-gold-dark transition-colors">{{ look.author.display_name }}</span>
+                    <span class="flex items-center gap-1 text-sm font-medium group-hover:text-gold-dark transition-colors"><span class="truncate">{{ look.author.display_name }}</span><SellerBadge v-if="look.author.seller" /></span>
                     <span class="block text-[11px] text-black/45 truncate">@{{ look.author.handle }} · {{ when }}</span>
                 </span>
             </router-link>
@@ -263,12 +271,13 @@ export default {
 
         <!-- What she's wearing — the reason this isn't just a photo app. -->
         <div v-if="look.refs.length" class="border-t border-black/6 px-3.5 py-3">
-            <p class="text-[10px] tracking-[0.2em] uppercase text-black/40 mb-2">Shop this look</p>
+            <p class="text-[10px] tracking-[0.2em] uppercase text-black/40 mb-2">Shop this look<template v-if="look.author.seller"> · sold by {{ look.author.display_name }}</template></p>
             <div class="scroll-strip flex gap-2.5 overflow-x-auto [scrollbar-width:none] -mx-3.5 px-3.5">
                 <router-link
                     v-for="r in look.refs"
                     :key="`${r.type}:${r.id}`"
                     :to="refPath(r)"
+                    @click="openRef($event, r)"
                     class="group flex items-center gap-2.5 p-1.5 pr-3 rounded-xl border border-black/8 hover:border-gold/60 transition-colors flex-shrink-0 w-[13.5rem]"
                 >
                     <span class="w-11 h-14 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
