@@ -220,7 +220,7 @@ class AffiliateShopLookTest extends TestCase
             ], ['Accept' => 'application/json'])->assertOk();
 
             $slide = collect($res->json('slides'))->last();
-            $this->cleanup[] = public_path(ltrim($slide['media_url'], '/'));
+            $this->cleanup[] = storage_path('app/public/' . \App\Services\Media::key($slide['media_url']));
 
             $this->assertNull($slide['cta_href'], "$href should have been dropped");
             $this->assertSame('Summer Edit', $slide['heading']);
@@ -230,13 +230,13 @@ class AffiliateShopLookTest extends TestCase
         $this->as('jane')->post('/api/account/affiliate/look/slides', [
             'image' => UploadedFile::fake()->image('hero.php', 2400, 1350),
         ], ['Accept' => 'application/json'])->assertStatus(422);
-        $this->assertEmpty(glob(public_path('uploads/affiliate-hero/*.php')));
+        $this->assertEmpty(glob(storage_path('app/public/uploads/affiliate-hero/*.php')));
 
         $ok = $this->as('jane')->post('/api/account/affiliate/look/slides', [
             'image' => UploadedFile::fake()->image('hero.jpg', 2400, 1350), 'cta_href' => '/shop?heading=women',
         ], ['Accept' => 'application/json'])->assertOk();
         $slide = collect($ok->json('slides'))->last();
-        $this->cleanup[] = public_path(ltrim($slide['media_url'], '/'));
+        $this->cleanup[] = storage_path('app/public/' . \App\Services\Media::key($slide['media_url']));
         $this->assertSame('/shop?heading=women', $slide['cta_href']);
     }
 
@@ -309,7 +309,7 @@ class AffiliateShopLookTest extends TestCase
             'prompt' => 'A woman in an emerald dress in a marble lobby', 'style' => 'Editorial studio',
         ])->assertOk();
         $url = $res->json('generated_url');
-        $this->cleanup[] = public_path(ltrim($url, '/'));
+        $this->cleanup[] = storage_path('app/public/' . \App\Services\Media::key($url));
 
         Http::assertSent(function ($req) {
             $body = $req->data();
@@ -317,7 +317,10 @@ class AffiliateShopLookTest extends TestCase
                 && str_contains($body['contents'][0]['parts'][0]['text'], 'no text');
         });
         $this->assertSame(AffiliateLook::AI_DAILY_LIMIT - 1, $res->json('remaining'));
-        $this->assertStringStartsWith("/ai/affiliate-hero/{$jane->id}/", $url);
+        // Wherever files live, this render sits in HER folder — that is what
+        // stops anyone else claiming it.
+        $this->assertTrue(\App\Services\Media::isUnder($url, "ai/affiliate-hero/{$jane->id}"));
+        $this->assertFalse(\App\Services\Media::isUnder($url, 'ai/affiliate-hero/aff_sara'));
 
         $slide = $this->as('jane')->postJson('/api/account/affiliate/look/slides', ['generated_url' => $url, 'prompt' => 'x'])->assertOk()->json('slides.0');
         $this->assertSame('ai', $slide['source']);
@@ -329,12 +332,11 @@ class AffiliateShopLookTest extends TestCase
         $this->affiliate('jane');
         $sara = $this->affiliate('sara');
 
-        $dir = public_path("ai/affiliate-hero/{$sara->id}");
-        if (! is_dir($dir)) mkdir($dir, 0775, true);
-        file_put_contents("$dir/abc-123.png", 'x');
-        $this->cleanup[] = "$dir/abc-123.png";
+        // A real render belonging to SARA, which Jane then tries to claim.
+        $saras = \App\Services\Media::put("ai/affiliate-hero/{$sara->id}", 'png', 'x');
+        $this->cleanup[] = storage_path('app/public/' . \App\Services\Media::key($saras));
 
-        foreach (["/ai/affiliate-hero/{$sara->id}/abc-123.png", '/ai/affiliate-hero/aff_jane/../../../.env', '/logo.png', 'https://evil.example/x.png'] as $url) {
+        foreach ([$saras, '/ai/affiliate-hero/aff_jane/../../../.env', '/logo.png', 'https://evil.example/x.png'] as $url) {
             $this->as('jane')->postJson('/api/account/affiliate/look/slides', ['generated_url' => $url])->assertStatus(422);
         }
         $this->assertSame(0, DB::table('affiliate_hero_slides')->count());

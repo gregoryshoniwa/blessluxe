@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Scopes\ExclusivityScope;
@@ -274,8 +275,7 @@ class AdminProductController extends Controller
             'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:20480'], // 20 MB
         ]);
 
-        $path = $request->file('image')->store('products', 'public');
-        $url  = Storage::url($path);  // /storage/products/xxx.jpg
+        $url = Media::upload($request->file('image'), 'products');
 
         $maxRank = (int) ProductImage::where('product_id', $product->id)->max('rank');
         $image = ProductImage::create([
@@ -302,11 +302,9 @@ class AdminProductController extends Controller
     public function destroyImage(string $productId, string $imageId)
     {
         $image = ProductImage::where('product_id', $productId)->where('id', $imageId)->firstOrFail();
-        // Try to remove the actual file too. URL is `/storage/products/foo.jpg`
-        // so strip the /storage/ prefix to get the disk-relative path.
-        if (str_starts_with($image->url, '/storage/')) {
-            Storage::disk('public')->delete(substr($image->url, strlen('/storage/')));
-        }
+        // Remove the file too. Media ignores any URL that isn't one of ours
+        // (a product image can also be an external link).
+        Media::delete($image->url);
         $image->delete();
         return ['ok' => true];
     }
@@ -339,8 +337,7 @@ class AdminProductController extends Controller
         ]);
 
         if ($request->hasFile('video')) {
-            $path       = $request->file('video')->store('products/videos', 'public');
-            $mediaUrl   = Storage::url($path);
+            $mediaUrl   = Media::upload($request->file('video'), 'products/videos');
             $sourceKind = 'upload';
             $meta       = null;
             $thumb      = null;
@@ -382,9 +379,7 @@ class AdminProductController extends Controller
     private function removeVideoMedia(string $productId): void
     {
         foreach (ProductMedia::where('product_id', $productId)->where('media_type', 'video')->get() as $m) {
-            if ($m->source_kind === 'upload' && str_starts_with($m->media_url, '/storage/')) {
-                Storage::disk('public')->delete(substr($m->media_url, strlen('/storage/')));
-            }
+            if ($m->source_kind === 'upload') Media::delete($m->media_url);
             $m->delete();
         }
     }

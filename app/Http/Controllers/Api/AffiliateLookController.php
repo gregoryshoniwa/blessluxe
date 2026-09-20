@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Affiliate;
 use App\Services\AffiliateLook;
@@ -124,11 +125,7 @@ class AffiliateLookController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            // Named from the DETECTED type, never the uploader's filename.
-            $name = 'hero_' . Str::random(20) . '.' . ($file->guessExtension() ?: 'jpg');
-            $file->move(public_path('uploads/affiliate-hero'), $name);
-            $media = ['media_type' => 'image', 'media_url' => '/uploads/affiliate-hero/' . $name, 'source' => 'upload'];
+            $media = ['media_type' => 'image', 'media_url' => Media::upload($request->file('image'), 'uploads/affiliate-hero'), 'source' => 'upload'];
         } elseif (! empty($data['youtube_url'])) {
             $id = AffiliateLook::youtubeId($data['youtube_url']);
             if (! $id) {
@@ -136,11 +133,11 @@ class AffiliateLookController extends Controller
             }
             $media = ['media_type' => 'youtube', 'media_url' => $id, 'source' => 'youtube'];
         } elseif (! empty($data['generated_url'])) {
-            // Only a file WE rendered for THIS affiliate — the path embeds their
-            // id, so one affiliate can't claim another's render (or any file).
+            // Only a file WE rendered for THIS affiliate. Their renders live in a
+            // folder named after their id, so another affiliate's render — or any
+            // other file, on any host — fails one of these two checks.
             $url = $data['generated_url'];
-            if (! preg_match('~^/ai/affiliate-hero/' . preg_quote($me->id, '~') . '/[A-Za-z0-9-]+\.(png|jpg|webp)$~', $url)
-                || ! is_file(public_path(ltrim($url, '/')))) {
+            if (! Media::isUnder($url, "ai/affiliate-hero/{$me->id}") || ! Media::exists($url)) {
                 return response()->json(['error' => 'That image has expired. Please generate it again.'], 422);
             }
             $media = ['media_type' => 'image', 'media_url' => $url, 'source' => 'ai'];
@@ -254,14 +251,10 @@ class AffiliateLookController extends Controller
             return response()->json(['error' => "The AI couldn't produce an image for that. Try describing the scene more simply."], 502);
         }
 
-        $ext = str_contains($result['mime'], 'webp') ? 'webp' : (str_contains($result['mime'], 'jpeg') ? 'jpg' : 'png');
-        $rel = "ai/affiliate-hero/{$me->id}/" . Str::uuid() . '.' . $ext;
-        $abs = public_path($rel);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, base64_decode($result['base64']));
+        $url = Media::putRender("ai/affiliate-hero/{$me->id}", $result);
 
         return [
-            'generated_url' => '/' . $rel,
+            'generated_url' => $url,
             'prompt'        => $data['prompt'],
             'remaining'     => max(0, AffiliateLook::AI_DAILY_LIMIT - $used - 1),
         ];
@@ -347,24 +340,18 @@ class AffiliateLookController extends Controller
         return $p;
     }
 
-    /** A product thumbnail as a reference image — only files that live on this server. */
+    /** A product thumbnail as a reference image — only files that are ours. */
     private function localImage(?string $url): ?array
     {
-        if (! $url || ! str_starts_with($url, '/') || str_contains($url, '..')) return null;
-        $abs = public_path(ltrim($url, '/'));
-        if (! is_file($abs)) return null;
-        $mime = mime_content_type($abs) ?: '';
-        if (! str_starts_with($mime, 'image/')) return null;
-
-        return ['base64' => base64_encode(file_get_contents($abs)), 'mime' => $mime];
+        return Media::asReference($url);
     }
 
     private function deleteFile(?string $url): void
     {
-        if (! $url || str_contains($url, '..')) return;
-        if (! preg_match('~^/(uploads/affiliate-hero|ai/affiliate-hero)/~', $url)) return;
-        $abs = public_path(ltrim($url, '/'));
-        if (is_file($abs)) @unlink($abs);
+        // Only ever inside the two hero folders, whatever URL is on the row.
+        if (Media::isUnder($url, 'uploads/affiliate-hero') || Media::isUnder($url, 'ai/affiliate-hero')) {
+            Media::delete($url);
+        }
     }
 
     private function ownSlide(Affiliate $me, string $id): object

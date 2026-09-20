@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Heading;
 use Illuminate\Http\Request;
@@ -30,8 +31,7 @@ class AdminHeadingController extends Controller
             'image_file' => ['nullable', 'image', 'max:10240'],
         ]);
         if ($request->hasFile('image_file')) {
-            $path = $request->file('image_file')->store('headings', 'public');
-            $data['image_url'] = Storage::url($path);
+            $data['image_url'] = Media::upload($request->file('image_file'), 'headings');
         }
         $heading = Heading::create([
             'id'        => 'head_' . Str::random(12),
@@ -60,8 +60,7 @@ class AdminHeadingController extends Controller
         ]);
         if (isset($data['handle'])) $data['handle'] = strtolower($data['handle']);
         if ($request->hasFile('image_file')) {
-            $path = $request->file('image_file')->store('headings', 'public');
-            $data['image_url'] = Storage::url($path);
+            $data['image_url'] = Media::upload($request->file('image_file'), 'headings');
         } elseif ($request->boolean('remove_image')) {
             $data['image_url'] = null;
         }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Services\AI\GeminiService;
 use Illuminate\Http\Request;
@@ -105,13 +106,7 @@ class AdminAiController extends Controller
         if (! $result) {
             return response()->json(['error' => 'No image returned by the model.'], 502);
         }
-        // Persist to public/ai/<uuid>.png and return a stable URL.
-        $ext = str_contains($result['mime'], 'webp') ? 'webp' : (str_contains($result['mime'], 'jpeg') ? 'jpg' : 'png');
-        $filename = 'ai/' . Str::uuid() . '.' . $ext;
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, base64_decode($result['base64']));
-        return ['url' => '/' . $filename, 'mime' => $result['mime']];
+        return ['url' => Media::putRender('ai/studio-admin', $result), 'mime' => $result['mime']];
     }
 
     public function describeProduct(Request $request)

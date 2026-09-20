@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Avatar;
 use App\Services\AI\GeminiService;
@@ -64,7 +65,7 @@ class AvatarController extends Controller
         $sources = [];
         $refs    = [];
         foreach ($request->file('images') as $file) {
-            $sources[] = $file->store('avatars/sources', 'public');
+            $sources[] = Media::upload($file, 'avatars/sources');
             $refs[]    = [
                 'mime'   => $file->getMimeType() ?: 'image/jpeg',
                 'base64' => base64_encode(file_get_contents($file->getRealPath())),
@@ -161,7 +162,7 @@ class AvatarController extends Controller
         $avatar = Avatar::where('customer_id', $customer->id)->findOrFail($id);
         $this->deleteRender($avatar->image_url);
         foreach ($avatar->source_images ?? [] as $path) {
-            Storage::disk('public')->delete($path);
+            Media::delete($path);
         }
         $avatar->delete();
         return ['ok' => true];
@@ -201,39 +202,24 @@ class AvatarController extends Controller
 
     private function saveRender(array $result): string
     {
-        $ext = str_contains($result['mime'], 'webp') ? 'webp' : (str_contains($result['mime'], 'jpeg') ? 'jpg' : 'png');
-        $filename = 'ai/avatars/' . Str::uuid() . '.' . $ext;
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, base64_decode($result['base64']));
-        return '/' . $filename;
+        return Media::putRender('ai/avatars', $result);
     }
 
     private function deleteRender(?string $url): void
     {
-        if ($url && str_starts_with($url, '/ai/avatars/')) {
-            @unlink(public_path(ltrim($url, '/')));
-        }
+        // Media ignores anything that isn't one of our own files.
+        Media::delete($url);
     }
 
     private function refFromPublicUrl(?string $url): ?array
     {
-        if (! $url) return null;
-        $abs = public_path(ltrim($url, '/'));
-        if (! is_file($abs)) return null;
-        return [
-            'mime'   => mime_content_type($abs) ?: 'image/png',
-            'base64' => base64_encode(file_get_contents($abs)),
-        ];
+        return Media::asReference($url);
     }
 
     private function refFromDisk(?string $path): ?array
     {
-        if (! $path || ! Storage::disk('public')->exists($path)) return null;
-        return [
-            'mime'   => Storage::disk('public')->mimeType($path) ?: 'image/jpeg',
-            'base64' => base64_encode(Storage::disk('public')->get($path)),
-        ];
+        // `$path` is a bare key on old rows and a full URL on new ones; Media reads both.
+        return Media::asReference($path);
     }
 
     private function shape(Avatar $a): array

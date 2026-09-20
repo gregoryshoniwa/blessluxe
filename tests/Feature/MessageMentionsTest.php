@@ -237,7 +237,7 @@ class MessageMentionsTest extends TestCase
 
         $this->assertSame('Silk Dress', $res['refs'][0]['title']);
         $this->assertCount(1, $res['attachments']);
-        @unlink(public_path(ltrim($res['attachments'][0], '/')));
+        @unlink(storage_path('app/public/' . \App\Services\Media::key($res['attachments'][0])));
     }
 
     #[Test]
@@ -255,11 +255,11 @@ class MessageMentionsTest extends TestCase
         if ($res->status() === 200) {
             $path = $res->json('message.attachments.0');
             $this->assertStringEndsNotWith('.php', $path);
-            @unlink(public_path(ltrim($path, '/')));
+            @unlink(storage_path('app/public/' . \App\Services\Media::key($path)));
         } else {
             // Rejecting it outright is just as good.
             $res->assertStatus(422);
         }
-        $this->assertEmpty(glob(public_path('uploads/affiliate-messages/*.php')));
+        $this->assertEmpty(glob(storage_path('app/public/uploads/affiliate-messages/*.php')));
     }
 }

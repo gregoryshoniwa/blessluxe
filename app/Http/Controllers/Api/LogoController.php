@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Logo;
 use App\Services\AI\GeminiService;
@@ -68,7 +69,7 @@ class LogoController extends Controller
         $sources = [];
         $refs    = [];
         foreach ($request->file('images', []) as $file) {
-            $sources[] = $file->store('logos/sources', 'public');
+            $sources[] = Media::upload($file, 'logos/sources');
             $refs[]    = [
                 'mime'   => $file->getMimeType() ?: 'image/jpeg',
                 'base64' => base64_encode(file_get_contents($file->getRealPath())),
@@ -165,7 +166,7 @@ class LogoController extends Controller
         $logo = Logo::where('customer_id', $customer->id)->findOrFail($id);
         $this->deleteRender($logo->image_url);
         foreach ($logo->source_images ?? [] as $path) {
-            Storage::disk('public')->delete($path);
+            Media::delete($path);
         }
         $logo->delete();
         return ['ok' => true];
@@ -203,30 +204,18 @@ class LogoController extends Controller
 
     private function saveRender(array $result): string
     {
-        $ext = str_contains($result['mime'], 'webp') ? 'webp' : (str_contains($result['mime'], 'jpeg') ? 'jpg' : 'png');
-        $filename = 'ai/logos/' . Str::uuid() . '.' . $ext;
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, base64_decode($result['base64']));
-        return '/' . $filename;
+        return Media::putRender('ai/logos', $result);
     }
 
     private function deleteRender(?string $url): void
     {
-        if ($url && str_starts_with($url, '/ai/logos/')) {
-            @unlink(public_path(ltrim($url, '/')));
-        }
+        // Media ignores anything that isn't one of our own files.
+        Media::delete($url);
     }
 
     private function refFromPublicUrl(?string $url): ?array
     {
-        if (! $url) return null;
-        $abs = public_path(ltrim($url, '/'));
-        if (! is_file($abs)) return null;
-        return [
-            'mime'   => mime_content_type($abs) ?: 'image/png',
-            'base64' => base64_encode(file_get_contents($abs)),
-        ];
+        return Media::asReference($url);
     }
 
     private function shape(Logo $l): array

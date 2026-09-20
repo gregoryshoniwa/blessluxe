@@ -110,7 +110,6 @@ public/
 - ICE servers come from `GET /api/{account,admin}/rtc/ice` ([Rtc](app/Services/Rtc.php)), **never from the bundle** — TURN credentials are billable and are issued short-lived via HMAC when `TURN_SECRET` is set. Without `TURN_URL`, ~15–20% of networks can't connect a call; the UI says so.
 - **The socket is optional and the provider is an env choice** (`BROADCAST_CONNECTION` + `VITE_REALTIME_DRIVER` = `reverb` | `pusher` | `none`; see the block in `.env.example`). Polling alone carries everything except typing/online/calls, at ~4 indexed queries per quiet poll. The zero-fee production setup is a free Pusher-protocol tier (100–200 concurrent connections) with overflow falling back to polling: [realtime.js](resources/js/lib/realtime.js) exposes `onRealtimeStatus()`, and a dropped or refused socket flips the conversation back to fast polling and hides the call buttons.
 - **Scaling path:** Laravel Cloud managed WebSockets (size the cluster to peak *open conversations*, not users). Self-hosted: one node tops out near 1,000 connections on `stream_select` — install `ext-uv`, raise `ulimit -n`/`minfds`; beyond one node set `REVERB_SCALING_ENABLED=true` with a shared Redis. Group calls/live video need an SFU (LiveKit) — mesh WebRTC stops at ~4 people.
-- **Known gap:** message/request images go to `public/uploads/` on local disk, which is ephemeral on Laravel Cloud. Move to object storage before relying on attachments in production.
 
 ### Notifications
 
@@ -119,6 +118,16 @@ public/
 ### Returns / RMA
 
 - 30-day return window from paid orders. Customer files via Account → Returns tab; admin reviews at `/admin/returns` with a side-drawer decision form. Full refund flips the source order to `refunded`.
+
+## Files and uploads
+
+**Never write a file next to the code** (`public_path()`, `->move()`, `->store(…, 'public')`, `Storage::disk('public')`). Laravel Cloud rebuilds the app's disk on every deploy, so those files vanish. Everything goes through [Media](app/Services/Media.php):
+
+- `Media::upload($file, 'dir')`, `Media::put('dir', 'ext', $bytes)`, `Media::putRender('dir', $aiResult)` → each returns **the URL to save**. Callers hand that URL back for everything else: `Media::delete($url)`, `Media::exists($url)`, `Media::asReference($url)` (for Nano Banana), `Media::isUnder($url, 'ai/affiliate-hero/'.$id)` (ownership of a folder).
+- Where files live is one setting, `MEDIA_DISK` ([config/media.php](config/media.php)): `public` locally, the Laravel Cloud bucket's disk name (`media`) in production. The bucket is Cloudflare R2, **must be created PUBLIC**, and **never pass a visibility flag** when writing — R2 rejects it (`NotImplemented`).
+- Local URLs are saved host-less (`/storage/products/x.jpg`), bucket URLs absolute. `Media::key($url)` understands every shape ever saved and returns **null for anything that isn't ours** (other hosts, `..`, odd characters) — endpoints that accept a URL from the browser rely on that.
+- Stored extensions come from an allow-list keyed on the file's **bytes** (`Media::EXTENSIONS`); unknown types become `.bin`. Don't use `guessExtension()` or the client filename — a `.php`-named image came back as `php`.
+- Old links keep working after the move: [MediaController](app/Http/Controllers/MediaController.php) 302-redirects `/storage/*`, `/ai/*`, `/uploads/*` to the bucket when no local file exists. `php artisan media:check` proves a bucket end to end; `php artisan media:push` copies pre-existing local files into it (idempotent, never deletes).
 
 ## Mobile standards
 

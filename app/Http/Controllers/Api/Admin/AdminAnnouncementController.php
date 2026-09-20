@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use Illuminate\Http\Request;
@@ -43,8 +44,7 @@ class AdminAnnouncementController extends Controller
         ]);
         // If they uploaded a file, replace media_url with the stored URL.
         if ($request->hasFile('media_file')) {
-            $path = $request->file('media_file')->store('announcements', 'public');
-            $data['media_url'] = Storage::url($path);
+            $data['media_url'] = Media::upload($request->file('media_file'), 'announcements');
         }
         $a = Announcement::create([
             'id'         => 'ann_' . Str::random(16),
@@ -85,8 +85,7 @@ class AdminAnnouncementController extends Controller
             'ends_at'     => ['sometimes', 'nullable', 'date'],
         ]);
         if ($request->hasFile('media_file')) {
-            $path = $request->file('media_file')->store('announcements', 'public');
-            $data['media_url'] = Storage::url($path);
+            $data['media_url'] = Media::upload($request->file('media_file'), 'announcements');
         }
         $a->update($data);
         return ['announcement' => $this->shape($a->fresh())];

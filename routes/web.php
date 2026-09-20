@@ -28,11 +28,21 @@ Route::get('/admin/{any?}', fn () => view('admin'))
 | Twitter crawlers see product titles, descriptions, images, and
 | JSON-LD without running JS. The SPA still does the page itself.
 |
-| The negative lookahead keeps /admin, /api and /storage from leaking in
-| here — a missing /storage file should 404, not render the SPA (which
-| makes broken images look like "successful" HTML responses).
+| The negative lookahead keeps /admin, /api and the media folders (/storage,
+| /ai/, /uploads/) from leaking in here — a missing image should 404, not
+| render the SPA (which makes broken images look like "successful" HTML).
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| Media saved before files moved to object storage. Reached only when the
+| web server found no real file at that path — see MediaController.
+|--------------------------------------------------------------------------
+*/
+Route::get('/{root}/{path}', [\App\Http\Controllers\MediaController::class, 'legacy'])
+    ->where(['root' => 'storage|ai|uploads', 'path' => '.*'])
+    ->name('media.legacy');
+
 Route::get('/{any?}', [SeoController::class, 'spa'])
-    ->where('any', '^(?!admin|api|storage|sitemap\.xml).*$')
+    ->where('any', '^(?!admin|api|storage|ai/|uploads/|sitemap\.xml).*$')
     ->name('store');

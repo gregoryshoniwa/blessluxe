@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Affiliate;
 use App\Models\Product;
@@ -325,9 +326,7 @@ class AffiliateStorefrontController extends Controller
 
         $paths = [];
         foreach ($request->file('images', []) as $file) {
-            $name = 'req_' . Str::random(18) . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('uploads/affiliate-requests'), $name);
-            $paths[] = '/uploads/affiliate-requests/' . $name;
+            $paths[] = Media::upload($file, 'uploads/affiliate-requests');
         }
 
         $id = 'apr_' . Str::random(16);

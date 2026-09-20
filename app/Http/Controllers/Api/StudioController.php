@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerProduct;
 use App\Models\Logo;
@@ -175,9 +176,7 @@ class StudioController extends Controller
 
         $item = StudioItem::where('customer_id', $customer->id)->findOrFail($id);
         foreach ([$item->image_url, $item->video_url] as $url) {
-            if ($url && str_starts_with($url, '/ai/studio/')) {
-                @unlink(public_path(ltrim($url, '/')));
-            }
+            Media::delete($url);
         }
         $item->delete();
         return ['ok' => true];
@@ -218,12 +217,9 @@ class StudioController extends Controller
             'items'      => $items,
         ])->setPaper('a4');
 
-        $filename = 'ai/studio/proposals/' . Str::uuid() . '.pdf';
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        $pdf->save($abs);
-
-        return ['url' => '/' . $filename];
+        // Rendered in memory and sent to the media disk — nothing is written
+        // next to the code, where a deploy would erase it.
+        return ['url' => Media::put('ai/studio/proposals', 'pdf', $pdf->output())];
     }
 
     // ─── Prompts ────────────────────────────────────────────────────────
@@ -330,22 +326,13 @@ class StudioController extends Controller
             str_contains($mime, 'jpeg') => 'jpg',
             default                     => 'png',
         };
-        $filename = 'ai/studio/' . Str::uuid() . '.' . $ext;
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, $bytes);
-        return '/' . $filename;
+
+        return Media::put('ai/studio', $ext, $bytes);
     }
 
     private function refFromPublicUrl(?string $url): ?array
     {
-        if (! $url) return null;
-        $abs = public_path(ltrim($url, '/'));
-        if (! is_file($abs)) return null;
-        return [
-            'mime'   => mime_content_type($abs) ?: 'image/png',
-            'base64' => base64_encode(file_get_contents($abs)),
-        ];
+        return Media::asReference($url);
     }
 
     private function shape(StudioItem $i): array

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Media;
 use App\Events\AffiliateMessageSent;
 use App\Events\AffiliateMessagesRead;
 use Illuminate\Support\Carbon;
@@ -313,15 +314,11 @@ class Messages
      */
     public static function storeImages(array $files): array
     {
+        // Naming (random, extension from the file's real bytes) and location
+        // are Media's job — see App\Services\Media.
         $paths = [];
         foreach ($files as $file) {
-            // Extension from the DETECTED type, never the client's filename —
-            // "photo.php" with an image mime must not land as a .php file in a
-            // web-served directory.
-            $ext = $file->guessExtension() ?: 'jpg';
-            $name = 'msg_' . Str::random(18) . '.' . $ext;
-            $file->move(public_path('uploads/affiliate-messages'), $name);
-            $paths[] = '/uploads/affiliate-messages/' . $name;
+            $paths[] = Media::upload($file, 'uploads/affiliate-messages');
         }
 
         return $paths;

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Media;
 use App\Http\Controllers\Controller;
 use App\Models\Avatar;
 use App\Models\Generation;
@@ -159,9 +160,7 @@ class GenerationController extends Controller
 
         $g = Generation::where('customer_id', $customer->id)->findOrFail($id);
         foreach ([$g->image_url, $g->video_url] as $url) {
-            if ($url && str_starts_with($url, '/ai/generations/')) {
-                @unlink(public_path(ltrim($url, '/')));
-            }
+            Media::delete($url);
         }
         $g->delete();
         return ['ok' => true];
@@ -242,32 +241,28 @@ class GenerationController extends Controller
             str_contains($mime, 'jpeg') => 'jpg',
             default                     => 'png',
         };
-        $filename = 'ai/generations/' . Str::uuid() . '.' . $ext;
-        $abs = public_path($filename);
-        if (! is_dir(dirname($abs))) mkdir(dirname($abs), 0775, true);
-        file_put_contents($abs, $bytes);
-        return '/' . $filename;
+
+        return Media::put('ai/generations', $ext, $bytes);
     }
 
     /** base64 ref from a local public URL (/ai/..., /storage/..., /uploads/...). */
     private function refFromLocalUrl(?string $url): ?array
     {
         if (! $url) return null;
-        if (Str::startsWith($url, ['http://', 'https://'])) {
-            try {
-                $res = Http::timeout(20)->get($url);
-                if (! $res->ok()) return null;
-                return ['mime' => $res->header('Content-Type') ?: 'image/jpeg', 'base64' => base64_encode($res->body())];
-            } catch (\Throwable) {
-                return null;
-            }
+
+        // One of our own files first — on a bucket those are https:// URLs too,
+        // and reading them off the disk is faster and doesn't leave the server.
+        if ($ours = Media::asReference($url)) return $ours;
+
+        // Otherwise an external product image (the catalogue allows those).
+        if (! Str::startsWith($url, ['http://', 'https://'])) return null;
+        try {
+            $res = Http::timeout(20)->get($url);
+            if (! $res->ok()) return null;
+            return ['mime' => $res->header('Content-Type') ?: 'image/jpeg', 'base64' => base64_encode($res->body())];
+        } catch (\Throwable) {
+            return null;
         }
-        $abs = public_path(ltrim($url, '/'));
-        if (! is_file($abs)) return null;
-        return [
-            'mime'   => mime_content_type($abs) ?: 'image/jpeg',
-            'base64' => base64_encode(file_get_contents($abs)),
-        ];
     }
 
     private function shape(Generation $g): array
