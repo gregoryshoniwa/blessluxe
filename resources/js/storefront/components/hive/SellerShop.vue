@@ -45,7 +45,7 @@ export default {
 
         <p v-if="!d.products.length" class="text-sm text-black/50 py-10 text-center">{{ mine ? "You haven't picked any pieces for your shop yet." : 'Nothing in the shop just now.' }}</p>
         <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <button v-for="p in d.products" :key="p.id" @click="open(p)" class="text-left bg-white border border-black/8 rounded-2xl overflow-hidden hover:border-gold transition-colors">
+            <button v-for="p in d.products" :key="p.id" @click="open(p)" class="text-left bg-white border border-black/8 overflow-hidden hover:border-gold transition-colors">
                 <span class="relative block aspect-[4/5] bg-cream-dark">
                     <img v-if="p.thumbnail" :src="p.thumbnail" :alt="p.title" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                     <ImageOff v-else class="absolute inset-0 m-auto w-5 h-5 text-black/20" />
@@ -58,7 +58,7 @@ export default {
             </button>
         </div>
 
-        <button @click="fullShop" class="mt-5 w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gold text-white px-8 py-3.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark">
+        <button @click="fullShop" class="mt-5 w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark">
             <ShoppingBag class="w-4 h-4" /> {{ d.curated ? 'Visit the full shop' : 'Shop everything with ' + (mine ? 'you' : name) }}
         </button>
         <router-link v-if="mine" :to="`/affiliate/${d.code}/dashboard`" class="block sm:inline-block sm:ml-4 mt-3 sm:mt-0 text-center text-xs text-gold-dark underline underline-offset-4">Manage your shop</router-link>
@@ -66,7 +66,7 @@ export default {
         <section v-if="d.buyer_tryons.length" class="mt-10">
             <h3 class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3">From {{ mine ? 'your' : 'their' }} buyers</h3>
             <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-3 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 sm:mx-0 sm:px-0">
-                <router-link v-for="l in d.buyer_tryons" :key="l.id" :to="`/@${l.author.handle}?look=${l.id}`" class="w-40 flex-shrink-0 bg-white border border-black/8 rounded-2xl overflow-hidden hover:border-gold">
+                <router-link v-for="l in d.buyer_tryons" :key="l.id" :to="`/@${l.author.handle}?look=${l.id}`" class="w-40 flex-shrink-0 bg-white border border-black/8 overflow-hidden hover:border-gold">
                     <span class="block aspect-[4/5] bg-cream-dark"><img v-if="l.images[0]" :src="l.images[0]" alt="" loading="lazy" class="w-full h-full object-cover" /></span>
                     <span class="block p-2.5">
                         <span class="flex items-center gap-1 text-[11px] text-green-700"><BadgeCheck class="w-3.5 h-3.5" /> Bought it</span>

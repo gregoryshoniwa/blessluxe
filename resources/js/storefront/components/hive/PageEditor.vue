@@ -79,7 +79,7 @@ export default {
 <template>
     <div class="fixed inset-0 z-[90] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Edit your page">
         <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-        <form @submit.prevent="save" class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[92dvh] flex flex-col shadow-2xl">
+        <form @submit.prevent="save" class="relative bg-white w-full sm:max-w-md max-h-[92dvh] flex flex-col shadow-2xl">
             <header class="flex items-center justify-between px-5 py-3.5 border-b border-black/8 flex-shrink-0">
                 <h2 class="font-display text-lg tracking-widest uppercase">Your page</h2>
                 <button type="button" @click="$emit('close')" class="w-11 h-11 -mr-3 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="Close"><X class="w-5 h-5" /></button>
@@ -87,7 +87,7 @@ export default {
 
             <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-4">
                 <label class="flex items-center gap-4 cursor-pointer">
-                    <span class="relative w-20 h-20 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center border border-gold/25 flex-shrink-0">
+                    <span class="rounded-full relative w-20 h-20 overflow-hidden bg-cream-dark flex items-center justify-center border border-gold/25 flex-shrink-0">
                         <img v-if="avatarUrl" :src="avatarUrl" alt="" class="w-full h-full object-cover" />
                         <UserRound v-else class="w-8 h-8 text-black/25" />
                         <span class="absolute inset-x-0 bottom-0 bg-black/55 text-white flex justify-center py-1"><Camera class="w-3.5 h-3.5" /></span>
@@ -99,13 +99,13 @@ export default {
 
                 <label class="block">
                     <span class="block text-xs text-black/60 mb-1">Name</span>
-                    <input v-model.trim="form.display_name" maxlength="60" required class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                    <input v-model.trim="form.display_name" maxlength="60" required class="w-full border border-black/12 g px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
                     <span v-if="errors.display_name" class="block text-[11px] text-red-600 mt-1">{{ errors.display_name[0] }}</span>
                 </label>
 
                 <label class="block">
                     <span class="block text-xs text-black/60 mb-1">Your link</span>
-                    <span class="flex items-center border border-black/12 rounded-lg focus-within:border-gold overflow-hidden">
+                    <span class="flex items-center border border-black/12 g focus-within:border-gold overflow-hidden">
                         <span class="pl-3 text-sm text-black/40 whitespace-nowrap">blessluxe.com/@</span>
                         <input v-model.trim="form.handle" maxlength="30" autocapitalize="none" autocomplete="off" spellcheck="false" class="flex-1 min-w-0 px-1 py-2.5 text-sm focus:outline-none" />
                         <LoaderCircle v-if="handleState === 'checking'" class="w-4 h-4 mr-3 animate-spin text-black/30" />
@@ -117,12 +117,12 @@ export default {
 
                 <label class="block">
                     <span class="block text-xs text-black/60 mb-1">City</span>
-                    <input v-model.trim="form.city" maxlength="60" placeholder="Harare" class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                    <input v-model.trim="form.city" maxlength="60" placeholder="Harare" class="w-full border border-black/12 g px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
                 </label>
 
                 <label class="block">
                     <span class="block text-xs text-black/60 mb-1">Bio</span>
-                    <textarea v-model="form.bio" rows="3" maxlength="200" placeholder="Your style in a line or two" class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-gold resize-none"></textarea>
+                    <textarea v-model="form.bio" rows="3" maxlength="200" placeholder="Your style in a line or two" class="w-full border border-black/12 g px-3 py-2.5 text-sm focus:outline-none focus:border-gold resize-none"></textarea>
                     <span class="block text-right text-[10px] text-black/35">{{ form.bio.length }}/200</span>
                 </label>
 

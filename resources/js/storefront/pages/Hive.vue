@@ -144,27 +144,27 @@ export default {
             <!-- Sticks under the phone top bar, so switching never needs a scroll to the top. -->
             <div class="sticky top-0 z-30 bg-cream px-4 sm:px-0 pt-3 pb-2.5 border-b border-black/5 sm:border-0">
                 <div class="flex items-center gap-2">
-                <div class="flex p-1 rounded-full bg-black/5 flex-1 min-w-0">
+                <div class="flex p-1 bg-black/5 flex-1 min-w-0">
                     <button
                         v-for="s in [{ k: 'everyone', l: 'For you' }, { k: 'following', l: 'Following' }]"
                         :key="s.k"
                         @click="pickScope(s.k)"
-                        :class="['flex-1 py-2 rounded-full text-xs tracking-widest uppercase transition-colors', scope === s.k ? 'bg-white shadow-sm text-black' : 'text-black/50']"
+                        :class="['flex-1 py-2 text-xs tracking-widest uppercase transition-colors', scope === s.k ? 'bg-white shadow-sm text-black' : 'text-black/50']"
                     >
                         {{ s.l }}
                     </button>
                 </div>
-                <router-link to="/hive/discover" class="lg:hidden w-11 h-11 rounded-full bg-white border border-black/10 inline-flex items-center justify-center flex-shrink-0" aria-label="Search people and occasions">
+                <router-link to="/hive/discover" class="lg:hidden w-11 h-11 bg-white border border-black/10 inline-flex items-center justify-center flex-shrink-0" aria-label="Search people and occasions">
                     <Search class="w-[18px] h-[18px]" />
                 </router-link>
                 </div>
                 <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-1.5 overflow-x-auto [scrollbar-width:none] mt-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-                    <button @click="occasion = ''" :class="['px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap flex-shrink-0 transition-colors', !occasion ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">All</button>
+                    <button @click="occasion = ''" :class="['px-3.5 py-1.5 text-xs whitespace-nowrap flex-shrink-0 transition-colors', !occasion ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">All</button>
                     <button
                         v-for="o in occasions"
                         :key="o.key"
                         @click="occasion = occasion === o.key ? '' : o.key"
-                        :class="['px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap flex-shrink-0 transition-colors', occasion === o.key ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']"
+                        :class="['px-3.5 py-1.5 text-xs whitespace-nowrap flex-shrink-0 transition-colors', occasion === o.key ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']"
                     >
                         {{ o.label }}
                     </button>
@@ -179,8 +179,8 @@ export default {
                         <router-link to="/hive/live" class="text-[11px] text-gold-dark">See all</router-link>
                     </div>
                     <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-2.5 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 sm:mx-0 sm:px-0">
-                        <router-link v-for="l in lives" :key="l.id" :to="`/hive/live/${l.id}`" class="flex items-center gap-2.5 bg-white border border-black/8 rounded-full pl-1.5 pr-4 py-1.5 flex-shrink-0 max-w-[16rem]">
-                            <span :class="['w-9 h-9 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border-2', l.state === 'live' ? 'border-red-500' : 'border-gold/40']">
+                        <router-link v-for="l in lives" :key="l.id" :to="`/hive/live/${l.id}`" class="flex items-center gap-2.5 bg-white border border-black/8 pl-1.5 pr-4 py-1.5 flex-shrink-0 max-w-[16rem]">
+                            <span :class="['rounded-full w-9 h-9 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border-2', l.state === 'live' ? 'border-red-500' : 'border-gold/40']">
                                 <img v-if="l.host.avatar_url" :src="l.host.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" /><UserRound v-else class="w-4 h-4 text-black/30" />
                             </span>
                             <span class="min-w-0">
@@ -192,7 +192,7 @@ export default {
                 </div>
 
                 <!-- What's on this week -->
-                <router-link v-for="c in challenges" :key="c.id" :to="`/hive/challenge/${c.slug}`" class="flex items-center gap-3 mb-4 bg-black text-white rounded-2xl px-4 py-3.5">
+                <router-link v-for="c in challenges" :key="c.id" :to="`/hive/challenge/${c.slug}`" class="flex items-center gap-3 mb-4 bg-black text-white px-4 py-3.5">
                     <Trophy class="w-5 h-5 text-gold flex-shrink-0" />
                     <span class="min-w-0 flex-1">
                         <span class="block text-sm font-medium truncate">{{ c.title }} <span class="text-gold">{{ c.tag }}</span></span>
@@ -206,7 +206,7 @@ export default {
                     <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Your fit twins</p>
                     <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-3 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 sm:mx-0 sm:px-0">
                         <router-link v-for="t in twins" :key="t.handle" :to="`/@${t.handle}`" class="flex-shrink-0 w-[4.5rem] text-center">
-                            <span class="block w-16 h-16 mx-auto rounded-full overflow-hidden bg-cream-dark border-2 border-gold/50 flex items-center justify-center">
+                            <span class="rounded-full block w-16 h-16 mx-auto overflow-hidden bg-cream-dark border-2 border-gold/50 flex items-center justify-center">
                                 <img v-if="t.avatar_url" :src="t.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                                 <UserRound v-else class="w-6 h-6 text-black/25" />
                             </span>
@@ -216,13 +216,13 @@ export default {
                     </div>
                 </div>
 
-                <router-link v-if="me && !twinsReady && !twins.length" :to="`/@${me.handle}?tab=fit`" class="xl:hidden flex items-center gap-3 mb-4 bg-white border border-gold/40 rounded-2xl px-4 py-3.5">
+                <router-link v-if="me && !twinsReady && !twins.length" :to="`/@${me.handle}?tab=fit`" class="xl:hidden flex items-center gap-3 mb-4 bg-white border border-gold/40 px-4 py-3.5">
                     <Ruler class="w-5 h-5 text-gold-dark flex-shrink-0" />
                     <span class="text-xs leading-relaxed"><span class="block font-medium text-sm">Find your fit twins</span>Add your measurements to see how pieces fit people built like you.</span>
                 </router-link>
 
                 <div v-if="loading" class="space-y-4">
-                    <div v-for="n in 2" :key="n" class="rounded-2xl border border-black/8 overflow-hidden animate-pulse bg-white">
+                    <div v-for="n in 2" :key="n" class="border border-black/8 overflow-hidden animate-pulse bg-white">
                         <div class="h-14"></div>
                         <div class="aspect-[4/5] bg-cream-dark"></div>
                     </div>
@@ -230,14 +230,14 @@ export default {
 
                 <div v-else-if="failed && !looks.length" class="text-center py-20 px-4">
                     <p class="text-black/60 mb-4">We couldn't load the Hive. Check your connection.</p>
-                    <button @click="load(true)" class="px-8 py-3 text-xs tracking-[0.25em] uppercase border border-black/20 hover:bg-white rounded-full">Try again</button>
+                    <button @click="load(true)" class="px-8 py-3 text-xs tracking-[0.25em] uppercase border border-black/20 hover:bg-white">Try again</button>
                 </div>
 
                 <div v-else-if="!looks.length" class="text-center py-20 px-6">
                     <Sparkles class="w-8 h-8 text-gold mx-auto mb-3" />
                     <p class="text-black/60 mb-6 max-w-xs mx-auto">{{ emptyText }}</p>
-                    <button v-if="scope === 'everyone'" @click="compose" class="bg-gold text-white px-8 py-3.5 rounded-full text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Share a look</button>
-                    <router-link v-else to="/hive/discover" class="inline-block px-8 py-3.5 rounded-full text-xs tracking-[0.25em] uppercase border border-black/20 hover:bg-white">Find people</router-link>
+                    <button v-if="scope === 'everyone'" @click="compose" class="bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Share a look</button>
+                    <router-link v-else to="/hive/discover" class="inline-block px-8 py-3.5 text-xs tracking-[0.25em] uppercase border border-black/20 hover:bg-white">Find people</router-link>
                 </div>
 
                 <div v-else class="space-y-4">
@@ -252,16 +252,16 @@ export default {
 
         <!-- ─── Right rail (wide screens) ───────────────────────────── -->
         <aside class="hidden xl:block sticky top-6 space-y-5 pt-6">
-            <div v-if="!me" class="bg-white border border-black/8 rounded-2xl p-5 text-center">
+            <div v-if="!me" class="bg-white border border-black/8 p-5 text-center">
                 <p class="text-sm text-black/65 mb-4">Everyone with a BLESSLUXE account has a page. Sign in to claim yours.</p>
-                <router-link :to="{ path: '/account/login', query: { next: '/hive' } }" class="block bg-gold text-white py-3 rounded-full text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Sign in</router-link>
+                <router-link :to="{ path: '/account/login', query: { next: '/hive' } }" class="block bg-gold text-white py-3 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Sign in</router-link>
             </div>
 
-            <div v-if="me" class="bg-white border border-black/8 rounded-2xl p-5">
+            <div v-if="me" class="bg-white border border-black/8 p-5">
                 <p class="flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3"><Ruler class="w-3.5 h-3.5" /> Your fit twins</p>
                 <div v-if="twins.length" class="space-y-3">
                     <router-link v-for="t in twins.slice(0, 6)" :key="t.handle" :to="`/@${t.handle}`" class="flex items-center gap-3 group">
-                        <span class="w-10 h-10 rounded-full overflow-hidden bg-cream-dark border border-gold/30 flex items-center justify-center flex-shrink-0">
+                        <span class="rounded-full w-10 h-10 overflow-hidden bg-cream-dark border border-gold/30 flex items-center justify-center flex-shrink-0">
                             <img v-if="t.avatar_url" :src="t.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                             <UserRound v-else class="w-4 h-4 text-black/25" />
                         </span>
@@ -280,11 +280,11 @@ export default {
                 </div>
             </div>
 
-            <div v-if="suggested.length" class="bg-white border border-black/8 rounded-2xl p-5">
+            <div v-if="suggested.length" class="bg-white border border-black/8 p-5">
                 <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3">People to follow</p>
                 <div class="space-y-3">
                     <router-link v-for="p in suggested" :key="p.handle" :to="`/@${p.handle}`" class="flex items-center gap-3 group">
-                        <span class="w-10 h-10 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                        <span class="rounded-full w-10 h-10 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                             <img v-if="p.avatar_url" :src="p.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                             <UserRound v-else class="w-4 h-4 text-black/25" />
                         </span>

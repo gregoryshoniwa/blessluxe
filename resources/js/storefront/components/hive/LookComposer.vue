@@ -231,7 +231,7 @@ export default {
     <div class="fixed inset-0 z-[90] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Share a look">
         <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
 
-        <div class="relative bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92dvh] flex flex-col shadow-2xl">
+        <div class="relative bg-white w-full sm:max-w-lg max-h-[92dvh] flex flex-col shadow-2xl">
             <header class="flex items-center justify-between px-5 py-3.5 border-b border-black/8 flex-shrink-0">
                 <h2 class="font-display text-lg tracking-widest uppercase">Share a look</h2>
                 <button @click="$emit('close')" class="w-11 h-11 -mr-3 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="Close">
@@ -243,17 +243,17 @@ export default {
                 <!-- Photos, or one short clip -->
                 <div>
                     <!-- A clip: its cover, how long, and what it will cost a viewer to play. -->
-                    <div v-if="clip" class="relative w-40 mx-auto aspect-[4/5] rounded-xl overflow-hidden bg-black">
+                    <div v-if="clip" class="relative w-40 mx-auto aspect-[4/5] overflow-hidden bg-black">
                         <img :src="clip.posterUrl" alt="" class="w-full h-full object-cover opacity-90" />
-                        <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-black/55 text-white flex items-center justify-center"><Play class="w-5 h-5 fill-white" /></span>
-                        <span class="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px]">{{ clipLabel }}</span>
-                        <button @click="removeClip" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove video"><X class="w-3.5 h-3.5" /></button>
+                        <span class="rounded-full absolute inset-0 m-auto w-12 h-12 bg-black/55 text-white flex items-center justify-center"><Play class="w-5 h-5 fill-white" /></span>
+                        <span class="absolute bottom-1.5 left-1.5 px-2 py-0.5 bg-black/70 text-white text-[10px]">{{ clipLabel }}</span>
+                        <button @click="removeClip" class="rounded-full absolute top-1 right-1 w-7 h-7 bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove video"><X class="w-3.5 h-3.5" /></button>
                     </div>
 
                     <!-- A post from another platform -->
                     <template v-else-if="embed">
-                    <div class="flex items-center gap-3 rounded-xl border border-black/10 bg-cream/60 p-3.5">
-                        <span class="w-11 h-11 rounded-full bg-black text-white flex items-center justify-center flex-shrink-0"><Play class="w-4 h-4 fill-white" /></span>
+                    <div class="flex items-center gap-3 border border-black/10 bg-cream/60 p-3.5">
+                        <span class="rounded-full w-11 h-11 bg-black text-white flex items-center justify-center flex-shrink-0"><Play class="w-4 h-4 fill-white" /></span>
                         <span class="min-w-0 flex-1">
                             <span class="block text-sm font-medium">{{ embed.label }} post</span>
                             <a :href="embed.source" target="_blank" rel="noopener" class="flex items-center gap-1 text-[11px] text-black/50 truncate hover:text-gold-dark"><span class="truncate">{{ embed.source }}</span> <ExternalLink class="w-3 h-3 flex-shrink-0" /></a>
@@ -270,7 +270,7 @@ export default {
                                 type="button"
                                 @click="embed.shape = sh.key"
                                 :aria-pressed="embed.shape === sh.key"
-                                :class="['rounded-xl border py-2.5 px-1 flex flex-col items-center gap-1 transition-colors', embed.shape === sh.key ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/55 hover:border-black/25']"
+                                :class="['border py-2.5 px-1 flex flex-col items-center gap-1 transition-colors', embed.shape === sh.key ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/55 hover:border-black/25']"
                             >
                                 <component :is="sh.icon" :class="['w-5 h-5', embed.shape === sh.key ? 'text-gold-dark' : '']" />
                                 <span class="text-xs font-medium leading-tight">{{ sh.label }}</span>
@@ -280,29 +280,29 @@ export default {
                     </div>
                     </template>
 
-                    <div v-else-if="clipProgress !== null" class="rounded-xl border border-gold/40 bg-cream/60 p-4 text-center">
+                    <div v-else-if="clipProgress !== null" class="border border-gold/40 bg-cream/60 p-4 text-center">
                         <p class="text-sm font-medium">Shrinking your video… {{ Math.round(clipProgress * 100) }}%</p>
-                        <div class="h-1.5 rounded-full bg-black/10 overflow-hidden mt-2.5"><div class="h-full bg-gold rounded-full transition-all" :style="{ width: (clipProgress * 100) + '%' }"></div></div>
+                        <div class="h-1.5 bg-black/10 overflow-hidden mt-2.5"><div class="h-full bg-gold transition-all" :style="{ width: (clipProgress * 100) + '%' }"></div></div>
                         <p class="text-[11px] text-black/50 mt-2">This takes about as long as the clip. Keep this screen open.</p>
                     </div>
 
                     <template v-else>
                         <!-- Nothing chosen yet: three equal doors, at every width. -->
                         <div v-if="photos.length === 0" class="grid grid-cols-3 gap-2.5">
-                            <label class="rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                            <label class="border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
                                 <LoaderCircle v-if="preparing" class="w-6 h-6 animate-spin" />
                                 <ImagePlus v-else class="w-6 h-6" />
                                 <span class="text-xs tracking-wide leading-tight">{{ preparing ? 'Preparing…' : 'Photos' }}</span>
                                 <span class="text-[10px] text-black/40 leading-tight">up to {{ MAX_IMAGES }}</span>
                                 <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
                             </label>
-                            <label class="rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                            <label class="border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
                                 <Video class="w-6 h-6" />
                                 <span class="text-xs tracking-wide leading-tight">Video</span>
                                 <span class="text-[10px] text-black/40 leading-tight">up to {{ videoRules.max_seconds }}s</span>
                                 <input type="file" accept="video/mp4,video/quicktime,video/webm" class="sr-only" @change="addClip" />
                             </label>
-                            <button type="button" @click="linking = !linking; linkError = null" :class="['rounded-xl border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors', linking ? 'bg-cream border-gold' : '']">
+                            <button type="button" @click="linking = !linking; linkError = null" :class="['border-2 border-dashed border-gold/40 aspect-square flex flex-col items-center justify-center gap-1.5 px-1 text-center text-gold-dark cursor-pointer hover:bg-cream transition-colors', linking ? 'bg-cream border-gold' : '']">
                                 <Link2 class="w-6 h-6" />
                                 <span class="text-xs tracking-wide leading-tight">Link</span>
                                 <span class="text-[10px] text-black/40 leading-tight">post or picture</span>
@@ -311,18 +311,18 @@ export default {
 
                         <!-- Photos chosen: thumbnails, then same-sized tiles to add more. -->
                         <div v-else class="grid grid-cols-4 gap-2">
-                            <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] rounded-lg overflow-hidden bg-cream-dark">
+                            <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] g overflow-hidden bg-cream-dark">
                                 <img :src="p.url" alt="" class="w-full h-full object-cover" />
-                                <button @click="removePhoto(i)" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
+                                <button @click="removePhoto(i)" class="rounded-full absolute top-1 right-1 w-7 h-7 bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
                                     <X class="w-3.5 h-3.5" />
                                 </button>
                             </div>
                             <template v-if="photos.length < MAX_IMAGES">
-                                <label class="aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark cursor-pointer hover:bg-cream transition-colors" aria-label="Add photos">
+                                <label class="aspect-[4/5] g border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark cursor-pointer hover:bg-cream transition-colors" aria-label="Add photos">
                                     <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" /><ImagePlus v-else class="w-6 h-6" />
                                     <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
                                 </label>
-                                <button type="button" @click="linking = !linking; linkError = null" class="aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark hover:bg-cream transition-colors" aria-label="Add a picture from a link">
+                                <button type="button" @click="linking = !linking; linkError = null" class="aspect-[4/5] g border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark hover:bg-cream transition-colors" aria-label="Add a picture from a link">
                                     <Link2 class="w-6 h-6" />
                                 </button>
                             </template>
@@ -330,8 +330,8 @@ export default {
 
                         <form v-if="linking" @submit.prevent="addLink" class="mt-3">
                             <div class="flex gap-2">
-                                <input v-model="linkUrl" type="url" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="Paste a link — https://…" class="flex-1 min-w-0 border border-black/12 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:border-gold" />
-                                <button type="submit" :disabled="!linkUrl.trim() || linkBusy" class="px-5 rounded-full bg-gold text-white text-xs font-semibold tracking-widest uppercase disabled:opacity-40 inline-flex items-center gap-1.5 flex-shrink-0">
+                                <input v-model="linkUrl" type="url" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="Paste a link — https://…" class="flex-1 min-w-0 border border-black/12 px-4 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                                <button type="submit" :disabled="!linkUrl.trim() || linkBusy" class="px-5 bg-gold text-white text-xs font-semibold tracking-widest uppercase disabled:opacity-40 inline-flex items-center gap-1.5 flex-shrink-0">
                                     <LoaderCircle v-if="linkBusy" class="w-3.5 h-3.5 animate-spin" /> Add
                                 </button>
                             </div>
@@ -345,7 +345,7 @@ export default {
                 </div>
 
                 <!-- Try-on -->
-                <div v-if="lines.length" class="rounded-2xl border border-gold/40 bg-cream/60 p-3.5">
+                <div v-if="lines.length" class="border border-gold/40 bg-cream/60 p-3.5">
                     <p class="flex items-center gap-2 text-sm font-medium"><ShoppingBag class="w-4 h-4 text-gold-dark" /> Wearing something you bought?</p>
                     <p class="text-xs text-black/55 mt-0.5 mb-3">Show how it really fits. Each piece earns you {{ reward }} Bees, and helps the next person pick a size.</p>
                     <div class="scroll-strip scroll-px-1 flex gap-2 overflow-x-auto [scrollbar-width:none]">
@@ -354,9 +354,9 @@ export default {
                             :key="l.line_item_id"
                             type="button"
                             @click="pickLine(l)"
-                            :class="['flex items-center gap-2.5 p-1.5 pr-3 rounded-xl border bg-white flex-shrink-0 w-[12.5rem] text-left transition-colors', line?.line_item_id === l.line_item_id ? 'border-gold ring-1 ring-gold' : 'border-black/10']"
+                            :class="['flex items-center gap-2.5 p-1.5 pr-3 border bg-white flex-shrink-0 w-[12.5rem] text-left transition-colors', line?.line_item_id === l.line_item_id ? 'border-gold ring-1 ring-gold' : 'border-black/10']"
                         >
-                            <span class="w-10 h-12 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                            <span class="w-10 h-12 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                                 <img v-if="l.thumbnail" :src="l.thumbnail" alt="" class="w-full h-full object-cover" />
                                 <ImageOff v-else class="w-4 h-4 text-black/25" />
                             </span>
@@ -371,13 +371,13 @@ export default {
                         <div>
                             <p class="text-xs text-black/60 mb-1.5">How does it fit?</p>
                             <div class="grid grid-cols-3 gap-1.5">
-                                <button v-for="f in fitChoices" :key="f.key" type="button" @click="fit = f.key" :class="['py-2.5 rounded-xl text-xs transition-colors', fit === f.key ? 'bg-gold text-white' : 'bg-white border border-black/10 text-black/70']">{{ f.label }}</button>
+                                <button v-for="f in fitChoices" :key="f.key" type="button" @click="fit = f.key" :class="['py-2.5 text-xs transition-colors', fit === f.key ? 'bg-gold text-white' : 'bg-white border border-black/10 text-black/70']">{{ f.label }}</button>
                             </div>
                         </div>
                         <div class="flex items-end gap-3">
                             <label class="flex-1 min-w-0">
                                 <span class="block text-xs text-black/60 mb-1">Size you took</span>
-                                <input v-model="sizeWorn" maxlength="24" placeholder="e.g. 14 / L" class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-gold" />
+                                <input v-model="sizeWorn" maxlength="24" placeholder="e.g. 14 / L" class="w-full border border-black/12 g px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-gold" />
                             </label>
                             <div class="flex-shrink-0">
                                 <span class="block text-xs text-black/60 mb-1">Rating</span>
@@ -398,7 +398,7 @@ export default {
                         rows="3"
                         maxlength="500"
                         placeholder="Where did you wear it? How does it fit — true to size?"
-                        class="w-full border border-black/12 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none"
+                        class="w-full border border-black/12 px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none"
                     ></textarea>
                     <p class="text-right text-[10px] text-black/35">{{ caption.length }}/500</p>
                 </div>
@@ -411,7 +411,7 @@ export default {
                             v-for="o in occasions"
                             :key="o.key"
                             @click="occasion = occasion === o.key ? '' : o.key"
-                            :class="['px-3 py-1.5 rounded-full text-xs transition-colors', occasion === o.key ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']"
+                            :class="['px-3 py-1.5 text-xs transition-colors', occasion === o.key ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']"
                         >
                             {{ o.label }}
                         </button>
@@ -427,7 +427,7 @@ export default {
                             :key="c.id"
                             type="button"
                             @click="challengeId = challengeId === c.id ? null : c.id"
-                            :class="['inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs transition-colors', challengeId === c.id ? 'bg-black text-white' : 'bg-black/5 text-black/70 hover:bg-black/10']"
+                            :class="['inline-flex items-center gap-1.5 px-3 py-2 text-xs transition-colors', challengeId === c.id ? 'bg-black text-white' : 'bg-black/5 text-black/70 hover:bg-black/10']"
                         >
                             <Trophy class="w-3.5 h-3.5" /> {{ c.tag }}<template v-if="c.prize_bees"> · {{ c.prize_bees }} Bees</template>
                         </button>
@@ -438,8 +438,8 @@ export default {
                 <div>
                     <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">What you're wearing</p>
                     <div v-if="refs.length" class="space-y-1.5 mb-2">
-                        <div v-for="(r, i) in refs" :key="`${r.type}:${r.id}`" class="flex items-center gap-3 p-1.5 pr-1 rounded-xl border border-black/8">
-                            <span class="w-9 h-11 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                        <div v-for="(r, i) in refs" :key="`${r.type}:${r.id}`" class="flex items-center gap-3 p-1.5 pr-1 border border-black/8">
+                            <span class="w-9 h-11 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                                 <img v-if="r.thumbnail" :src="r.thumbnail" alt="" class="w-full h-full object-cover" />
                                 <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                             </span>
@@ -452,7 +452,7 @@ export default {
                             </button>
                         </div>
                     </div>
-                    <button v-if="!picking && refs.length < 6" @click="picking = true" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-gold/50 text-gold-dark text-xs tracking-wide hover:bg-cream transition-colors">
+                    <button v-if="!picking && refs.length < 6" @click="picking = true" class="inline-flex items-center gap-2 px-4 py-2.5 border border-gold/50 text-gold-dark text-xs tracking-wide hover:bg-cream transition-colors">
                         <Tag class="w-3.5 h-3.5" /> Tag a BLESSLUXE piece
                     </button>
                     <MentionPicker
@@ -464,7 +464,7 @@ export default {
                     />
                 </div>
 
-                <p v-if="error" class="text-sm text-red-600 bg-red-50 rounded-xl px-3.5 py-2.5" role="alert">{{ error }}</p>
+                <p v-if="error" class="text-sm text-red-600 bg-red-50 px-3.5 py-2.5" role="alert">{{ error }}</p>
             </div>
 
             <footer class="px-5 py-3.5 border-t border-black/8 flex-shrink-0 pb-[max(0.875rem,env(safe-area-inset-bottom))]">

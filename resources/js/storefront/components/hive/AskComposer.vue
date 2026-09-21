@@ -53,7 +53,7 @@ export default {
 <template>
     <div class="fixed inset-0 z-[90] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Ask the Hive">
         <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-        <div class="relative bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92dvh] flex flex-col shadow-2xl">
+        <div class="relative bg-white w-full sm:max-w-lg max-h-[92dvh] flex flex-col shadow-2xl">
             <header class="flex items-center justify-between px-5 py-3.5 border-b border-black/8 flex-shrink-0">
                 <h2 class="font-display text-lg tracking-widest uppercase">Ask the Hive</h2>
                 <button @click="$emit('close')" class="w-11 h-11 -mr-3 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="Close"><X class="w-5 h-5" /></button>
@@ -61,19 +61,19 @@ export default {
 
             <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
                 <div>
-                    <textarea ref="q" v-model="question" rows="2" maxlength="200" placeholder="What do I wear to my cousin's roora in October?" class="w-full border border-black/12 rounded-xl px-3.5 py-3 text-base font-medium focus:outline-none focus:border-gold resize-none"></textarea>
-                    <textarea v-model="details" rows="3" maxlength="600" placeholder="Anything that helps — your budget, colours you love, what you already own…" class="w-full mt-2 border border-black/12 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none"></textarea>
+                    <textarea ref="q" v-model="question" rows="2" maxlength="200" placeholder="What do I wear to my cousin's roora in October?" class="w-full border border-black/12 px-3.5 py-3 text-base font-medium focus:outline-none focus:border-gold resize-none"></textarea>
+                    <textarea v-model="details" rows="3" maxlength="600" placeholder="Anything that helps — your budget, colours you love, what you already own…" class="w-full mt-2 border border-black/12 px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none"></textarea>
                 </div>
 
                 <div>
                     <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Photos · optional</p>
                     <div class="grid grid-cols-4 gap-2">
-                        <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] rounded-lg overflow-hidden bg-cream-dark">
+                        <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] g overflow-hidden bg-cream-dark">
                             <img :src="p.url" alt="" class="w-full h-full object-cover" />
-                            <span class="absolute top-1 left-1 w-6 h-6 rounded-full bg-white/90 text-[11px] font-semibold flex items-center justify-center">{{ 'ABCD'[i] }}</span>
-                            <button @click="removePhoto(i)" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo"><X class="w-3.5 h-3.5" /></button>
+                            <span class="rounded-full absolute top-1 left-1 w-6 h-6 bg-white/90 text-[11px] font-semibold flex items-center justify-center">{{ 'ABCD'[i] }}</span>
+                            <button @click="removePhoto(i)" class="rounded-full absolute top-1 right-1 w-7 h-7 bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo"><X class="w-3.5 h-3.5" /></button>
                         </div>
-                        <label v-if="photos.length < 4" class="aspect-[4/5] rounded-lg border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
+                        <label v-if="photos.length < 4" class="aspect-[4/5] g border-2 border-dashed border-gold/40 flex items-center justify-center text-gold-dark cursor-pointer hover:bg-cream transition-colors">
                             <LoaderCircle v-if="preparing" class="w-5 h-5 animate-spin" /><ImagePlus v-else class="w-6 h-6" />
                             <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="addPhotos" />
                         </label>
@@ -86,16 +86,16 @@ export default {
                 <div>
                     <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Occasion</p>
                     <div class="flex flex-wrap gap-1.5">
-                        <button v-for="o in occasions" :key="o" @click="occasion = occasion === o ? '' : o" :class="['px-3 py-1.5 rounded-full text-xs transition-colors', occasion === o ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']">{{ occasionLabel(o) }}</button>
+                        <button v-for="o in occasions" :key="o" @click="occasion = occasion === o ? '' : o" :class="['px-3 py-1.5 text-xs transition-colors', occasion === o ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']">{{ occasionLabel(o) }}</button>
                     </div>
                 </div>
 
-                <p v-if="reward" class="text-xs text-black/55 bg-cream rounded-xl px-3.5 py-3 leading-relaxed">When an answer helps, accept it — that person earns {{ reward }} Bees from BLESSLUXE. It costs you nothing.</p>
-                <p v-if="error" class="text-sm text-red-600 bg-red-50 rounded-xl px-3.5 py-2.5" role="alert">{{ error }}</p>
+                <p v-if="reward" class="text-xs text-black/55 bg-cream px-3.5 py-3 leading-relaxed">When an answer helps, accept it — that person earns {{ reward }} Bees from BLESSLUXE. It costs you nothing.</p>
+                <p v-if="error" class="text-sm text-red-600 bg-red-50 px-3.5 py-2.5" role="alert">{{ error }}</p>
             </div>
 
             <footer class="px-5 py-3.5 border-t border-black/8 flex-shrink-0 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-                <button @click="post" :disabled="!canPost" class="w-full bg-gold text-white py-3.5 rounded-full text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-40 inline-flex items-center justify-center gap-2">
+                <button @click="post" :disabled="!canPost" class="w-full bg-gold text-white py-3.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-40 inline-flex items-center justify-center gap-2">
                     <LoaderCircle v-if="sending" class="w-4 h-4 animate-spin" /> {{ sending ? 'Posting…' : 'Ask' }}
                 </button>
             </footer>

@@ -159,6 +159,10 @@ Plan, research and phase gates: [docs/bless-pages-plan.md](docs/bless-pages-plan
 - Stored extensions come from an allow-list keyed on the file's **bytes** (`Media::EXTENSIONS`); unknown types become `.bin`. Don't use `guessExtension()` or the client filename — a `.php`-named image came back as `php`.
 - Old links keep working after the move: [MediaController](app/Http/Controllers/MediaController.php) 302-redirects `/storage/*`, `/ai/*`, `/uploads/*` to the bucket when no local file exists. `php artisan media:check` proves a bucket end to end; `php artisan media:push` copies pre-existing local files into it (idempotent, never deletes).
 
+## Corners: the brand is SQUARE
+
+BLESSLUXE's storefront has square corners — buttons (`bg-gold text-white px-8 py-3 …` with no radius), cards, inputs, panels and modals. **Round corners are only for things that are genuinely circular:** avatars, icon-only buttons floating over media or in a corner (the LUXE launcher, the Hive's "+"), status dots, and count badges. Everything else, including bordered icon buttons sitting in a row of square controls, is square. Don't reach for `rounded-xl` / `rounded-2xl` / pill buttons — the Hive drifted into them once and had to be pulled back.
+
 ## Mobile standards
 
 Both SPAs must work from **320px** up (WCAG reflow); 360 and 390 are the common phones. Shared rules live in the "Mobile standards" block at the end of [app.css](resources/css/app.css) — extend those rather than patching pages one by one:

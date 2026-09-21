@@ -88,7 +88,7 @@ export default {
         <p v-if="loading && !ask" class="text-sm text-black/40 py-16 text-center">Loading…</p>
         <div v-else-if="notFound" class="text-center py-20">
             <p class="text-black/55 mb-6">This question is no longer here.</p>
-            <router-link to="/hive/ask" class="inline-block bg-gold text-white px-8 py-3.5 rounded-full text-xs font-semibold tracking-[0.25em] uppercase">See other questions</router-link>
+            <router-link to="/hive/ask" class="inline-block bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.25em] uppercase">See other questions</router-link>
         </div>
 
         <template v-else-if="ask">
@@ -97,10 +97,10 @@ export default {
             <h2 class="text-[10px] tracking-[0.2em] uppercase text-black/45 mt-6 mb-3">{{ answers.length ? `${answers.length} ${answers.length === 1 ? 'answer' : 'answers'}` : 'No answers yet' }}</h2>
 
             <ul class="space-y-3">
-                <li v-for="a in answers" :key="a.id" :class="['bg-white rounded-2xl border px-3.5 py-3', a.accepted ? 'border-green-500/60' : 'border-black/8']">
+                <li v-for="a in answers" :key="a.id" :class="['bg-white border px-3.5 py-3', a.accepted ? 'border-green-500/60' : 'border-black/8']">
                     <p v-if="a.accepted" class="inline-flex items-center gap-1.5 text-[10px] tracking-widest uppercase text-green-700 mb-2"><BadgeCheck class="w-4 h-4" /> Accepted answer<template v-if="a.bees"> · earned {{ a.bees }} Bees</template></p>
                     <div class="flex gap-2.5">
-                        <router-link :to="`/@${a.author.handle}`" class="w-8 h-8 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                        <router-link :to="`/@${a.author.handle}`" class="rounded-full w-8 h-8 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                             <img v-if="a.author.avatar_url" :src="a.author.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                             <UserRound v-else class="w-4 h-4 text-black/30" />
                         </router-link>
@@ -109,8 +109,8 @@ export default {
                             <p v-if="a.body" class="text-sm text-black/80 leading-relaxed mt-0.5 whitespace-pre-line break-words">{{ a.body }}</p>
 
                             <div v-if="a.refs.length" class="flex flex-col gap-1.5 mt-2">
-                                <router-link v-for="r in a.refs" :key="`${r.type}:${r.id}`" :to="refPath(r)" @click="openRef($event, a, r)" class="group flex items-center gap-3 p-1.5 pr-3 rounded-xl border border-black/8 hover:border-gold/60 transition-colors">
-                                    <span class="w-11 h-14 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                                <router-link v-for="r in a.refs" :key="`${r.type}:${r.id}`" :to="refPath(r)" @click="openRef($event, a, r)" class="group flex items-center gap-3 p-1.5 pr-3 border border-black/8 hover:border-gold/60 transition-colors">
+                                    <span class="w-11 h-14 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                                         <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
                                         <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                                     </span>
@@ -123,7 +123,7 @@ export default {
                             </div>
 
                             <div class="flex items-center gap-4 mt-2 text-[11px] text-black/40">
-                                <button v-if="a.can_accept" @click="accept(a)" :disabled="accepting === a.id" class="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                                <button v-if="a.can_accept" @click="accept(a)" :disabled="accepting === a.id" class="inline-flex items-center gap-1.5 h-9 px-4 bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                                     <LoaderCircle v-if="accepting === a.id" class="w-3.5 h-3.5 animate-spin" /><BadgeCheck v-else class="w-3.5 h-3.5" /> This helped
                                 </button>
                                 <button v-if="a.is_mine && !a.accepted" @click="removeAnswer(a)" class="hover:text-red-600 inline-flex items-center gap-1 py-2"><Trash2 class="w-3 h-3" /> Remove</button>
@@ -135,20 +135,20 @@ export default {
             </ul>
 
             <!-- Answer -->
-            <div v-if="!ask.is_mine" class="mt-5 bg-white border border-black/8 rounded-2xl p-3.5">
+            <div v-if="!ask.is_mine" class="mt-5 bg-white border border-black/8 p-3.5">
                 <p v-if="reward && !ask.solved" class="text-[11px] text-black/50 mb-2">If {{ ask.author.display_name }} accepts your answer you earn {{ reward }} Bees.</p>
-                <textarea v-model="draft" rows="2" maxlength="500" placeholder="Suggest something…" class="w-full bg-cream/60 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-gold resize-none"></textarea>
+                <textarea v-model="draft" rows="2" maxlength="500" placeholder="Suggest something…" class="w-full bg-cream/60 px-3.5 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-gold resize-none"></textarea>
                 <div v-if="refs.length" class="flex flex-wrap gap-1.5 mt-2">
-                    <span v-for="(r, i) in refs" :key="`${r.type}:${r.id}`" class="inline-flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-cream text-xs max-w-full">
+                    <span v-for="(r, i) in refs" :key="`${r.type}:${r.id}`" class="inline-flex items-center gap-1.5 pl-3 pr-1 py-1 bg-cream text-xs max-w-full">
                         <span class="truncate">{{ r.title }}</span>
                         <button @click="refs.splice(i, 1)" class="w-6 h-6 inline-flex items-center justify-center text-black/40 hover:text-black" aria-label="Remove"><X class="w-3 h-3" /></button>
                     </span>
                 </div>
                 <MentionPicker v-if="picking" class="mt-2" endpoint="/api/account/hive/mentions" :chosen="chosenKeys" @pick="pick" @close="picking = false" />
                 <div class="flex items-center justify-between mt-2">
-                    <button v-if="!picking" @click="openPicker" class="inline-flex items-center gap-2 h-10 px-3.5 rounded-full border border-gold/50 text-gold-dark text-xs hover:bg-cream"><Tag class="w-3.5 h-3.5" /> Tag a piece</button>
+                    <button v-if="!picking" @click="openPicker" class="inline-flex items-center gap-2 h-10 px-3.5 border border-gold/50 text-gold-dark text-xs hover:bg-cream"><Tag class="w-3.5 h-3.5" /> Tag a piece</button>
                     <span v-else></span>
-                    <button @click="send" :disabled="!canSend" class="inline-flex items-center gap-2 h-10 px-5 rounded-full bg-gold text-white text-xs font-semibold tracking-[0.15em] uppercase hover:bg-gold-dark disabled:opacity-40">
+                    <button @click="send" :disabled="!canSend" class="inline-flex items-center gap-2 h-10 px-5 bg-gold text-white text-xs font-semibold tracking-[0.15em] uppercase hover:bg-gold-dark disabled:opacity-40">
                         <LoaderCircle v-if="sending" class="w-4 h-4 animate-spin" /><SendHorizontal v-else class="w-4 h-4" /> Answer
                     </button>
                 </div>

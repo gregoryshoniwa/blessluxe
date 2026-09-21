@@ -32,12 +32,12 @@ export default {
         <div v-if="!items.length" class="text-center py-14">
             <Shirt class="w-8 h-8 text-gold mx-auto mb-3" />
             <p class="text-sm text-black/55 mb-6 max-w-xs mx-auto">Everything you buy from BLESSLUXE lands here, ready to show off.</p>
-            <router-link to="/shop" class="inline-block bg-gold text-white px-8 py-3.5 rounded-full text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Browse the shop</router-link>
+            <router-link to="/shop" class="inline-block bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Browse the shop</router-link>
         </div>
 
         <ul v-else class="space-y-2">
-            <li v-for="i in items" :key="i.line_item_id" class="flex items-center gap-3 bg-white border border-black/8 rounded-2xl p-2.5">
-                <component :is="i.product_handle ? 'router-link' : 'span'" :to="i.product_handle ? `/shop/${i.product_handle}` : null" class="w-14 h-[4.5rem] rounded-lg overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+            <li v-for="i in items" :key="i.line_item_id" class="flex items-center gap-3 bg-white border border-black/8 p-2.5">
+                <component :is="i.product_handle ? 'router-link' : 'span'" :to="i.product_handle ? `/shop/${i.product_handle}` : null" class="w-14 h-[4.5rem] g overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                     <img v-if="i.thumbnail" :src="i.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
                     <ImageOff v-else class="w-4 h-4 text-black/25" />
                 </component>
@@ -46,7 +46,7 @@ export default {
                     <p class="text-[11px] text-black/45 truncate">{{ i.variant ? i.variant + ' · ' : '' }}{{ when(i.bought_at) }}</p>
                 </div>
                 <router-link v-if="i.look_id" :to="{ query: { look: i.look_id } }" class="inline-flex items-center gap-1 text-[11px] text-green-700 flex-shrink-0 px-2 py-2"><BadgeCheck class="w-4 h-4" /> Try-on posted</router-link>
-                <button v-else @click="tryOn(i)" class="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-full border border-gold/50 text-gold-dark text-xs flex-shrink-0 hover:bg-cream">
+                <button v-else @click="tryOn(i)" class="inline-flex items-center gap-1.5 h-10 px-3.5 border border-gold/50 text-gold-dark text-xs flex-shrink-0 hover:bg-cream">
                     <Camera class="w-3.5 h-3.5" /> Try-on<template v-if="i.earns"> · +{{ i.earns }}</template>
                 </button>
             </li>

@@ -43,7 +43,7 @@ export default {
 <template>
     <div v-if="subject" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Report">
         <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-        <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
+        <div class="relative bg-white w-full sm:max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
             <div class="flex items-center justify-between mb-1">
                 <h2 class="font-display text-lg tracking-widest uppercase">Report</h2>
                 <button @click="$emit('close')" class="w-11 h-11 -mr-3 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="Close"><X class="w-5 h-5" /></button>
@@ -51,7 +51,7 @@ export default {
             <p class="text-xs text-black/50 mb-4">They won't know it was you.</p>
 
             <div class="space-y-1.5 mb-4">
-                <label v-for="r in REASONS" :key="r.key" :class="['flex items-start gap-3 px-3.5 py-3 rounded-xl border cursor-pointer transition-colors', reason === r.key ? 'border-gold bg-cream' : 'border-black/10']">
+                <label v-for="r in REASONS" :key="r.key" :class="['flex items-start gap-3 px-3.5 py-3 border cursor-pointer transition-colors', reason === r.key ? 'border-gold bg-cream' : 'border-black/10']">
                     <input v-model="reason" type="radio" :value="r.key" class="mt-0.5 w-4 h-4 accent-[var(--color-gold)] flex-shrink-0" />
                     <span class="text-sm">
                         {{ r.label }}
@@ -60,7 +60,7 @@ export default {
                 </label>
             </div>
 
-            <textarea v-model="note" rows="2" maxlength="300" placeholder="Anything we should know? (optional)" class="w-full border border-black/12 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none mb-4"></textarea>
+            <textarea v-model="note" rows="2" maxlength="300" placeholder="Anything we should know? (optional)" class="w-full border border-black/12 px-3.5 py-3 text-sm focus:outline-none focus:border-gold resize-none mb-4"></textarea>
 
             <button @click="send" :disabled="!reason || sending" class="w-full bg-black text-white py-3.5 text-xs font-semibold tracking-[0.3em] uppercase disabled:opacity-40 inline-flex items-center justify-center gap-2">
                 <LoaderCircle v-if="sending" class="w-4 h-4 animate-spin" /> Send report

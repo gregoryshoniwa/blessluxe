@@ -178,7 +178,7 @@ export default {
 <template>
     <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
         <div v-if="loading && !page" class="animate-pulse">
-            <div class="flex items-center gap-5 mb-8"><div class="w-24 h-24 rounded-full bg-cream-dark"></div><div class="flex-1 space-y-3"><div class="h-5 w-40 bg-cream-dark rounded"></div><div class="h-3 w-24 bg-cream-dark rounded"></div></div></div>
+            <div class="flex items-center gap-5 mb-8"><div class="rounded-full w-24 h-24 bg-cream-dark"></div><div class="flex-1 space-y-3"><div class="h-5 w-40 bg-cream-dark"></div><div class="h-3 w-24 bg-cream-dark"></div></div></div>
             <div class="grid grid-cols-3 gap-1"><div v-for="n in 6" :key="n" class="aspect-[4/5] bg-cream-dark"></div></div>
         </div>
 
@@ -191,7 +191,7 @@ export default {
         <template v-else-if="page">
             <!-- ─── Who ─────────────────────────────────────────────── -->
             <header class="flex items-start gap-4 sm:gap-7 mb-6">
-                <span class="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-cream-dark border border-gold/30 flex items-center justify-center flex-shrink-0">
+                <span class="rounded-full w-20 h-20 sm:w-28 sm:h-28 overflow-hidden bg-cream-dark border border-gold/30 flex items-center justify-center flex-shrink-0">
                     <img v-if="page.avatar_url" :src="page.avatar_url" :alt="page.display_name" class="w-full h-full object-cover" />
                     <UserRound v-else class="w-8 h-8 text-black/25" />
                 </span>
@@ -214,7 +214,7 @@ export default {
             <p v-if="page.city" class="flex items-center gap-1.5 text-xs text-black/50 mb-1.5"><MapPin class="w-3.5 h-3.5" /> {{ page.city }}</p>
             <p v-if="page.bio" class="text-sm text-black/75 leading-relaxed whitespace-pre-line break-words mb-3">{{ page.bio }}</p>
 
-            <p v-if="page.twin_match" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-cream border border-gold/30 text-xs text-gold-dark mb-3">
+            <p v-if="page.twin_match" class="inline-flex items-center gap-2 px-3.5 py-2 bg-cream border border-gold/30 text-xs text-gold-dark mb-3">
                 <Ruler class="w-3.5 h-3.5" /> {{ page.twin_match }}% fit match with you
             </p>
 
@@ -274,7 +274,7 @@ export default {
                 <FitEditor v-if="page.is_me" @saved="onFitSaved" />
                 <div v-else-if="fitRows.length">
                     <dl class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div v-for="r in fitRows" :key="r.label" class="bg-white border border-black/8 rounded-xl px-4 py-3">
+                        <div v-for="r in fitRows" :key="r.label" class="bg-white border border-black/8 px-4 py-3">
                             <dt class="text-[10px] tracking-[0.2em] uppercase text-black/40">{{ r.label }}</dt>
                             <dd class="text-sm mt-0.5 capitalize">{{ r.value }}</dd>
                         </div>
@@ -300,7 +300,7 @@ export default {
                     <ShoppingBag class="w-8 h-8 text-gold mx-auto mb-4" />
                     <h2 class="font-display text-xl tracking-widest uppercase mb-2">Sell from your page</h2>
                     <p class="text-sm text-black/55 mb-6 max-w-sm mx-auto">Approved sellers get a verified badge, a shop on their page, and commission whenever someone buys what they tag in a look.</p>
-                    <router-link to="/affiliate" class="inline-block bg-gold text-white px-10 py-3.5 rounded-full text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Apply to sell</router-link>
+                    <router-link to="/affiliate" class="inline-block bg-gold text-white px-10 py-3.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Apply to sell</router-link>
                 </div>
             </section>
         </template>
@@ -310,7 +310,7 @@ export default {
         <!-- A look, opened from the grid. -->
         <div v-if="open" class="fixed inset-0 z-[80] flex items-center justify-center p-0 sm:p-6" role="dialog" aria-modal="true">
             <div class="absolute inset-0 bg-black/70" @click="closeLook"></div>
-            <div class="relative w-full sm:max-w-md max-h-[100dvh] sm:max-h-[94dvh] overflow-y-auto overscroll-contain sm:rounded-2xl">
+            <div class="relative w-full sm:max-w-md max-h-[100dvh] sm:max-h-[94dvh] overflow-y-auto overscroll-contain">
                 <!-- Its own bar on a phone: the card's top-right corner is the "more" menu. -->
                 <div class="sm:hidden sticky top-0 z-30 bg-white flex justify-end border-b border-black/8">
                     <button @click="closeLook" class="h-12 px-4 inline-flex items-center gap-1.5 text-xs tracking-widest uppercase text-black/60" aria-label="Close"><X class="w-4 h-4" /> Close</button>

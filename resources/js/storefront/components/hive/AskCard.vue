@@ -57,10 +57,10 @@ export default {
 </script>
 
 <template>
-    <article class="bg-white border border-black/8 rounded-2xl overflow-hidden">
+    <article class="bg-white border border-black/8 overflow-hidden">
         <header class="flex items-center gap-3 px-3.5 pt-3">
             <router-link :to="`/@${ask.author.handle}`" class="flex items-center gap-3 min-w-0 flex-1 group">
-                <span class="w-9 h-9 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border border-gold/20">
+                <span class="rounded-full w-9 h-9 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border border-gold/20">
                     <img v-if="ask.author.avatar_url" :src="ask.author.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                     <UserRound v-else class="w-4 h-4 text-black/30" />
                 </span>
@@ -69,11 +69,11 @@ export default {
                     <span class="block text-[11px] text-black/45 truncate">asked · {{ when }}</span>
                 </span>
             </router-link>
-            <span v-if="ask.solved" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[10px] tracking-widest uppercase flex-shrink-0"><BadgeCheck class="w-3.5 h-3.5" /> Solved</span>
+            <span v-if="ask.solved" class="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-700 text-[10px] tracking-widest uppercase flex-shrink-0"><BadgeCheck class="w-3.5 h-3.5" /> Solved</span>
             <div class="relative flex-shrink-0">
                 <button @click="menuOpen = !menuOpen" class="w-11 h-11 -mr-2 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="More"><Ellipsis class="w-5 h-5" /></button>
                 <div v-if="menuOpen" class="fixed inset-0 z-10" @click="menuOpen = false"></div>
-                <div v-if="menuOpen" class="absolute right-0 top-full z-20 bg-white border border-black/10 rounded-xl shadow-xl py-1.5 min-w-[11rem]">
+                <div v-if="menuOpen" class="absolute right-0 top-full z-20 bg-white border border-black/10 shadow-xl py-1.5 min-w-[11rem]">
                     <button v-if="ask.is_mine" @click="remove" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left"><Trash2 class="w-4 h-4" /> Remove</button>
                     <button v-else @click="report" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-cream text-left"><Flag class="w-4 h-4" /> Report</button>
                 </div>
@@ -83,7 +83,7 @@ export default {
         <component :is="linked ? 'router-link' : 'div'" :to="linked ? `/hive/ask/${ask.id}` : null" class="block px-3.5 pt-2 pb-3">
             <h2 :class="['font-medium leading-snug break-words', linked ? 'text-base' : 'text-lg']">{{ ask.question }}</h2>
             <p v-if="ask.details" :class="['text-sm text-black/65 mt-1.5 leading-relaxed whitespace-pre-line break-words', linked ? 'line-clamp-3' : '']">{{ ask.details }}</p>
-            <span v-if="occasion" class="inline-block mt-2.5 px-2.5 py-1 rounded-full bg-cream text-[10px] tracking-widest uppercase text-gold-dark">{{ occasion }}</span>
+            <span v-if="occasion" class="inline-block mt-2.5 px-2.5 py-1 bg-cream text-[10px] tracking-widest uppercase text-gold-dark">{{ occasion }}</span>
         </component>
 
         <!-- One photo: context. Two or more: the options of a vote. -->
@@ -100,11 +100,11 @@ export default {
                 :aria-label="`Vote for option ${LETTERS[i]}`"
             >
                 <img :src="src" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                <span class="absolute top-2 left-2 w-7 h-7 rounded-full bg-white/90 text-xs font-semibold flex items-center justify-center shadow">{{ LETTERS[i] }}</span>
-                <span v-if="ask.my_vote === i" class="absolute top-2 right-2 w-7 h-7 rounded-full bg-gold text-white flex items-center justify-center shadow"><Check class="w-4 h-4" /></span>
+                <span class="rounded-full absolute top-2 left-2 w-7 h-7 bg-white/90 text-xs font-semibold flex items-center justify-center shadow">{{ LETTERS[i] }}</span>
+                <span v-if="ask.my_vote === i" class="rounded-full absolute top-2 right-2 w-7 h-7 bg-gold text-white flex items-center justify-center shadow"><Check class="w-4 h-4" /></span>
                 <span v-if="voted" class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent pt-8 pb-2 px-2.5 text-left">
                     <span class="block text-white text-lg font-semibold leading-none">{{ percent(i) }}%</span>
-                    <span class="block h-1 rounded-full bg-white/30 mt-1.5 overflow-hidden"><span class="block h-full bg-white rounded-full transition-all duration-500" :style="{ width: percent(i) + '%' }"></span></span>
+                    <span class="block h-1 bg-white/30 mt-1.5 overflow-hidden"><span class="block h-full bg-white transition-all duration-500" :style="{ width: percent(i) + '%' }"></span></span>
                 </span>
                 <span v-else-if="!ask.is_mine" class="absolute inset-x-0 bottom-0 bg-black/45 text-white text-[11px] tracking-widest uppercase py-2 opacity-0 group-hover:opacity-100 sm:transition-opacity max-sm:opacity-100">Tap to vote</span>
             </button>

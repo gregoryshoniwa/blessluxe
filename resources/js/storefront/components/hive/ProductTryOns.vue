@@ -39,11 +39,11 @@ export default {
             <p v-if="d.rating" class="inline-flex items-center gap-1.5 text-sm"><Star class="w-4 h-4 text-gold fill-gold" /> {{ d.rating }} <span class="text-black/45">from {{ d.total }} {{ d.total === 1 ? 'buyer' : 'buyers' }}</span></p>
         </div>
 
-        <div v-if="d.summary" class="bg-white border border-black/8 rounded-2xl p-4 mb-5">
+        <div v-if="d.summary" class="bg-white border border-black/8 p-4 mb-5">
             <p class="text-sm font-medium mb-3">{{ verdict() }}</p>
             <div class="grid grid-cols-3 gap-3 text-center">
                 <div v-for="k in ['small', 'true', 'large']" :key="k">
-                    <div class="h-1.5 rounded-full bg-black/8 overflow-hidden"><div class="h-full bg-gold rounded-full" :style="{ width: d.summary[k] + '%' }"></div></div>
+                    <div class="h-1.5 bg-black/8 overflow-hidden"><div class="h-full bg-gold" :style="{ width: d.summary[k] + '%' }"></div></div>
                     <p class="text-xs mt-1.5">{{ FIT[k] }}</p>
                     <p class="text-[11px] text-black/45">{{ d.summary[k] }}%</p>
                 </div>
@@ -51,10 +51,10 @@ export default {
         </div>
 
         <div class="scroll-strip flex gap-3 overflow-x-auto [scrollbar-width:none] -mx-[5%] px-[5%] sm:mx-0 sm:px-0">
-            <router-link v-for="l in d.tryons" :key="l.id" :to="`/@${l.author.handle}?look=${l.id}`" class="w-44 sm:w-52 flex-shrink-0 bg-white border border-black/8 rounded-2xl overflow-hidden hover:border-gold transition-colors">
+            <router-link v-for="l in d.tryons" :key="l.id" :to="`/@${l.author.handle}?look=${l.id}`" class="w-44 sm:w-52 flex-shrink-0 bg-white border border-black/8 overflow-hidden hover:border-gold transition-colors">
                 <div class="relative aspect-[4/5] bg-cream-dark">
                     <img :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                    <span v-if="l.twin_match" class="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/95 text-[10px] text-gold-dark shadow"><Ruler class="w-3 h-3" /> {{ l.twin_match }}% like you</span>
+                    <span v-if="l.twin_match" class="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-1 bg-white/95 text-[10px] text-gold-dark shadow"><Ruler class="w-3 h-3" /> {{ l.twin_match }}% like you</span>
                 </div>
                 <div class="p-3">
                     <p class="flex items-center gap-1 text-[11px] text-green-700"><BadgeCheck class="w-3.5 h-3.5" /> Bought it</p>

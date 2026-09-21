@@ -91,7 +91,7 @@ export default {
                 <label
                     v-for="s in sharing"
                     :key="s.key"
-                    :class="['flex sm:flex-col gap-3 sm:gap-2 p-3.5 rounded-xl border cursor-pointer transition-colors', form.fit_visibility === s.key ? 'border-gold bg-cream' : 'border-black/10 hover:border-black/25']"
+                    :class="['flex sm:flex-col gap-3 sm:gap-2 p-3.5 border cursor-pointer transition-colors', form.fit_visibility === s.key ? 'border-gold bg-cream' : 'border-black/10 hover:border-black/25']"
                 >
                     <input v-model="form.fit_visibility" type="radio" :value="s.key" class="sr-only" />
                     <component :is="s.icon" :class="['w-5 h-5 flex-shrink-0', form.fit_visibility === s.key ? 'text-gold-dark' : 'text-black/40']" />
@@ -108,7 +108,7 @@ export default {
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <label v-for="m in measures" :key="m.key" class="block">
                     <span class="block text-xs text-black/60 mb-1">{{ m.label }}</span>
-                    <input v-model.number="form[m.key]" type="number" inputmode="numeric" min="40" max="230" placeholder="—" class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                    <input v-model.number="form[m.key]" type="number" inputmode="numeric" min="40" max="230" placeholder="—" class="w-full border border-black/12 g px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
                     <span v-if="errors[m.key]" class="block text-[11px] text-red-600 mt-1">{{ errors[m.key][0] }}</span>
                 </label>
             </div>
@@ -124,7 +124,7 @@ export default {
                     type="button"
                     @click="form.body_shape = form.body_shape === s ? '' : s"
                     :title="SHAPE_HELP[s]"
-                    :class="['px-3.5 py-2 rounded-full text-xs capitalize transition-colors', form.body_shape === s ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']"
+                    :class="['px-3.5 py-2 text-xs capitalize transition-colors', form.body_shape === s ? 'bg-gold text-white' : 'bg-black/5 text-black/65 hover:bg-black/10']"
                 >
                     {{ s === 'inverted' ? 'Inverted triangle' : s }}
                 </button>
@@ -137,7 +137,7 @@ export default {
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <label v-for="s in sizes" :key="s.key" class="block">
                     <span class="block text-xs text-black/60 mb-1">{{ s.label }}</span>
-                    <input v-model.trim="form[s.key]" maxlength="12" :placeholder="s.ph" class="w-full border border-black/12 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                    <input v-model.trim="form[s.key]" maxlength="12" :placeholder="s.ph" class="w-full border border-black/12 g px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
                 </label>
             </div>
         </fieldset>

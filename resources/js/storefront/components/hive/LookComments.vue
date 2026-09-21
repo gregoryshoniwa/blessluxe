@@ -65,7 +65,7 @@ export default {
 
         <ul v-else class="space-y-3 mb-1">
             <li v-for="c in comments" :key="c.id" class="group flex gap-2.5">
-                <router-link :to="`/@${c.author.handle}`" class="w-7 h-7 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 mt-0.5">
+                <router-link :to="`/@${c.author.handle}`" class="rounded-full w-7 h-7 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 mt-0.5">
                     <img v-if="c.author.avatar_url" :src="c.author.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                     <UserRound v-else class="w-3.5 h-3.5 text-black/30" />
                 </router-link>
@@ -84,7 +84,7 @@ export default {
         </ul>
 
         <form @submit.prevent="send" class="flex items-center gap-2 mt-2">
-            <input v-model="draft" maxlength="500" placeholder="Add a comment…" class="flex-1 min-w-0 bg-cream/70 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-gold" />
+            <input v-model="draft" maxlength="500" placeholder="Add a comment…" class="flex-1 min-w-0 bg-cream/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-gold" />
             <button type="submit" :disabled="!draft.trim() || sending" class="w-11 h-11 inline-flex items-center justify-center text-gold-dark disabled:text-black/20" aria-label="Post comment">
                 <LoaderCircle v-if="sending" class="w-5 h-5 animate-spin" /><SendHorizontal v-else class="w-5 h-5" />
             </button>

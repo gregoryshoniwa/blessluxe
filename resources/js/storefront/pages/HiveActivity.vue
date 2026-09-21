@@ -38,8 +38,8 @@ export default {
 
         <ul v-else class="space-y-1">
             <li v-for="n in items" :key="n.id">
-                <router-link :to="n.url || '/hive'" :class="['flex items-start gap-3 rounded-2xl px-3.5 py-3 transition-colors', n.unread ? 'bg-white border border-gold/40' : 'hover:bg-white border border-transparent']">
-                    <span class="relative w-11 h-11 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                <router-link :to="n.url || '/hive'" :class="['flex items-start gap-3 px-3.5 py-3 transition-colors', n.unread ? 'bg-white border border-gold/40' : 'hover:bg-white border border-transparent']">
+                    <span class="rounded-full relative w-11 h-11 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                         <img v-if="n.avatar_url" :src="n.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                         <UserRound v-else class="w-5 h-5 text-black/25" />
                     </span>

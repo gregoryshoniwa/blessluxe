@@ -52,7 +52,7 @@ export default {
 <template>
     <div v-if="target" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Send a gift">
         <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-        <div class="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
+        <div class="relative bg-white w-full sm:max-w-md p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
             <div class="flex items-center justify-between">
                 <h2 class="font-display text-lg tracking-widest uppercase flex items-center gap-2"><Gift class="w-5 h-5 text-gold" /> Send a gift</h2>
                 <button @click="$emit('close')" class="w-11 h-11 -mr-3 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="Close"><X class="w-5 h-5" /></button>
@@ -68,7 +68,7 @@ export default {
                             :key="g.code"
                             @click="send(g)"
                             :disabled="!canAfford(g) || !!sending"
-                            :class="['rounded-xl border py-2.5 flex flex-col items-center gap-0.5 transition-colors', canAfford(g) ? 'border-black/10 hover:border-gold hover:bg-cream' : 'border-black/5 opacity-40']"
+                            :class="['border py-2.5 flex flex-col items-center gap-0.5 transition-colors', canAfford(g) ? 'border-black/10 hover:border-gold hover:bg-cream' : 'border-black/5 opacity-40']"
                             :aria-label="`Send a ${g.label}, ${g.bees} Bees`"
                         >
                             <LoaderCircle v-if="sending === g.code" class="w-6 h-6 animate-spin text-gold" />
@@ -77,7 +77,7 @@ export default {
                             <span class="text-[10px] text-gold-dark font-medium">{{ g.bees }}</span>
                         </button>
                     </div>
-                    <div v-if="thanks" class="absolute inset-0 bg-white/95 rounded-xl flex flex-col items-center justify-center" role="status">
+                    <div v-if="thanks" class="absolute inset-0 bg-white/95 flex flex-col items-center justify-center" role="status">
                         <span class="text-5xl animate-bounce">{{ thanks.emoji }}</span>
                         <span class="text-sm font-medium mt-1">{{ thanks.label }} sent</span>
                     </div>
@@ -87,7 +87,7 @@ export default {
                     <span>You have <strong class="text-black">{{ balance }}</strong> Bees</span>
                     <span>{{ left }} left to give today</span>
                 </p>
-                <p v-if="balance !== null && types.length && balance < types[0].bees" class="text-xs text-black/55 bg-cream rounded-xl px-3.5 py-3 mt-3 leading-relaxed">
+                <p v-if="balance !== null && types.length && balance < types[0].bees" class="text-xs text-black/55 bg-cream px-3.5 py-3 mt-3 leading-relaxed">
                     You earn Bees by shopping, posting a try-on of something you bought, or having an answer accepted in Ask.
                 </p>
                 <p v-if="error" class="text-sm text-red-600 mt-3" role="alert">{{ error }}</p>

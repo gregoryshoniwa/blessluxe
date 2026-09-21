@@ -67,15 +67,15 @@ export default {
     <div class="max-w-[34rem] mx-auto w-full sm:px-6 lg:px-0">
         <div class="sticky top-0 z-30 bg-cream px-4 sm:px-0 pt-3 pb-2.5 border-b border-black/5 sm:border-0">
             <div class="flex items-center gap-2">
-                <div class="flex p-1 rounded-full bg-black/5 flex-1">
-                    <button @click="mine = false" :class="['flex-1 py-2 rounded-full text-xs tracking-widest uppercase transition-colors', !mine ? 'bg-white shadow-sm text-black' : 'text-black/50']">Everyone</button>
-                    <button @click="pickMine" :class="['flex-1 py-2 rounded-full text-xs tracking-widest uppercase transition-colors', mine ? 'bg-white shadow-sm text-black' : 'text-black/50']">Mine</button>
+                <div class="flex p-1 bg-black/5 flex-1">
+                    <button @click="mine = false" :class="['flex-1 py-2 text-xs tracking-widest uppercase transition-colors', !mine ? 'bg-white shadow-sm text-black' : 'text-black/50']">Everyone</button>
+                    <button @click="pickMine" :class="['flex-1 py-2 text-xs tracking-widest uppercase transition-colors', mine ? 'bg-white shadow-sm text-black' : 'text-black/50']">Mine</button>
                 </div>
-                <button @click="ask" class="h-10 px-5 rounded-full bg-gold text-white text-xs font-semibold tracking-[0.15em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5 flex-shrink-0"><Plus class="w-4 h-4" /> Ask</button>
+                <button @click="ask" class="h-10 px-5 bg-gold text-white text-xs font-semibold tracking-[0.15em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5 flex-shrink-0"><Plus class="w-4 h-4" /> Ask</button>
             </div>
             <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-1.5 overflow-x-auto [scrollbar-width:none] mt-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-                <button @click="occasion = ''" :class="['px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap flex-shrink-0', !occasion ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">All</button>
-                <button v-for="o in occasions" :key="o" @click="occasion = occasion === o ? '' : o" :class="['px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap flex-shrink-0', occasion === o ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">{{ occasionLabel(o) }}</button>
+                <button @click="occasion = ''" :class="['px-3.5 py-1.5 text-xs whitespace-nowrap flex-shrink-0', !occasion ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">All</button>
+                <button v-for="o in occasions" :key="o" @click="occasion = occasion === o ? '' : o" :class="['px-3.5 py-1.5 text-xs whitespace-nowrap flex-shrink-0', occasion === o ? 'bg-black text-white' : 'bg-white border border-black/10 text-black/65']">{{ occasionLabel(o) }}</button>
             </div>
         </div>
 
@@ -85,7 +85,7 @@ export default {
             <div v-else-if="!asks.length" class="text-center py-20">
                 <MessageCircleQuestion class="w-9 h-9 text-gold mx-auto mb-3" />
                 <p class="text-black/60 mb-6 max-w-xs mx-auto">{{ mine ? "You haven't asked anything yet." : 'Stuck on what to wear? Ask — people answer with real pieces you can buy.' }}</p>
-                <button @click="ask" class="bg-gold text-white px-8 py-3.5 rounded-full text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Ask the Hive</button>
+                <button @click="ask" class="bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark">Ask the Hive</button>
             </div>
 
             <div v-else class="space-y-4">

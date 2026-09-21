@@ -66,7 +66,7 @@ export default {
         <div v-else-if="notFound" class="text-center py-20"><p class="text-black/55">That challenge isn't here any more.</p></div>
 
         <template v-else-if="challenge">
-            <header class="bg-black text-white rounded-2xl p-5 mb-4">
+            <header class="bg-black text-white p-5 mb-4">
                 <p class="flex items-center gap-2 text-[10px] tracking-[0.25em] uppercase text-gold"><Trophy class="w-4 h-4" /> Challenge · {{ deadline }}</p>
                 <h1 class="font-display text-2xl tracking-wide mt-2">{{ challenge.title }}</h1>
                 <p class="text-gold text-sm mt-0.5">{{ challenge.tag }}</p>
@@ -76,8 +76,8 @@ export default {
                     <span><strong>{{ challenge.entries }}</strong> <span class="text-white/60">{{ challenge.entries === 1 ? 'entry' : 'entries' }}</span></span>
                 </div>
                 <div class="flex gap-2 mt-5">
-                    <button v-if="challenge.state === 'live'" @click="enter" class="flex-1 bg-gold text-white py-3 rounded-full text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark inline-flex items-center justify-center gap-2"><Plus class="w-4 h-4" /> Enter a look</button>
-                    <a :href="shareHref" target="_blank" rel="noopener" class="w-12 h-11 rounded-full border border-white/25 inline-flex items-center justify-center flex-shrink-0" aria-label="Share on WhatsApp"><Share2 class="w-4 h-4" /></a>
+                    <button v-if="challenge.state === 'live'" @click="enter" class="flex-1 bg-gold text-white py-3 text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark inline-flex items-center justify-center gap-2"><Plus class="w-4 h-4" /> Enter a look</button>
+                    <a :href="shareHref" target="_blank" rel="noopener" class="w-12 h-11 border border-white/25 inline-flex items-center justify-center flex-shrink-0" aria-label="Share on WhatsApp"><Share2 class="w-4 h-4" /></a>
                 </div>
             </header>
 

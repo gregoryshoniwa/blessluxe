@@ -129,11 +129,11 @@ export default {
 </script>
 
 <template>
-    <article class="bg-white border border-black/8 rounded-2xl overflow-hidden">
+    <article class="bg-white border border-black/8 overflow-hidden">
         <!-- Who -->
         <header class="flex items-center gap-3 px-3.5 py-3">
             <router-link v-if="showAuthor" :to="`/@${look.author.handle}`" class="flex items-center gap-3 min-w-0 flex-1 group">
-                <span class="w-9 h-9 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border border-gold/20">
+                <span class="rounded-full w-9 h-9 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border border-gold/20">
                     <img v-if="look.author.avatar_url" :src="look.author.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" />
                     <UserRound v-else class="w-4 h-4 text-black/30" />
                 </span>
@@ -144,14 +144,14 @@ export default {
             </router-link>
             <span v-else class="flex-1 text-[11px] text-black/45">{{ when }}</span>
 
-            <span v-if="occasion" class="hidden min-[380px]:inline-block px-2.5 py-1 rounded-full bg-cream text-[10px] tracking-widest uppercase text-gold-dark flex-shrink-0">{{ occasion }}</span>
+            <span v-if="occasion" class="hidden min-[380px]:inline-block px-2.5 py-1 bg-cream text-[10px] tracking-widest uppercase text-gold-dark flex-shrink-0">{{ occasion }}</span>
 
             <div class="relative flex-shrink-0">
                 <button @click="menuOpen = !menuOpen" class="w-11 h-11 -mr-2 inline-flex items-center justify-center text-black/45 hover:text-black" aria-label="More">
                     <Ellipsis class="w-5 h-5" />
                 </button>
                 <div v-if="menuOpen" class="fixed inset-0 z-10" @click="menuOpen = false"></div>
-                <div v-if="menuOpen" class="absolute right-0 top-full z-20 bg-white border border-black/10 rounded-xl shadow-xl py-1.5 min-w-[11rem]">
+                <div v-if="menuOpen" class="absolute right-0 top-full z-20 bg-white border border-black/10 shadow-xl py-1.5 min-w-[11rem]">
                     <button v-if="look.is_mine && (look.embed || look.video)" @click="menuOpen = false; reshaping = true" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-cream text-left">
                         <Proportions class="w-4 h-4" /> Change shape
                     </button>
@@ -171,7 +171,7 @@ export default {
                 v-for="sh in [{ k: 'tall', l: 'Portrait', i: 'RectangleVertical' }, { k: 'wide', l: 'Landscape', i: 'RectangleHorizontal' }, { k: 'post', l: 'Square', i: 'Square' }]"
                 :key="sh.k"
                 @click="setShape(sh.k)"
-                :class="['flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-full text-xs border transition-colors', shape === sh.k ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/60']"
+                :class="['flex-1 inline-flex items-center justify-center gap-1.5 h-10 text-xs border transition-colors', shape === sh.k ? 'border-gold bg-cream text-black' : 'border-black/10 text-black/60']"
             >
                 <component :is="sh.i" class="w-4 h-4" /> {{ sh.l }}
             </button>
@@ -198,7 +198,7 @@ export default {
                     <img v-if="look.images[0]" :src="look.images[0]" alt="" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover opacity-55" />
                     <span v-else class="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black"></span>
                     <span class="relative flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-                        <span class="w-16 h-16 rounded-full bg-black/55 flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
+                        <span class="rounded-full w-16 h-16 bg-black/55 flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
                         <span class="text-sm font-medium drop-shadow">Tap to load from {{ look.embed.label }}</span>
                         <span class="text-[11px] text-white/75 drop-shadow max-w-[16rem]">Uses your data. {{ look.embed.label }} will know you viewed it.</span>
                     </span>
@@ -209,8 +209,8 @@ export default {
                 <video v-if="playing" ref="video" :src="look.video.url" :poster="look.images[0]" controls playsinline loop preload="auto" class="w-full h-full object-contain bg-black"></video>
                 <button v-else @click="play" class="relative block w-full h-full" :aria-label="`Play video, ${look.video.size_label || ''}`">
                     <img :src="look.images[0]" :alt="look.caption || `Video by ${look.author.display_name}`" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                    <span class="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/55 text-white flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
-                    <span class="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-black/70 text-white text-[11px]">Video · {{ look.video.seconds }}s<template v-if="look.video.size_label"> · {{ look.video.size_label }}</template></span>
+                    <span class="rounded-full absolute inset-0 m-auto w-16 h-16 bg-black/55 text-white flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
+                    <span class="absolute bottom-3 left-3 px-2.5 py-1 bg-black/70 text-white text-[11px]">Video · {{ look.video.seconds }}s<template v-if="look.video.size_label"> · {{ look.video.size_label }}</template></span>
                 </button>
             </div></div>
             <div
@@ -232,7 +232,7 @@ export default {
             </div>
             <Heart v-if="burst" class="absolute inset-0 m-auto w-24 h-24 text-white fill-white drop-shadow-lg pointer-events-none animate-ping" />
             <div v-if="!look.video && !look.embed && look.images.length > 1" class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
-                <span v-for="(s, i) in look.images" :key="i" :class="['w-1.5 h-1.5 rounded-full transition-colors', i === slide ? 'bg-white' : 'bg-white/45']"></span>
+                <span v-for="(s, i) in look.images" :key="i" :class="['rounded-full w-1.5 h-1.5 transition-colors', i === slide ? 'bg-white' : 'bg-white/45']"></span>
             </div>
         </div>
 
@@ -281,9 +281,9 @@ export default {
                     :key="`${r.type}:${r.id}`"
                     :to="refPath(r)"
                     @click="openRef($event, r)"
-                    class="group flex items-center gap-2.5 p-1.5 pr-3 rounded-xl border border-black/8 hover:border-gold/60 transition-colors flex-shrink-0 w-[13.5rem]"
+                    class="group flex items-center gap-2.5 p-1.5 pr-3 border border-black/8 hover:border-gold/60 transition-colors flex-shrink-0 w-[13.5rem]"
                 >
-                    <span class="w-11 h-14 rounded-md overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
+                    <span class="w-11 h-14 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
                         <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
                         <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                     </span>

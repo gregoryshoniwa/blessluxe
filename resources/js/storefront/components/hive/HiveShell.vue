@@ -90,24 +90,24 @@ export default {
                     v-for="i in items"
                     :key="i.key"
                     :to="i.to"
-                    :class="['flex items-center gap-4 px-3 py-3 rounded-xl text-[15px] transition-colors', active === i.key ? 'bg-cream font-semibold text-black' : 'text-black/70 hover:bg-cream/70 hover:text-black']"
+                    :class="['flex items-center gap-4 px-3 py-3 text-[15px] transition-colors', active === i.key ? 'bg-cream font-semibold text-black' : 'text-black/70 hover:bg-cream/70 hover:text-black']"
                     :aria-current="active === i.key ? 'page' : null"
                 >
                     <span class="relative">
                         <component :is="i.icon" class="w-6 h-6" :stroke-width="active === i.key ? 2.2 : 1.6" />
-                        <span v-if="i.badge" class="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">{{ i.badge > 99 ? '99+' : i.badge }}</span>
+                        <span v-if="i.badge" class="rounded-full absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">{{ i.badge > 99 ? '99+' : i.badge }}</span>
                     </span>
                     {{ i.label }}
                 </router-link>
             </nav>
 
-            <button @click="compose" class="mt-6 w-full bg-gold text-white py-3.5 rounded-full text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors inline-flex items-center justify-center gap-2">
+            <button @click="compose" class="mt-6 w-full bg-gold text-white py-3.5 text-xs font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors inline-flex items-center justify-center gap-2">
                 <Plus class="w-4 h-4" /> Share a look
             </button>
 
             <div class="mt-auto space-y-1">
-                <router-link v-if="me" :to="`/@${me.handle}`" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-cream/70">
-                    <span class="w-9 h-9 rounded-full overflow-hidden bg-cream-dark border border-gold/25 flex items-center justify-center flex-shrink-0">
+                <router-link v-if="me" :to="`/@${me.handle}`" class="flex items-center gap-3 px-3 py-2.5 hover:bg-cream/70">
+                    <span class="rounded-full w-9 h-9 overflow-hidden bg-cream-dark border border-gold/25 flex items-center justify-center flex-shrink-0">
                         <img v-if="me.avatar_url" :src="me.avatar_url" alt="" class="w-full h-full object-cover" />
                         <UserRound v-else class="w-4 h-4 text-black/30" />
                     </span>
@@ -116,7 +116,7 @@ export default {
                         <span class="block text-xs text-black/45 truncate">@{{ me.handle }}</span>
                     </span>
                 </router-link>
-                <router-link to="/shop" class="flex items-center gap-4 px-3 py-3 rounded-xl text-sm text-black/60 hover:bg-cream/70 hover:text-black">
+                <router-link to="/shop" class="flex items-center gap-4 px-3 py-3 text-sm text-black/60 hover:bg-cream/70 hover:text-black">
                     <ShoppingBag class="w-5 h-5" /> Back to the shop
                 </router-link>
             </div>
@@ -141,12 +141,12 @@ export default {
             <div class="grid grid-cols-5 h-14 max-w-md mx-auto">
                 <template v-for="(t, n) in tabs" :key="t.key">
                     <button v-if="n === 2" @click="choosing = true" class="flex items-center justify-center" aria-label="Create">
-                        <span class="w-11 h-11 rounded-full bg-gold text-white flex items-center justify-center shadow-md"><Plus class="w-6 h-6" /></span>
+                        <span class="rounded-full w-11 h-11 bg-gold text-white flex items-center justify-center shadow-md"><Plus class="w-6 h-6" /></span>
                     </button>
                     <router-link :to="t.to" class="flex flex-col items-center justify-center gap-0.5" :aria-current="active === t.key ? 'page' : null" :aria-label="t.label">
                         <span class="relative">
                             <component :is="t.icon" :class="['w-6 h-6', active === t.key ? 'text-black' : 'text-black/45']" :stroke-width="active === t.key ? 2.2 : 1.6" />
-                            <span v-if="t.badge" class="absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">{{ t.badge > 99 ? '99+' : t.badge }}</span>
+                            <span v-if="t.badge" class="rounded-full absolute -top-1.5 -right-2.5 min-w-[17px] h-[17px] px-1 bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">{{ t.badge > 99 ? '99+' : t.badge }}</span>
                         </span>
                         <span :class="['text-[9px] tracking-wide', active === t.key ? 'text-black font-semibold' : 'text-black/45']">{{ t.label }}</span>
                     </router-link>
@@ -157,13 +157,13 @@ export default {
         <!-- Phone "+": what do you want to make? -->
         <div v-if="choosing" class="lg:hidden fixed inset-0 z-[85] flex items-end" role="dialog" aria-modal="true" aria-label="Create">
             <div class="absolute inset-0 bg-black/50" @click="choosing = false"></div>
-            <div class="relative bg-white w-full rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div class="relative bg-white w-full p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button v-for="c in [
                     { l: 'Share a look', h: 'Photos, a short video, or a link', i: 'Camera', f: compose },
                     { l: 'Ask the Hive', h: 'What should I wear? Which one?', i: 'MessageCircleQuestion', f: () => go('/hive/ask?ask=1') },
                     { l: 'Schedule a live', h: 'Go live by link and receive gifts', i: 'Radio', f: () => go('/hive/live?schedule=1') },
-                ]" :key="c.l" @click="c.f()" class="w-full flex items-center gap-4 px-3 py-3.5 rounded-xl hover:bg-cream text-left">
-                    <span class="w-11 h-11 rounded-full bg-cream flex items-center justify-center flex-shrink-0"><component :is="c.i" class="w-5 h-5 text-gold-dark" /></span>
+                ]" :key="c.l" @click="c.f()" class="w-full flex items-center gap-4 px-3 py-3.5 hover:bg-cream text-left">
+                    <span class="rounded-full w-11 h-11 bg-cream flex items-center justify-center flex-shrink-0"><component :is="c.i" class="w-5 h-5 text-gold-dark" /></span>
                     <span><span class="block text-sm font-medium">{{ c.l }}</span><span class="block text-xs text-black/50">{{ c.h }}</span></span>
                 </button>
             </div>

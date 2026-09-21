@@ -98,7 +98,7 @@ export default {
         <div v-else-if="notFound" class="text-center py-20"><p class="text-black/55">This live isn't here any more.</p></div>
 
         <template v-else-if="live">
-            <div class="bg-black rounded-2xl overflow-hidden">
+            <div class="bg-black overflow-hidden">
                 <div :class="frameClass">
                     <iframe v-if="loaded" :src="live.embed.url" :title="live.title" class="w-full h-full border-0 bg-black" referrerpolicy="strict-origin-when-cross-origin"
                         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
@@ -106,7 +106,7 @@ export default {
                         <img v-if="live.cover_url" :src="live.cover_url" alt="" class="absolute inset-0 w-full h-full object-cover opacity-55" />
                         <span v-else class="absolute inset-0 bg-gradient-to-br from-zinc-800 to-black"></span>
                         <span class="relative flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-                            <span class="w-16 h-16 rounded-full bg-black/55 flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
+                            <span class="rounded-full w-16 h-16 bg-black/55 flex items-center justify-center"><Play class="w-7 h-7 fill-white ml-0.5" /></span>
                             <span class="text-sm font-medium">{{ live.state === 'upcoming' ? countdown : `Tap to watch on ${live.embed.label}` }}</span>
                             <span class="text-[11px] text-white/70 max-w-[16rem]">Streams use a lot of data — Wi-Fi is best. {{ live.embed.label }} will know you watched.</span>
                         </span>
@@ -117,17 +117,17 @@ export default {
             <div class="flex items-start gap-3 mt-4">
                 <div class="min-w-0 flex-1">
                     <p class="mb-1">
-                        <span v-if="live.state === 'live'" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600 text-white text-[10px] font-semibold tracking-widest uppercase"><span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> Live now</span>
-                        <span v-else-if="live.state === 'upcoming'" class="inline-flex px-2.5 py-1 rounded-full bg-cream text-[11px] text-gold-dark">{{ countdown }}</span>
-                        <span v-else class="inline-flex px-2.5 py-1 rounded-full bg-black/5 text-[11px] text-black/55">{{ live.state === 'missed' ? "This one didn't happen" : 'Ended — watch it again above' }}</span>
+                        <span v-if="live.state === 'live'" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-600 text-white text-[10px] font-semibold tracking-widest uppercase"><span class="rounded-full w-1.5 h-1.5 bg-white animate-pulse"></span> Live now</span>
+                        <span v-else-if="live.state === 'upcoming'" class="inline-flex px-2.5 py-1 bg-cream text-[11px] text-gold-dark">{{ countdown }}</span>
+                        <span v-else class="inline-flex px-2.5 py-1 bg-black/5 text-[11px] text-black/55">{{ live.state === 'missed' ? "This one didn't happen" : 'Ended — watch it again above' }}</span>
                     </p>
                     <h1 class="font-display text-xl sm:text-2xl tracking-wide break-words">{{ live.title }}</h1>
                 </div>
-                <a :href="shareHref" target="_blank" rel="noopener" class="w-11 h-11 rounded-full border border-black/12 inline-flex items-center justify-center flex-shrink-0 hover:bg-white" aria-label="Share on WhatsApp"><Share2 class="w-4 h-4" /></a>
+                <a :href="shareHref" target="_blank" rel="noopener" class="w-11 h-11 border border-black/12 inline-flex items-center justify-center flex-shrink-0 hover:bg-white" aria-label="Share on WhatsApp"><Share2 class="w-4 h-4" /></a>
             </div>
 
             <router-link :to="`/@${live.host.handle}`" class="flex items-center gap-3 mt-3 group">
-                <span class="w-10 h-10 rounded-full overflow-hidden bg-cream-dark border border-gold/25 flex items-center justify-center flex-shrink-0">
+                <span class="rounded-full w-10 h-10 overflow-hidden bg-cream-dark border border-gold/25 flex items-center justify-center flex-shrink-0">
                     <img v-if="live.host.avatar_url" :src="live.host.avatar_url" alt="" class="w-full h-full object-cover" /><UserRound v-else class="w-4 h-4 text-black/30" />
                 </span>
                 <span class="min-w-0"><span class="flex items-center gap-1 text-sm font-medium group-hover:text-gold-dark"><span class="truncate">{{ live.host.display_name }}</span><SellerBadge v-if="live.host.seller" /></span>
@@ -136,32 +136,32 @@ export default {
             <p v-if="live.description" class="text-sm text-black/70 leading-relaxed mt-3 whitespace-pre-line break-words">{{ live.description }}</p>
 
             <!-- Host controls -->
-            <div v-if="live.is_mine" class="mt-5 bg-white border border-gold/40 rounded-2xl p-4">
+            <div v-if="live.is_mine" class="mt-5 bg-white border border-gold/40 p-4">
                 <p class="text-[10px] tracking-[0.2em] uppercase text-gold-dark mb-2">Your live</p>
                 <p v-if="live.state === 'upcoming'" class="text-xs text-black/60 leading-relaxed mb-3">{{ live.reminders }} {{ live.reminders === 1 ? 'person wants' : 'people want' }} a reminder. Start your stream on {{ live.embed.label }} first, then tap Go live here — that's what sends the reminders.</p>
                 <p v-if="live.gifts_bees" class="text-sm mb-3">Gifts this session: <strong>{{ live.gifts_bees }} Bees</strong></p>
                 <div class="flex flex-wrap gap-2">
-                    <button v-if="live.can_start" @click="host('start')" :disabled="busy" class="flex-1 h-11 rounded-full bg-red-600 text-white text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2 disabled:opacity-50"><Radio class="w-4 h-4" /> Go live</button>
+                    <button v-if="live.can_start" @click="host('start')" :disabled="busy" class="flex-1 h-11 bg-red-600 text-white text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2 disabled:opacity-50"><Radio class="w-4 h-4" /> Go live</button>
                     <p v-else-if="live.state === 'upcoming'" class="flex-1 text-xs text-black/50 self-center">You can go live from 2 hours before the time.</p>
-                    <button v-if="live.can_end" @click="host('end', { title: 'End your live?', body: 'People can still watch it again from the link.', confirmLabel: 'End' })" :disabled="busy" class="flex-1 h-11 rounded-full bg-black text-white text-xs font-semibold tracking-[0.2em] uppercase disabled:opacity-50">End live</button>
-                    <button v-if="live.can_cancel" @click="host('cancel', { title: 'Cancel this live?', body: 'Anyone who asked for a reminder won’t get one.', confirmLabel: 'Cancel it', tone: 'danger' })" :disabled="busy" class="h-11 px-5 rounded-full border border-black/15 text-xs tracking-widest uppercase disabled:opacity-50">Cancel</button>
+                    <button v-if="live.can_end" @click="host('end', { title: 'End your live?', body: 'People can still watch it again from the link.', confirmLabel: 'End' })" :disabled="busy" class="flex-1 h-11 bg-black text-white text-xs font-semibold tracking-[0.2em] uppercase disabled:opacity-50">End live</button>
+                    <button v-if="live.can_cancel" @click="host('cancel', { title: 'Cancel this live?', body: 'Anyone who asked for a reminder won’t get one.', confirmLabel: 'Cancel it', tone: 'danger' })" :disabled="busy" class="h-11 px-5 border border-black/15 text-xs tracking-widest uppercase disabled:opacity-50">Cancel</button>
                 </div>
             </div>
 
             <!-- Viewer actions -->
             <div v-else class="flex gap-2 mt-5">
-                <button v-if="live.state === 'upcoming'" @click="toggleRemind" :class="['flex-1 h-12 rounded-full text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2', live.reminded ? 'border border-black/15' : 'bg-gold text-white hover:bg-gold-dark']">
+                <button v-if="live.state === 'upcoming'" @click="toggleRemind" :class="['flex-1 h-12 text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2', live.reminded ? 'border border-black/15' : 'bg-gold text-white hover:bg-gold-dark']">
                     <component :is="live.reminded ? 'BellRing' : 'Bell'" class="w-4 h-4" /> {{ live.reminded ? "We'll remind you" : 'Remind me' }}
                 </button>
-                <button v-if="live.state !== 'missed'" @click="gift" class="flex-1 h-12 rounded-full bg-black text-white text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2 hover:bg-zinc-800"><Gift class="w-4 h-4 text-gold" /> Send a gift</button>
-                <button @click="report" class="w-12 h-12 rounded-full border border-black/12 inline-flex items-center justify-center text-black/45 flex-shrink-0" aria-label="Report this live"><Flag class="w-4 h-4" /></button>
+                <button v-if="live.state !== 'missed'" @click="gift" class="flex-1 h-12 bg-black text-white text-xs font-semibold tracking-[0.2em] uppercase inline-flex items-center justify-center gap-2 hover:bg-zinc-800"><Gift class="w-4 h-4 text-gold" /> Send a gift</button>
+                <button @click="report" class="w-12 h-12 border border-black/12 inline-flex items-center justify-center text-black/45 flex-shrink-0" aria-label="Report this live"><Flag class="w-4 h-4" /></button>
             </div>
 
             <!-- The room -->
             <section v-if="gifts.length" class="mt-6">
                 <h2 class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Gifts</h2>
                 <ul class="space-y-1.5">
-                    <li v-for="g in gifts" :key="g.id" class="flex items-center gap-2.5 bg-white border border-black/6 rounded-xl px-3 py-2 text-sm">
+                    <li v-for="g in gifts" :key="g.id" class="flex items-center gap-2.5 bg-white border border-black/6 px-3 py-2 text-sm">
                         <span class="text-xl leading-none" aria-hidden="true">{{ g.emoji }}</span>
                         <span class="min-w-0 flex-1 truncate"><router-link :to="`/@${g.handle}`" class="font-medium hover:text-gold-dark">{{ g.from }}</router-link> sent a {{ g.label }}</span>
                         <span class="text-xs text-gold-dark flex-shrink-0">{{ g.bees }}</span>
