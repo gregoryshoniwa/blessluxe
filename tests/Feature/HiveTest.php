@@ -210,6 +210,26 @@ class HiveTest extends TestCase
     }
 
     #[Test]
+    public function a_look_remembers_its_photos_shape_so_the_feed_can_show_it_whole(): void
+    {
+        $me = $this->member('rudo');
+
+        // A full-length portrait (1:2) and a landscape (3:2): the feed frames each by its own shape.
+        $tall = $this->as($me)->post('/api/account/hive/looks', ['images' => [UploadedFile::fake()->image('full-length.jpg', 600, 1200)]], ['Accept' => 'application/json'])->assertOk()->json('look');
+        $wide = $this->as($me)->post('/api/account/hive/looks', ['images' => [UploadedFile::fake()->image('street.jpg', 1200, 800)]], ['Accept' => 'application/json'])->assertOk()->json('look');
+
+        $this->assertSame(0.5, $tall['ratio']);
+        $this->assertSame(1.5, $wide['ratio']);
+        $this->assertEqualsCanonicalizing([0.5, 1.5], array_column($this->getJson('/api/store/hive/feed')->json('looks'), 'ratio'));
+
+        // Looks from before this was recorded are filled in by the backfill command.
+        DB::table('hive_looks')->update(['ratio' => null]);
+        $this->assertNull($this->getJson('/api/store/hive/feed')->json('looks.0.ratio'));
+        $this->artisan('hive:measure-looks')->assertSuccessful();
+        $this->assertEqualsCanonicalizing([0.5, 1.5], array_map('floatval', DB::table('hive_looks')->pluck('ratio')->all()));
+    }
+
+    #[Test]
     public function only_the_author_sees_how_many_likes_a_look_has(): void
     {
         $author = $this->member('rudo'); $fan = $this->member('chipo');

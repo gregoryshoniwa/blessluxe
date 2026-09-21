@@ -27,11 +27,16 @@ export default {
     },
     emits: ['removed', 'report', 'gift'],
     data() {
-        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false, reshaping: false };
+        return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false, reshaping: false, measured: null };
     },
     computed: {
         when() { return timeAgo(this.look.created_at); },
         occasion() { return this.look.occasion ? occasionLabel(this.look.occasion) : null; },
+        /** The photo frame: the first photo's own shape, held between 9:16 and 1.91:1. */
+        photoRatio() {
+            const r = this.look.ratio || this.measured || 0.75;       // 3:4 until known — the usual fashion portrait
+            return Math.min(1.91, Math.max(0.5625, r));
+        },
         shape() { return this.look.embed?.shape || this.look.video?.shape || 'post'; },
         /**
          * The frame. Tall is capped in width rather than height, so a phone-shaped
@@ -62,6 +67,12 @@ export default {
                 this.watcher = new IntersectionObserver(([e]) => { if (!e.isIntersecting) v.pause(); }, { threshold: 0.25 });
                 this.watcher.observe(v);
             });
+        },
+
+        /** Looks posted before shapes were recorded: measure the photo once it arrives. */
+        measure(e) {
+            const im = e.target;
+            if (!this.look.ratio && im.naturalHeight) this.measured = im.naturalWidth / im.naturalHeight;
         },
 
         async setShape(shape) {
@@ -213,20 +224,27 @@ export default {
                     <span class="absolute bottom-3 left-3 px-2.5 py-1 bg-black/70 text-white text-[11px]">Video · {{ look.video.seconds }}s<template v-if="look.video.size_label"> · {{ look.video.size_label }}</template></span>
                 </button>
             </div></div>
+            <!-- Photos are shown WHOLE, at their own shape: the frame takes the first
+                 photo's width÷height (measured when it was posted), so a full-length
+                 outfit keeps its head and its shoes. Very tall or very wide photos are
+                 held between 9:16 and 1.91:1 and never taller than 80% of the screen;
+                 anything that doesn't fill the frame sits on cream rather than being cut. -->
             <div
                 v-else
-                class="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                class="flex w-full max-h-[80dvh] overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                :style="{ aspectRatio: photoRatio }"
                 @scroll.passive="onSwipe"
                 @dblclick="toggleLike(true)"
             >
-                <div v-for="(src, i) in look.images" :key="src" class="w-full flex-shrink-0 snap-center aspect-[4/5]">
+                <div v-for="(src, i) in look.images" :key="src" class="w-full h-full flex-shrink-0 snap-center">
                     <img
                         :src="src"
                         :alt="look.caption || `Look by ${look.author.display_name}`"
                         :loading="i === 0 ? 'eager' : 'lazy'"
                         decoding="async"
-                        class="w-full h-full object-cover select-none"
+                        class="w-full h-full object-contain select-none"
                         draggable="false"
+                        @load="i === 0 && measure($event)"
                     />
                 </div>
             </div>
@@ -284,7 +302,7 @@ export default {
                     class="group flex items-center gap-2.5 p-1.5 pr-3 border border-black/8 hover:border-gold/60 transition-colors flex-shrink-0 w-[13.5rem]"
                 >
                     <span class="w-11 h-14 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
-                        <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
+                        <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover object-top" />
                         <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                     </span>
                     <span class="min-w-0">

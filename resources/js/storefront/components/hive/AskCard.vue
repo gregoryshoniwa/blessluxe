@@ -88,7 +88,7 @@ export default {
 
         <!-- One photo: context. Two or more: the options of a vote. -->
         <div v-if="ask.images.length === 1" class="bg-cream-dark">
-            <img :src="ask.images[0]" alt="" loading="lazy" decoding="async" class="w-full max-h-[28rem] object-cover" />
+            <img :src="ask.images[0]" alt="" loading="lazy" decoding="async" class="block w-full h-auto max-h-[80dvh] object-contain" />
         </div>
         <div v-else-if="ask.is_poll" :class="['grid gap-0.5 bg-white', ask.images.length === 3 ? 'grid-cols-3' : 'grid-cols-2']">
             <button
@@ -96,10 +96,10 @@ export default {
                 :key="src"
                 @click="vote(i)"
                 :disabled="voted || ask.is_mine || voting"
-                class="relative aspect-[4/5] bg-cream-dark overflow-hidden group disabled:cursor-default"
+                class="relative aspect-[3/4] bg-cream-dark overflow-hidden group disabled:cursor-default"
                 :aria-label="`Vote for option ${LETTERS[i]}`"
             >
-                <img :src="src" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                <img :src="src" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover object-top" />
                 <span class="rounded-full absolute top-2 left-2 w-7 h-7 bg-white/90 text-xs font-semibold flex items-center justify-center shadow">{{ LETTERS[i] }}</span>
                 <span v-if="ask.my_vote === i" class="rounded-full absolute top-2 right-2 w-7 h-7 bg-gold text-white flex items-center justify-center shadow"><Check class="w-4 h-4" /></span>
                 <span v-if="voted" class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent pt-8 pb-2 px-2.5 text-left">

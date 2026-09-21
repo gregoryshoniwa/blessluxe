@@ -69,7 +69,7 @@ export default {
                     <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Photos · optional</p>
                     <div class="grid grid-cols-4 gap-2">
                         <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] g overflow-hidden bg-cream-dark">
-                            <img :src="p.url" alt="" class="w-full h-full object-cover" />
+                            <img :src="p.url" alt="" class="w-full h-full object-cover object-top" />
                             <span class="rounded-full absolute top-1 left-1 w-6 h-6 bg-white/90 text-[11px] font-semibold flex items-center justify-center">{{ 'ABCD'[i] }}</span>
                             <button @click="removePhoto(i)" class="rounded-full absolute top-1 right-1 w-7 h-7 bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo"><X class="w-3.5 h-3.5" /></button>
                         </div>

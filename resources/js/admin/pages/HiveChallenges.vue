@@ -147,7 +147,7 @@ export default {
                     <p v-if="!entries.length" class="text-sm text-zinc-500 py-10 text-center">No entries.</p>
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         <button v-for="e in entries" :key="e.id" @click="toggle(e)" :class="['text-left border-2 overflow-hidden', picked.includes(e.id) ? 'border-emerald-500' : 'border-transparent']">
-                            <span class="block aspect-[4/5] bg-zinc-100"><img v-if="e.image" :src="e.image" alt="" loading="lazy" class="w-full h-full object-cover" /></span>
+                            <span class="block aspect-[3/4] bg-zinc-100"><img v-if="e.image" :src="e.image" alt="" loading="lazy" class="w-full h-full object-cover object-top" /></span>
                             <span class="block p-2 text-xs"><span class="font-medium">@{{ e.handle }}</span><span class="block text-zinc-500">♥ {{ e.hearts }} · 💬 {{ e.comments }}</span></span>
                         </button>
                     </div>

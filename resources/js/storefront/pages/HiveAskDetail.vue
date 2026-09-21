@@ -111,7 +111,7 @@ export default {
                             <div v-if="a.refs.length" class="flex flex-col gap-1.5 mt-2">
                                 <router-link v-for="r in a.refs" :key="`${r.type}:${r.id}`" :to="refPath(r)" @click="openRef($event, a, r)" class="group flex items-center gap-3 p-1.5 pr-3 border border-black/8 hover:border-gold/60 transition-colors">
                                     <span class="w-11 h-14 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
-                                        <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
+                                        <img v-if="r.thumbnail" :src="r.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover object-top" />
                                         <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                                     </span>
                                     <span class="min-w-0 flex-1">

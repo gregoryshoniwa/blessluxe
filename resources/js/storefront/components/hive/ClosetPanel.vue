@@ -38,7 +38,7 @@ export default {
         <ul v-else class="space-y-2">
             <li v-for="i in items" :key="i.line_item_id" class="flex items-center gap-3 bg-white border border-black/8 p-2.5">
                 <component :is="i.product_handle ? 'router-link' : 'span'" :to="i.product_handle ? `/shop/${i.product_handle}` : null" class="w-14 h-[4.5rem] g overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
-                    <img v-if="i.thumbnail" :src="i.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover" />
+                    <img v-if="i.thumbnail" :src="i.thumbnail" alt="" loading="lazy" class="w-full h-full object-cover object-top" />
                     <ImageOff v-else class="w-4 h-4 text-black/25" />
                 </component>
                 <div class="min-w-0 flex-1">

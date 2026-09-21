@@ -52,8 +52,8 @@ export default {
 
         <div class="scroll-strip flex gap-3 overflow-x-auto [scrollbar-width:none] -mx-[5%] px-[5%] sm:mx-0 sm:px-0">
             <router-link v-for="l in d.tryons" :key="l.id" :to="`/@${l.author.handle}?look=${l.id}`" class="w-44 sm:w-52 flex-shrink-0 bg-white border border-black/8 overflow-hidden hover:border-gold transition-colors">
-                <div class="relative aspect-[4/5] bg-cream-dark">
-                    <img :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                <div class="relative aspect-[3/4] bg-cream-dark">
+                    <img :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover object-top" />
                     <span v-if="l.twin_match" class="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-1 bg-white/95 text-[10px] text-gold-dark shadow"><Ruler class="w-3 h-3" /> {{ l.twin_match }}% like you</span>
                 </div>
                 <div class="p-3">

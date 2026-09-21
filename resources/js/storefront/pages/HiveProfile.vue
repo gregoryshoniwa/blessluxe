@@ -179,7 +179,7 @@ export default {
     <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
         <div v-if="loading && !page" class="animate-pulse">
             <div class="flex items-center gap-5 mb-8"><div class="rounded-full w-24 h-24 bg-cream-dark"></div><div class="flex-1 space-y-3"><div class="h-5 w-40 bg-cream-dark"></div><div class="h-3 w-24 bg-cream-dark"></div></div></div>
-            <div class="grid grid-cols-3 gap-1"><div v-for="n in 6" :key="n" class="aspect-[4/5] bg-cream-dark"></div></div>
+            <div class="grid grid-cols-3 gap-1"><div v-for="n in 6" :key="n" class="aspect-[3/4] bg-cream-dark"></div></div>
         </div>
 
         <div v-else-if="notFound" class="text-center py-24">
@@ -256,8 +256,8 @@ export default {
                     <button v-if="page.is_me" @click="compose" class="bg-gold text-white px-8 py-3.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Share your first look</button>
                 </div>
                 <div v-else class="grid grid-cols-3 gap-1">
-                    <button v-for="l in looks" :key="l.id" @click="open = l" class="relative aspect-[4/5] bg-cream-dark overflow-hidden group" :aria-label="l.caption || 'Open look'">
-                        <img v-if="l.images[0]" :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+                    <button v-for="l in looks" :key="l.id" @click="open = l" class="relative aspect-[3/4] bg-cream-dark overflow-hidden group" :aria-label="l.caption || 'Open look'">
+                        <img v-if="l.images[0]" :src="l.images[0]" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-300" />
                         <span v-else class="absolute inset-0 bg-gradient-to-br from-zinc-700 to-black text-white flex flex-col items-center justify-center gap-1.5 text-[11px]"><Play class="w-5 h-5 fill-white" /> {{ l.embed?.label }}</span>
                         <Play v-if="l.video || l.embed" class="absolute top-2 right-2 w-4 h-4 text-white fill-white drop-shadow" />
                         <Images v-else-if="l.images.length > 1" class="absolute top-2 right-2 w-4 h-4 text-white drop-shadow" />

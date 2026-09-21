@@ -84,7 +84,7 @@ export default {
                 <!-- What was reported -->
                 <div v-if="s.look || s.talk?.images?.length" class="flex gap-2 flex-shrink-0">
                     <a v-for="src in (s.look || s.talk).images.slice(0, 2)" :key="src" :href="src" target="_blank" rel="noopener" class="block w-24 h-32 bg-zinc-100 overflow-hidden">
-                        <img :src="src" alt="" class="w-full h-full object-cover" />
+                        <img :src="src" alt="" class="w-full h-full object-cover object-top" />
                     </a>
                 </div>
 

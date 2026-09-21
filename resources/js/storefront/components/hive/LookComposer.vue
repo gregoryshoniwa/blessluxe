@@ -312,7 +312,7 @@ export default {
                         <!-- Photos chosen: thumbnails, then same-sized tiles to add more. -->
                         <div v-else class="grid grid-cols-4 gap-2">
                             <div v-for="(p, i) in photos" :key="p.url" class="relative aspect-[4/5] g overflow-hidden bg-cream-dark">
-                                <img :src="p.url" alt="" class="w-full h-full object-cover" />
+                                <img :src="p.url" alt="" class="w-full h-full object-cover object-top" />
                                 <button @click="removePhoto(i)" class="rounded-full absolute top-1 right-1 w-7 h-7 bg-black/60 text-white inline-flex items-center justify-center" aria-label="Remove photo">
                                     <X class="w-3.5 h-3.5" />
                                 </button>
@@ -357,7 +357,7 @@ export default {
                             :class="['flex items-center gap-2.5 p-1.5 pr-3 border bg-white flex-shrink-0 w-[12.5rem] text-left transition-colors', line?.line_item_id === l.line_item_id ? 'border-gold ring-1 ring-gold' : 'border-black/10']"
                         >
                             <span class="w-10 h-12 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
-                                <img v-if="l.thumbnail" :src="l.thumbnail" alt="" class="w-full h-full object-cover" />
+                                <img v-if="l.thumbnail" :src="l.thumbnail" alt="" class="w-full h-full object-cover object-top" />
                                 <ImageOff v-else class="w-4 h-4 text-black/25" />
                             </span>
                             <span class="min-w-0">
@@ -440,7 +440,7 @@ export default {
                     <div v-if="refs.length" class="space-y-1.5 mb-2">
                         <div v-for="(r, i) in refs" :key="`${r.type}:${r.id}`" class="flex items-center gap-3 p-1.5 pr-1 border border-black/8">
                             <span class="w-9 h-11 overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0">
-                                <img v-if="r.thumbnail" :src="r.thumbnail" alt="" class="w-full h-full object-cover" />
+                                <img v-if="r.thumbnail" :src="r.thumbnail" alt="" class="w-full h-full object-cover object-top" />
                                 <component v-else :is="r.type === 'pack' ? 'Package' : 'ImageOff'" class="w-4 h-4 text-black/25" />
                             </span>
                             <span class="min-w-0 flex-1">

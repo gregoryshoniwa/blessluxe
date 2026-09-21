@@ -359,6 +359,8 @@ class Hive
             'id'         => $l->id,
             'caption'    => $l->caption,
             'images'     => json_decode((string) $l->images, true) ?: [],
+            // width ÷ height of images[0], so the feed can size the frame before the photo loads.
+            'ratio'      => isset($l->ratio) && $l->ratio > 0 ? (float) $l->ratio : null,
             'refs'       => json_decode((string) ($l->refs ?? ''), true) ?: [],
             'occasion'   => $l->occasion,
             'created_at' => Carbon::parse($l->created_at, config('app.timezone'))->toIso8601String(),
@@ -403,6 +405,14 @@ class Hive
                 DB::table('hive_looks')->where('id', $lookId)->where('likes_count', '>', 0)->decrement('likes_count');
             }
         });
+    }
+
+    /** width ÷ height of an image's bytes, or null if it can't be read. */
+    public static function ratioOf(?string $bytes): ?float
+    {
+        $size = $bytes ? @getimagesizefromstring($bytes) : false;
+
+        return $size && $size[1] > 0 ? round($size[0] / $size[1], 3) : null;
     }
 
     // ─── "For you" ─────────────────────────────────────────────────────────

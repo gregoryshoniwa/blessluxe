@@ -161,12 +161,17 @@ class HiveLinksTest extends TestCase
         $this->member('rudo');
         Http::fake(['cdn.example.com/*' => Http::response($this->png(), 200, ['Content-Type' => 'image/png'])]);
 
-        $look = $this->share(['image_urls' => ['https://cdn.example.com/photos/dress.png?sig=abc'], 'images' => [UploadedFile::fake()->image('mine.jpg')]])->assertOk()->json('look');
+        $look = $this->share(['image_urls' => ['https://cdn.example.com/photos/dress.png?sig=abc'], 'images' => [UploadedFile::fake()->image('mine.jpg', 950, 1000)]])->assertOk()->json('look');
+
+        // A look made only from a link is measured from the copy we stored.
+        $onlyLink = $this->share(['image_urls' => ['https://cdn.example.com/photos/dress.png']])->assertOk()->json('look');
+        $this->assertSame(0.8, $onlyLink['ratio']);                    // the 2000×2500 original
 
         $this->assertCount(2, $look['images']);                         // an upload and a link, together
         $copied = $look['images'][1];
         $this->assertStringNotContainsString('cdn.example.com', $copied);
         $this->assertTrue(Media::isUnder($copied, 'hive/looks/cust_rudo'));
+        $this->assertSame(0.95, $look['ratio'] ?? null);                // the UPLOAD is first, so its shape frames the post
         [$w, $h] = getimagesizefromstring(Media::get($copied));
         $this->assertSame(RemoteImage::MAX_EDGE, max($w, $h));          // 2000×2500 came down to 1080 on the long edge
     }

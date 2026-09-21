@@ -253,15 +253,21 @@ class HiveController extends Controller
             return response()->json(['errors' => ['image_urls' => [$e->getMessage()]]], 422);
         }
         if ($embed && ($cover = HiveEmbeds::cover($embed['provider'], $embed['ref'], $dir))) $urls[] = $cover;
+        // The first photo's shape, so the feed can show it whole. Read from the upload
+        // itself when there is one; a picture copied from a link is read back once.
+        $ratio = null;
+        if (! $embed && $urls) {
+            $ratio = $files ? Hive::ratioOf((string) @file_get_contents($files[0]->getRealPath())) : Hive::ratioOf(Media::get($urls[0]));
+        }
         $video = $request->file('video');
         $videoUrl = $video ? Media::upload($video, "hive/looks/{$me->customer_id}") : null;
 
         $id = 'look_' . Str::ulid();
-        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge, $video, $videoUrl, $embed) {
+        DB::transaction(function () use ($id, $me, $data, $urls, $refs, $line, $challenge, $video, $videoUrl, $embed, $ratio) {
             DB::table('hive_looks')->insert([
                 'id' => $id, 'customer_id' => $me->customer_id,
                 'caption' => ($c = trim(strip_tags((string) ($data['caption'] ?? '')))) === '' ? null : $c,
-                'images' => json_encode($urls), 'refs' => $refs ? json_encode($refs) : null,
+                'images' => json_encode($urls), 'ratio' => $ratio, 'refs' => $refs ? json_encode($refs) : null,
                 'embed_provider' => $embed['provider'] ?? null, 'embed_ref' => $embed['ref'] ?? null,
                 'shape' => ($embed || $video) ? ($data['shape'] ?? null) : null,
                 'video_url' => $videoUrl, 'video_bytes' => $video?->getSize(),

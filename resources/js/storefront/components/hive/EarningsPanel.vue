@@ -34,7 +34,7 @@ export default {
             <div v-if="s.seller.looks_that_sold.length" class="mt-4 pt-4 border-t border-black/6">
                 <p class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">Looks that sold</p>
                 <router-link v-for="l in s.seller.looks_that_sold" :key="l.id" :to="{ query: { look: l.id } }" class="flex items-center gap-3 py-1.5 group">
-                    <span class="w-10 h-12 overflow-hidden bg-cream-dark flex-shrink-0"><img v-if="l.image" :src="l.image" alt="" loading="lazy" class="w-full h-full object-cover" /></span>
+                    <span class="w-10 h-12 overflow-hidden bg-cream-dark flex-shrink-0"><img v-if="l.image" :src="l.image" alt="" loading="lazy" class="w-full h-full object-cover object-top" /></span>
                     <span class="min-w-0 flex-1 text-sm truncate group-hover:text-gold-dark">{{ l.caption || 'Look' }}</span>
                     <span class="text-xs text-black/55 whitespace-nowrap">{{ l.items }} sold · {{ l.sales_label }}</span>
                 </router-link>
