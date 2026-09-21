@@ -4,13 +4,14 @@ import { authStore } from '../auth-store.js';
 import { hiveStore, whatsappShare } from '../hive-store.js';
 import LookCard from '../components/hive/LookCard.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
+import GiftSheet from '../components/hive/GiftSheet.vue';
 import { ArrowLeft, Trophy, LoaderCircle, Share2, Plus } from 'lucide-vue-next';
 
 /** One challenge: what it is, what it pays, when it closes — and everyone's entries. */
 export default {
     name: 'HiveChallenge',
-    components: { LookCard, ReportSheet, ArrowLeft, Trophy, LoaderCircle, Share2, Plus },
-    data() { return { auth: authStore.state, challenge: null, looks: [], next: null, loading: true, loadingMore: false, notFound: false, reporting: null, observer: null }; },
+    components: { LookCard, ReportSheet, GiftSheet, ArrowLeft, Trophy, LoaderCircle, Share2, Plus },
+    data() { return { auth: authStore.state, challenge: null, looks: [], next: null, loading: true, loadingMore: false, notFound: false, reporting: null, gifting: null, observer: null }; },
     computed: {
         deadline() {
             const c = this.challenge;
@@ -48,6 +49,7 @@ export default {
         },
         enter() { hiveStore.compose(this.$router, this.$route, { challengeId: this.challenge.id }); },
         onPosted(e) { if (e.detail.challenge_id === this.challenge?.id) { this.looks.unshift(e.detail); this.challenge.entries += 1; } },
+        async gift(target) { if (await hiveStore.ready(this.$router, this.$route)) this.gifting = target; },
         report(s) {
             if (!this.auth.signedIn) { this.$router.push({ path: '/account/login', query: { next: this.$route.fullPath } }); return; }
             this.reporting = s;
@@ -81,11 +83,12 @@ export default {
 
             <p v-if="!looks.length" class="text-center text-sm text-black/50 py-14">No entries yet — yours could be the first.</p>
             <div v-else class="space-y-4">
-                <LookCard v-for="l in looks" :key="l.id" :look="l" @removed="(id) => looks = looks.filter((x) => x.id !== id)" @report="report" />
+                <LookCard v-for="l in looks" :key="l.id" :look="l" @removed="(id) => looks = looks.filter((x) => x.id !== id)" @report="report" @gift="gift" />
                 <div ref="sentinel" class="h-14 flex items-center justify-center"><LoaderCircle v-if="loadingMore" class="w-5 h-5 animate-spin text-black/30" /></div>
             </div>
         </template>
 
+        <GiftSheet :target="gifting" @close="gifting = null" />
         <ReportSheet :subject="reporting" @close="reporting = null" @sent="(s) => looks = looks.filter((x) => x.id !== s.id)" />
     </div>
 </template>

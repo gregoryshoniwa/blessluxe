@@ -32,13 +32,14 @@ class HiveTalk
     public const SAME_PAIR_COOLDOWN_DAYS = 7;
 
     /** Notification kinds that belong on the Hive's Activity page. */
-    public const ACTIVITY_KINDS = ['hive_follow', 'hive_like', 'hive_comment', 'hive_answer', 'hive_accepted'];
+    public const ACTIVITY_KINDS = ['hive_follow', 'hive_like', 'hive_comment', 'hive_answer', 'hive_accepted', 'hive_gift', 'hive_live'];
 
     /** Reportable things beyond looks/pages: type → [table, parent counter]. */
     private const TALK = [
         'comment' => ['hive_comments', 'hive_looks', 'look_id', 'comments_count'],
         'answer'  => ['hive_answers',  'hive_asks',  'ask_id',  'answers_count'],
         'ask'     => ['hive_asks',     null,         null,      null],
+        'live'    => ['hive_lives',    null,         null,      null],
     ];
 
     // ─── Comments ──────────────────────────────────────────────────────────
@@ -285,6 +286,8 @@ class HiveTalk
     public static function setStatus(string $type, string $id, string $status): void
     {
         [$table, $parent, $fk, $counter] = self::TALK[$type];
+        // A live's visible state is called "scheduled", not "published".
+        if ($type === 'live' && $status === 'published') $status = 'scheduled';
 
         DB::transaction(function () use ($table, $parent, $fk, $counter, $id, $status) {
             $row = DB::table($table)->where('id', $id)->lockForUpdate()->first();

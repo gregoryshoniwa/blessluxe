@@ -197,6 +197,8 @@ Verified tailors/designers/runners with held payment and PIN collection; deadlin
 
 ### Phase 4 — Live + gifts · 6–8 weeks · pay per event
 Scheduled lives for verified 18+ creators; Bees gifts with limits; published 70% creator share; payouts to EcoCash — **only after the legal structure is signed off.** Target Wi-Fi and diaspora viewers first.
+- **Built 21 Sep 2026 as "Phase 4 lite", avoiding both blockers:** lives are scheduled BY LINK (the host streams on YouTube/TikTok/Facebook/Instagram as they already do and it plays in the Hive's tap-to-load frame), so there is **no streaming bill**; and gifts are **closed-loop** — Bees that were earned, moved between members, spendable only at checkout, never bought and never cashed out. The creator keeps 100% (`CREATOR_SHARE_PERCENT`). Reminders, a live-now badge, a gifts feed, and gifts on ordinary looks too.
+- **Still needs the lawyer before it carries real volume**, and before Bees are ever made purchasable or withdrawable — that single change is what would turn this into regulated stored value. EcoCash cash-out is deliberately NOT built.
 - **Gate:** 20 regular hosts · gifts + live sales exceed streaming cost by 3×.
 
 ### Phase 5 — Beyond Zimbabwe

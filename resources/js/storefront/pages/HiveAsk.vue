@@ -22,6 +22,7 @@ export default {
         document.title = 'Ask · Bless Hive';
         this.observer = new IntersectionObserver((e) => { if (e[0].isIntersecting) this.load(false); }, { rootMargin: '800px' });
         this.load(true);
+        if (this.$route.query.ask) this.ask();
     },
     beforeUnmount() { this.observer?.disconnect(); },
     methods: {

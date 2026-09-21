@@ -7,6 +7,7 @@ import LookCard from '../components/hive/LookCard.vue';
 import FitEditor from '../components/hive/FitEditor.vue';
 import PageEditor from '../components/hive/PageEditor.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
+import GiftSheet from '../components/hive/GiftSheet.vue';
 import EarningsPanel from '../components/hive/EarningsPanel.vue';
 import SellerShop from '../components/hive/SellerShop.vue';
 import ClosetPanel from '../components/hive/ClosetPanel.vue';
@@ -26,7 +27,7 @@ const FIT_LABELS = {
  */
 export default {
     name: 'HiveProfilePage',
-    components: { LookCard, FitEditor, PageEditor, ReportSheet, EarningsPanel, SellerShop, ClosetPanel, SellerBadge, Coins, Play, Shirt, Star, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
+    components: { LookCard, FitEditor, PageEditor, ReportSheet, GiftSheet, EarningsPanel, SellerShop, ClosetPanel, SellerBadge, Coins, Play, Shirt, Star, UserRound, MapPin, Share2, Pencil, Plus, Flag, X, Lock, ShoppingBag, LoaderCircle, Ruler, Images },
     data() {
         return {
             auth: authStore.state,
@@ -42,7 +43,7 @@ export default {
             editing: false,
             openWithComments: false,
             observer: null,
-            reporting: null,
+            reporting: null, gifting: null,
         };
     },
     computed: {
@@ -159,6 +160,7 @@ export default {
         },
         onFitSaved(me) { this.page = { ...this.page, ...me }; },
 
+        async gift(target) { if (await hiveStore.ready(this.$router, this.$route)) this.gifting = target; },
         report(subject) {
             if (!this.auth.signedIn) {
                 this.$router.push({ path: '/account/login', query: { next: this.$route.fullPath } });
@@ -313,11 +315,12 @@ export default {
                 <div class="sm:hidden sticky top-0 z-30 bg-white flex justify-end border-b border-black/8">
                     <button @click="closeLook" class="h-12 px-4 inline-flex items-center gap-1.5 text-xs tracking-widest uppercase text-black/60" aria-label="Close"><X class="w-4 h-4" /> Close</button>
                 </div>
-                <LookCard :key="open.id" :look="open" :open-comments="openWithComments" @removed="onRemoved" @report="report" />
+                <LookCard :key="open.id" :look="open" :open-comments="openWithComments" @removed="onRemoved" @report="report" @gift="gift" />
             </div>
         </div>
 
         <PageEditor v-if="editing" @close="editing = false" @saved="onPageSaved" />
+        <GiftSheet :target="gifting" @close="gifting = null" />
         <ReportSheet :subject="reporting" @close="reporting = null" @sent="onReported" />
     </div>
 </template>

@@ -515,7 +515,7 @@ class HiveController extends Controller
     {
         $me = $this->mustBeMember(requireAdult: false);
         $data = $request->validate([
-            'type'   => ['required', Rule::in(['look', 'page', 'comment', 'ask', 'answer'])],
+            'type'   => ['required', Rule::in(['look', 'page', 'comment', 'ask', 'answer', 'live'])],
             'id'     => ['required', 'string', 'max:64'],
             'reason' => ['required', Rule::in(Hive::REPORT_REASONS)],
             'note'   => ['nullable', 'string', 'max:300'],

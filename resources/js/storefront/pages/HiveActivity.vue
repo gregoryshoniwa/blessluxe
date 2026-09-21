@@ -1,14 +1,14 @@
 <script>
 import { api } from '../../lib/api.js';
 import { hiveStore, timeAgo } from '../hive-store.js';
-import { Heart, MessageCircle, UserPlus, MessageCircleQuestion, BadgeCheck, UserRound, Bell } from 'lucide-vue-next';
+import { Heart, MessageCircle, UserPlus, MessageCircleQuestion, BadgeCheck, UserRound, Bell, Gift, Radio } from 'lucide-vue-next';
 
-const ICONS = { hive_like: 'Heart', hive_comment: 'MessageCircle', hive_follow: 'UserPlus', hive_answer: 'MessageCircleQuestion', hive_accepted: 'BadgeCheck' };
+const ICONS = { hive_like: 'Heart', hive_comment: 'MessageCircle', hive_follow: 'UserPlus', hive_answer: 'MessageCircleQuestion', hive_accepted: 'BadgeCheck', hive_gift: 'Gift', hive_live: 'Radio' };
 
 /** Who hearted, commented, followed, answered. Opening the page clears the badge. */
 export default {
     name: 'HiveActivity',
-    components: { Heart, MessageCircle, UserPlus, MessageCircleQuestion, BadgeCheck, UserRound, Bell },
+    components: { Heart, MessageCircle, UserPlus, MessageCircleQuestion, BadgeCheck, UserRound, Bell, Gift, Radio },
     data() { return { items: [], loading: true }; },
     async mounted() {
         document.title = 'Activity · Bless Hive';

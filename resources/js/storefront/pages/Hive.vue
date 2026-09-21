@@ -4,7 +4,8 @@ import { authStore } from '../auth-store.js';
 import { hiveStore, occasionLabel } from '../hive-store.js';
 import LookCard from '../components/hive/LookCard.vue';
 import ReportSheet from '../components/hive/ReportSheet.vue';
-import { UserRound, Ruler, LoaderCircle, Sparkles, Search, Trophy, ChevronRight } from 'lucide-vue-next';
+import GiftSheet from '../components/hive/GiftSheet.vue';
+import { UserRound, Ruler, LoaderCircle, Sparkles, Search, Trophy, ChevronRight, Radio } from 'lucide-vue-next';
 
 /**
  * Bless Hive — Home. The whole screen is the feed (the frame around it is
@@ -13,7 +14,7 @@ import { UserRound, Ruler, LoaderCircle, Sparkles, Search, Trophy, ChevronRight 
  */
 export default {
     name: 'HiveHome',
-    components: { LookCard, ReportSheet, UserRound, Ruler, LoaderCircle, Sparkles, Search, Trophy, ChevronRight },
+    components: { LookCard, ReportSheet, GiftSheet, UserRound, Ruler, LoaderCircle, Sparkles, Search, Trophy, ChevronRight, Radio },
     data() {
         return {
             auth: authStore.state,
@@ -29,7 +30,8 @@ export default {
             twinsReady: true,
             suggested: [],
             challenges: [],
-            reporting: null,
+            lives: [],
+            reporting: null, gifting: null,
             observer: null,
             ticket: 0,
         };
@@ -91,6 +93,7 @@ export default {
         },
 
         async loadMine() {
+            api.get('/api/store/hive/lives').then((d) => { this.lives = [...d.live, ...d.upcoming].slice(0, 6); }).catch(() => {});
             api.get('/api/store/hive/challenges').then((d) => { this.challenges = d.challenges; }).catch(() => {});
             api.get('/api/store/hive/discover').then((d) => { this.suggested = d.people.slice(0, 5); }).catch(() => {});
             if (!(await hiveStore.load())) return;
@@ -122,6 +125,7 @@ export default {
         onReported(subject) {
             if (subject.type === 'look') this.looks = this.looks.filter((l) => l.id !== subject.id);
         },
+        async gift(target) { if (await hiveStore.ready(this.$router, this.$route)) this.gifting = target; },
         report(subject) {
             if (!this.auth.signedIn) {
                 this.$router.push({ path: '/account/login', query: { next: '/hive' } });
@@ -168,6 +172,25 @@ export default {
             </div>
 
             <div class="px-4 sm:px-0 pt-3 pb-6">
+                <!-- Live now / coming up -->
+                <div v-if="lives.length" class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="flex items-center gap-1.5 text-[10px] tracking-[0.2em] uppercase text-black/45"><Radio class="w-3.5 h-3.5" /> Live</p>
+                        <router-link to="/hive/live" class="text-[11px] text-gold-dark">See all</router-link>
+                    </div>
+                    <div class="scroll-strip scroll-px-4 sm:scroll-px-0 flex gap-2.5 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 sm:mx-0 sm:px-0">
+                        <router-link v-for="l in lives" :key="l.id" :to="`/hive/live/${l.id}`" class="flex items-center gap-2.5 bg-white border border-black/8 rounded-full pl-1.5 pr-4 py-1.5 flex-shrink-0 max-w-[16rem]">
+                            <span :class="['w-9 h-9 rounded-full overflow-hidden bg-cream-dark flex items-center justify-center flex-shrink-0 border-2', l.state === 'live' ? 'border-red-500' : 'border-gold/40']">
+                                <img v-if="l.host.avatar_url" :src="l.host.avatar_url" alt="" loading="lazy" class="w-full h-full object-cover" /><UserRound v-else class="w-4 h-4 text-black/30" />
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-xs font-medium truncate">{{ l.title }}</span>
+                                <span :class="['block text-[10px] truncate', l.state === 'live' ? 'text-red-600 font-semibold tracking-widest uppercase' : 'text-black/45']">{{ l.state === 'live' ? 'Live now' : new Date(l.starts_at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }}</span>
+                            </span>
+                        </router-link>
+                    </div>
+                </div>
+
                 <!-- What's on this week -->
                 <router-link v-for="c in challenges" :key="c.id" :to="`/hive/challenge/${c.slug}`" class="flex items-center gap-3 mb-4 bg-black text-white rounded-2xl px-4 py-3.5">
                     <Trophy class="w-5 h-5 text-gold flex-shrink-0" />
@@ -218,7 +241,7 @@ export default {
                 </div>
 
                 <div v-else class="space-y-4">
-                    <LookCard v-for="l in looks" :key="l.id" :look="l" @removed="onRemoved" @report="report" />
+                    <LookCard v-for="l in looks" :key="l.id" :look="l" @removed="onRemoved" @report="report" @gift="gift" />
                     <div ref="sentinel" class="h-16 flex items-center justify-center">
                         <LoaderCircle v-if="loadingMore" class="w-5 h-5 animate-spin text-black/30" />
                         <span v-else-if="!next && looks.length > 3" class="text-[10px] tracking-widest uppercase text-black/30">You're all caught up</span>
@@ -275,6 +298,7 @@ export default {
             </div>
         </aside>
 
+        <GiftSheet :target="gifting" @close="gifting = null" />
         <ReportSheet :subject="reporting" @close="reporting = null" @sent="onReported" />
     </div>
 </template>

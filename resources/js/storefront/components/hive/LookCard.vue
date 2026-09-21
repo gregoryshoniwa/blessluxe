@@ -4,7 +4,7 @@ import { confirmDialog, toast, toastError } from '../../../lib/dialog.js';
 import { hiveStore, timeAgo, occasionLabel, whatsappShare } from '../../hive-store.js';
 import LookComments from './LookComments.vue';
 import SellerBadge from './SellerBadge.vue';
-import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions } from 'lucide-vue-next';
+import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions, Gift } from 'lucide-vue-next';
 
 /**
  * One look: who, the photos, what she's wearing, and the three things you can
@@ -17,7 +17,7 @@ import { Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, Me
  */
 export default {
     name: 'LookCard',
-    components: { LookComments, SellerBadge, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions },
+    components: { LookComments, SellerBadge, Heart, Ellipsis, Flag, Trash2, Share2, Package, ImageOff, UserRound, MessageCircle, BadgeCheck, Star, Trophy, Play, ExternalLink, RectangleVertical, RectangleHorizontal, Square, Proportions, Gift },
     props: {
         look: { type: Object, required: true },
         // On someone's own page the author row is repetition.
@@ -25,7 +25,7 @@ export default {
         // Opened from a notification about a comment: start with the thread showing.
         openComments: { type: Boolean, default: false },
     },
-    emits: ['removed', 'report'],
+    emits: ['removed', 'report', 'gift'],
     data() {
         return { slide: 0, menuOpen: false, busy: false, burst: false, talking: this.openComments, playing: false, watcher: null, loaded: false, reshaping: false };
     },
@@ -257,6 +257,9 @@ export default {
                 <button @click="talking = !talking" class="h-11 px-2 inline-flex items-center gap-1.5 text-black/70 hover:text-black" :aria-expanded="talking" aria-label="Comments">
                 <MessageCircle class="w-[22px] h-[22px]" />
                 <span v-if="look.comments" class="text-xs">{{ look.comments }}</span>
+            </button>
+            <button v-if="!look.is_mine" @click="$emit('gift', { context: 'look', id: look.id, name: look.author.display_name })" class="w-11 h-11 inline-flex items-center justify-center text-black/70 hover:text-gold-dark" aria-label="Send a gift">
+                <Gift class="w-[22px] h-[22px]" />
             </button>
             <a :href="shareHref" target="_blank" rel="noopener" class="w-11 h-11 inline-flex items-center justify-center text-black/70 hover:text-black" aria-label="Share on WhatsApp">
                 <Share2 class="w-5 h-5" />

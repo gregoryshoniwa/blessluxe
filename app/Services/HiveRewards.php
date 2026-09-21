@@ -25,6 +25,7 @@ class HiveRewards
         'hive_try_on'          => 'Try-on review',
         'hive_answer_accepted' => 'Accepted answer',
         'hive_challenge_win'   => 'Challenge prize',
+        'hive_gift_received'   => 'Gift received',
     ];
 
     // ─── Try-ons ───────────────────────────────────────────────────────────

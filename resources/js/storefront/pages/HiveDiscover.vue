@@ -4,14 +4,14 @@ import { toastError } from '../../lib/dialog.js';
 import { authStore } from '../auth-store.js';
 import { hiveStore, occasionLabel } from '../hive-store.js';
 import SellerBadge from '../components/hive/SellerBadge.vue';
-import { Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck } from 'lucide-vue-next';
+import { Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck, Radio, ChevronRight } from 'lucide-vue-next';
 
 /** Find people (by name or @handle), your fit twins, and looks by occasion. */
 export default {
     name: 'HiveDiscover',
-    components: { SellerBadge, Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck },
+    components: { SellerBadge, Search, UserRound, LoaderCircle, Ruler, X, ShoppingBag, BadgeCheck, Radio, ChevronRight },
     data() {
-        return { auth: authStore.state, hive: hiveStore.state, q: '', people: [], searching: false, loading: true, occasions: [], twins: [], twinsReady: true, sellers: [], timer: null, ticket: 0, busy: null };
+        return { auth: authStore.state, hive: hiveStore.state, q: '', people: [], searching: false, loading: true, occasions: [], twins: [], twinsReady: true, sellers: [], lives: 0, timer: null, ticket: 0, busy: null };
     },
     watch: {
         q() {
@@ -73,6 +73,16 @@ export default {
         </label>
 
         <template v-if="!searching">
+            <!-- Live -->
+            <router-link to="/hive/live" class="flex items-center gap-3 mt-6 bg-black text-white rounded-2xl px-4 py-3.5">
+                <Radio class="w-5 h-5 text-gold flex-shrink-0" />
+                <span class="min-w-0 flex-1">
+                    <span class="block text-sm font-medium">Live in the Hive</span>
+                    <span class="block text-xs text-white/60">{{ lives ? `${lives} on now` : 'Styling sessions, drops and hauls' }}</span>
+                </span>
+                <ChevronRight class="w-4 h-4 text-white/50 flex-shrink-0" />
+            </router-link>
+
             <!-- By occasion -->
             <section class="mt-6">
                 <h2 class="text-[10px] tracking-[0.2em] uppercase text-black/45 mb-3">What's the occasion?</h2>

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AvatarController;
 use App\Http\Controllers\Api\GenerationController;
 use App\Http\Controllers\Api\HiveController;
+use App\Http\Controllers\Api\HiveLiveController;
 use App\Http\Controllers\Api\HiveTalkController;
 use App\Http\Controllers\Api\Admin\AdminHiveController;
 use App\Http\Controllers\Api\LogoController;
@@ -91,6 +92,9 @@ Route::prefix('store')->group(function () {
         Route::get('/looks/{id}/comments', [HiveTalkController::class, 'comments']);
         Route::get('/discover',            [HiveController::class, 'discover'])->middleware('throttle:hive-read');
         Route::get('/products/{productId}/tryons', [HiveController::class, 'productTryOns']);
+        Route::get('/lives',               [HiveLiveController::class, 'index']);
+        Route::get('/lives/{id}',          [HiveLiveController::class, 'show']);
+        Route::get('/lives/{id}/gifts',    [HiveLiveController::class, 'gifts'])->middleware('throttle:hive-read');
         Route::get('/challenges',          [HiveController::class, 'challenges']);
         Route::get('/challenges/{slug}',   [HiveController::class, 'challenge']);
         Route::get('/asks',                [HiveTalkController::class, 'asks']);
@@ -244,6 +248,15 @@ Route::middleware('web')->prefix('account')->group(function () {
         Route::get   ('/tryons/eligible',    [HiveController::class, 'eligibleTryOns']);
         Route::get   ('/earnings',           [HiveController::class, 'earnings']);
         Route::get   ('/closet',             [HiveController::class, 'closet']);
+
+        Route::get   ('/gifts',                 [HiveLiveController::class, 'menu']);
+        Route::post  ('/gifts',                 [HiveLiveController::class, 'give'])->middleware('throttle:hive-talk');
+        Route::post  ('/lives',                 [HiveLiveController::class, 'store'])->middleware('throttle:hive-post');
+        Route::post  ('/lives/{id}/start',      [HiveLiveController::class, 'start']);
+        Route::post  ('/lives/{id}/end',        [HiveLiveController::class, 'end']);
+        Route::post  ('/lives/{id}/cancel',     [HiveLiveController::class, 'cancel']);
+        Route::post  ('/lives/{id}/remind',     [HiveLiveController::class, 'remind'])->middleware('throttle:hive-tap');
+        Route::delete('/lives/{id}/remind',     [HiveLiveController::class, 'unremind']);
         Route::get   ('/mentions',           [HiveController::class, 'mentions'])->middleware('throttle:hive-read');
         Route::post  ('/links/inspect',      [HiveController::class, 'inspectLink'])->middleware('throttle:hive-talk');
         Route::post  ('/looks',              [HiveController::class, 'storeLook'])->middleware('throttle:hive-post');

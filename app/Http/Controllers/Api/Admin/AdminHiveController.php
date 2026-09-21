@@ -36,7 +36,7 @@ class AdminHiveController extends Controller
 
         // Comments, questions and answers: the words themselves, and whose they are.
         $talk = [];
-        foreach (['comment' => ['hive_comments', 'body'], 'ask' => ['hive_asks', 'question'], 'answer' => ['hive_answers', 'body']] as $type => [$tbl, $col]) {
+        foreach (['comment' => ['hive_comments', 'body'], 'ask' => ['hive_asks', 'question'], 'answer' => ['hive_answers', 'body'], 'live' => ['hive_lives', 'title']] as $type => [$tbl, $col]) {
             $ids = $rows->where('subject_type', $type)->pluck('subject_id')->unique();
             if ($ids->isEmpty()) continue;
             foreach (DB::table("$tbl as t")->join('hive_profiles as p', 'p.customer_id', '=', 't.customer_id')->whereIn('t.id', $ids)

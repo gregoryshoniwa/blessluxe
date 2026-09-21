@@ -3,7 +3,7 @@ import { authStore } from '../../auth-store.js';
 import { hiveStore } from '../../hive-store.js';
 import LookComposer from './LookComposer.vue';
 import HiveGate from './HiveGate.vue';
-import { House, Compass, MessageCircleQuestion, Bell, UserRound, Plus, ShoppingBag, LogIn } from 'lucide-vue-next';
+import { House, Compass, MessageCircleQuestion, Bell, UserRound, Plus, ShoppingBag, LogIn, Radio, Camera, X } from 'lucide-vue-next';
 
 /**
  * The Hive's own frame. Inside /hive and /@handle the shop's announcement bar,
@@ -18,9 +18,9 @@ import { House, Compass, MessageCircleQuestion, Bell, UserRound, Plus, ShoppingB
  */
 export default {
     name: 'HiveShell',
-    components: { LookComposer, HiveGate, House, Compass, MessageCircleQuestion, Bell, UserRound, Plus, ShoppingBag, LogIn },
+    components: { LookComposer, HiveGate, House, Compass, MessageCircleQuestion, Bell, UserRound, Plus, ShoppingBag, LogIn, Radio, Camera, X },
     data() {
-        return { auth: authStore.state, hive: hiveStore.state, timer: null };
+        return { auth: authStore.state, hive: hiveStore.state, timer: null, choosing: false };
     },
     computed: {
         me() { return this.hive.me; },
@@ -30,18 +30,20 @@ export default {
                 { key: 'home',     to: '/hive',          label: 'Home',     icon: 'House' },
                 { key: 'discover', to: '/hive/discover', label: 'Discover', icon: 'Compass' },
                 { key: 'ask',      to: '/hive/ask',      label: 'Ask',      icon: 'MessageCircleQuestion' },
+                { key: 'live',     to: '/hive/live',     label: 'Live',     icon: 'Radio' },
                 { key: 'activity', to: '/hive/activity', label: 'Activity', icon: 'Bell', badge: this.hive.unread },
                 { key: 'me',       to: this.myPath,      label: this.me ? 'My page' : 'Sign in', icon: this.me ? 'UserRound' : 'LogIn' },
             ];
         },
         // Phone tab bar has five places and "+" takes the middle one, so Discover
         // lives as the search button on Home instead of a tab.
-        tabs() { return this.items.filter((i) => i.key !== 'discover'); },
+        tabs() { return this.items.filter((i) => !['discover', 'live'].includes(i.key)); },
         active() {
             const p = this.$route.path;
             if (p === '/hive') return 'home';
             if (p.startsWith('/hive/discover')) return 'discover';
             if (p.startsWith('/hive/ask')) return 'ask';
+            if (p.startsWith('/hive/live')) return 'live';
             if (p.startsWith('/hive/activity')) return 'activity';
             if (this.me && p.toLowerCase() === `/@${this.me.handle}`) return 'me';
             return null;
@@ -67,7 +69,8 @@ export default {
             if (await hiveStore.load()) hiveStore.refreshUnread();
         },
         onVisible() { if (!document.hidden) hiveStore.refreshUnread(); },
-        compose() { hiveStore.compose(this.$router, this.$route); },
+        compose() { this.choosing = false; hiveStore.compose(this.$router, this.$route); },
+        go(path) { this.choosing = false; this.$router.push(path); },
         onPosted(look) { hiveStore.posted(look); },
     },
 };
@@ -137,7 +140,7 @@ export default {
         <nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-black/10 pb-[env(safe-area-inset-bottom)]" aria-label="Hive">
             <div class="grid grid-cols-5 h-14 max-w-md mx-auto">
                 <template v-for="(t, n) in tabs" :key="t.key">
-                    <button v-if="n === 2" @click="compose" class="flex items-center justify-center" aria-label="Share a look">
+                    <button v-if="n === 2" @click="choosing = true" class="flex items-center justify-center" aria-label="Create">
                         <span class="w-11 h-11 rounded-full bg-gold text-white flex items-center justify-center shadow-md"><Plus class="w-6 h-6" /></span>
                     </button>
                     <router-link :to="t.to" class="flex flex-col items-center justify-center gap-0.5" :aria-current="active === t.key ? 'page' : null" :aria-label="t.label">
@@ -150,6 +153,21 @@ export default {
                 </template>
             </div>
         </nav>
+
+        <!-- Phone "+": what do you want to make? -->
+        <div v-if="choosing" class="lg:hidden fixed inset-0 z-[85] flex items-end" role="dialog" aria-modal="true" aria-label="Create">
+            <div class="absolute inset-0 bg-black/50" @click="choosing = false"></div>
+            <div class="relative bg-white w-full rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <button v-for="c in [
+                    { l: 'Share a look', h: 'Photos, a short video, or a link', i: 'Camera', f: compose },
+                    { l: 'Ask the Hive', h: 'What should I wear? Which one?', i: 'MessageCircleQuestion', f: () => go('/hive/ask?ask=1') },
+                    { l: 'Schedule a live', h: 'Go live by link and receive gifts', i: 'Radio', f: () => go('/hive/live?schedule=1') },
+                ]" :key="c.l" @click="c.f()" class="w-full flex items-center gap-4 px-3 py-3.5 rounded-xl hover:bg-cream text-left">
+                    <span class="w-11 h-11 rounded-full bg-cream flex items-center justify-center flex-shrink-0"><component :is="c.i" class="w-5 h-5 text-gold-dark" /></span>
+                    <span><span class="block text-sm font-medium">{{ c.l }}</span><span class="block text-xs text-black/50">{{ c.h }}</span></span>
+                </button>
+            </div>
+        </div>
 
         <LookComposer v-if="hive.composerOpen" @close="hive.composerOpen = false" @posted="onPosted" />
         <HiveGate />
