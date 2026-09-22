@@ -19,6 +19,7 @@ export default {
             option: null,
             phone: '',
             phoneError: '',
+            phoneRevealed: false, // the gateway rejected the number we sent quietly — let them fix it
             // Bees redemption state.
             bees: null,         // { balance, recent } when signed-in customer has bees; null otherwise
             beesSettings: null, // { enabled, per_usd, max_discount_percent, earn_per_usd }
@@ -38,8 +39,14 @@ export default {
         itemCount() { return this.cart?.item_count || 0; },
         chosen() { return this.options.find((o) => o.id === this.option) || null; },
         needsPhone() { return !!this.chosen?.needs?.includes('phone'); },
+        // A wallet prompt lands on a phone, so the shopper must confirm WHICH one.
+        // A card is paid on the gateway's page — the number is only for their
+        // records, so the one from the details step is used without asking,
+        // and the field appears only when we don't have one.
+        promptsPhone() { return this.needsPhone && this.chosen?.method !== 'card'; },
+        askPhone() { return this.needsPhone && (this.promptsPhone || this.phoneRevealed || !this.phoneLooksValid(this.draft.phone)); },
         payLabel() {
-            if (this.submitting) return this.chosen?.needs?.includes('phone') ? 'Sending the prompt…' : `Redirecting to ${this.chosen?.label || 'payment'}…`;
+            if (this.submitting) return this.promptsPhone ? 'Sending the prompt…' : `Redirecting to ${this.chosen?.label || 'payment'}…`;
             return `Pay $${this.total}`;
         },
         readyToPay() {
@@ -98,11 +105,17 @@ export default {
             } catch { /* keep previous preview */ }
             finally { this.previewing = false; }
         },
+        phoneLooksValid(v) { return /\d{9,}/.test(String(v || '').replace(/\D/g, '')); },
         icon(o) { return { smartphone: 'Smartphone', wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard' }[o.icon] || 'Shield'; },
         async pay() {
             if (!this.chosen) return;
             this.phoneError = '';
-            if (this.needsPhone && !/\d{9,}/.test(this.phone.replace(/\D/g, ''))) { this.phoneError = 'Enter the phone number that will pay, e.g. 077 123 4567.'; return; }
+            if (this.needsPhone && !this.askPhone) this.phone = this.draft.phone;
+            if (this.needsPhone && !this.phoneLooksValid(this.phone)) {
+                this.phoneRevealed = true;
+                this.phoneError = this.promptsPhone ? 'Enter the phone number that will pay, e.g. 077 123 4567.' : 'Enter a mobile number for your receipt, e.g. 077 123 4567.';
+                return;
+            }
             this.submitting = true;
             this.error = '';
             try {
@@ -123,6 +136,7 @@ export default {
             } catch (e) {
                 // A field problem sits under the field; anything the gateway said is a notification.
                 this.phoneError = e.payload?.errors?.phone?.[0] || '';
+                if (this.phoneError) this.phoneRevealed = true;
                 if (!this.phoneError) toast(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Payment could not be started.', { tone: 'error' });
             } finally {
                 this.submitting = false;
@@ -235,8 +249,8 @@ export default {
                                 <div class="flex-1 min-w-0">
                                     <p class="font-display text-base">{{ o.label }}</p>
                                     <p class="text-xs text-black/60 mt-1">{{ o.hint }}</p>
-                                    <div v-if="option === o.id && needsPhone" class="mt-3">
-                                        <label class="block text-xs text-black/60 mb-1">Phone number that will pay</label>
+                                    <div v-if="option === o.id && askPhone" class="mt-3">
+                                        <label class="block text-xs text-black/60 mb-1">{{ promptsPhone ? 'Phone number that will pay' : 'Mobile number for your receipt' }}</label>
                                         <input v-model.trim="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="077 123 4567" class="w-full sm:w-72 border border-black/15 px-3 py-2.5 text-sm focus:outline-none focus:border-gold" @click.stop />
                                         <p v-if="phoneError" class="text-xs text-red-600 mt-1">{{ phoneError }}</p>
                                     </div>
