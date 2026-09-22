@@ -13,7 +13,9 @@ const routes = [
     { path: '/checkout/shipping', name: 'checkout-shipping', component: () => import('./pages/CheckoutShipping.vue') },
     { path: '/checkout/payment', name: 'checkout-payment', component: () => import('./pages/CheckoutPayment.vue') },
     { path: '/checkout/confirmation', name: 'checkout-confirmation', component: () => import('./pages/CheckoutConfirmation.vue') },
-    { path: '/checkout/paynow/return', name: 'paynow-return', component: () => import('./pages/PaynowReturn.vue') },
+    { path: '/checkout/return', name: 'payment-return', component: () => import('./pages/PaymentReturn.vue') },
+    // Old Paynow-shaped path: Paynow's dashboard and stale bundles still send people here.
+    { path: '/checkout/paynow/return', name: 'paynow-return', component: () => import('./pages/PaymentReturn.vue') },
     { path: '/account', name: 'account', component: () => import('./pages/Account.vue') },
     { path: '/account/login', name: 'login', component: () => import('./pages/Login.vue') },
     { path: '/account/signup', name: 'signup', component: () => import('./pages/Signup.vue') },

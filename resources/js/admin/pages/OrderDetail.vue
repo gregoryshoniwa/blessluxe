@@ -107,7 +107,7 @@ export default {
                 <p class="text-sm text-zinc-600 mb-4">
                     Restocks {{ data.order.lines.length }} line item{{ data.order.lines.length === 1 ? '' : 's' }},
                     refunds Bees if any were used, cancels any affiliate sale, and emails the customer.
-                    <strong>The money refund still has to be processed in Paynow's dashboard.</strong>
+                    <strong>The money refund still has to be processed in the payment gateway's own dashboard.</strong>
                 </p>
                 <textarea v-model="refundReason" placeholder="Reason (optional, shown to the customer)" rows="3" class="w-full border border-zinc-300 px-3 py-2 text-sm mb-3"></textarea>
                 <p v-if="refundError" class="text-sm text-red-600 mb-3">{{ refundError }}</p>

@@ -13,6 +13,7 @@ const routes = [
     { path: '/admin/affiliates', name: 'admin-affiliates', component: () => import('./pages/Affiliates.vue') },
     { path: '/admin/affiliates/:id', name: 'admin-affiliate-detail', component: () => import('./pages/AffiliateDetail.vue') },
     { path: '/admin/regions',    name: 'admin-regions',   component: () => import('./pages/Regions.vue') },
+    { path: '/admin/payments',  name: 'admin-payments', component: () => import('./pages/Payments.vue') },
     { path: '/admin/bees',      name: 'admin-bees',     component: () => import('./pages/Bees.vue') },
     // Renamed programme — old bookmarks land on the new page.
     { path: '/admin/' + 'bl' + 'its', redirect: '/admin/bees' },

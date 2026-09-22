@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\HiveController;
 use App\Http\Controllers\Api\HiveLiveController;
 use App\Http\Controllers\Api\HiveTalkController;
 use App\Http\Controllers\Api\Admin\AdminHiveController;
+use App\Http\Controllers\Api\Admin\AdminPaymentsController;
 use App\Http\Controllers\Api\LogoController;
 use App\Http\Controllers\Api\StudioController;
 use App\Http\Controllers\Api\CustomerAddressController;
@@ -48,7 +49,7 @@ use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CatalogueController;
 use App\Http\Controllers\Api\HeadingController;
-use App\Http\Controllers\Api\PaynowController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
 use Illuminate\Support\Facades\Route;
 
@@ -143,14 +144,25 @@ Route::prefix('store')->group(function () {
         Route::post ('/packs/{code}/slots/{slotId}/reserve',  [PackController::class, 'reserve']);
         Route::post ('/packs/{code}/slots/{slotId}/release',  [PackController::class, 'release']);
 
-        // Paynow payment flow.
-        Route::post('/payments/paynow/initiate', [PaynowController::class, 'initiate']);
-        Route::post('/payments/paynow/ipn',      [PaynowController::class, 'ipn'])
-            ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
-        Route::get('/payments/paynow/return',    [PaynowController::class, 'return']);
-        Route::get('/payments/paynow/status/{reference}', [PaynowController::class, 'status']);
+        // ─── Payments — any gateway (App\Services\Payments) ─────────────
+        Route::get ('/payments/options',              [PaymentController::class, 'options']);
+        Route::post('/payments/initiate',             [PaymentController::class, 'initiate']);
+        Route::get ('/payments/return',               [PaymentController::class, 'return']);
+        Route::get ('/payments/status/{reference}',   [PaymentController::class, 'status']);
         // Buys a right, not goods — deliberately outside the cart flow.
-        Route::post('/payments/paynow/exclusivity/{exclusivityId}', [PaynowController::class, 'initiateExclusivity']);
+        Route::post('/payments/exclusivity/{exclusivityId}', [PaymentController::class, 'initiateExclusivity']);
+        // Provider callbacks authenticate themselves (Paynow: SHA512 hash), so no CSRF.
+        Route::post('/payments/{gateway}/webhook',    [PaymentController::class, 'webhook'])
+            ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
+
+        // The old Paynow-shaped URLs. Paynow's dashboard has them as resulturl /
+        // returnurl, and a browser on an old bundle still posts to them. Keep.
+        Route::post('/payments/paynow/initiate',      [PaymentController::class, 'initiate']);
+        Route::post('/payments/paynow/ipn',           [PaymentController::class, 'webhook'])->defaults('gateway', 'paynow')
+            ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
+        Route::get ('/payments/paynow/return',        [PaymentController::class, 'return']);
+        Route::get ('/payments/paynow/status/{reference}', [PaymentController::class, 'status']);
+        Route::post('/payments/paynow/exclusivity/{exclusivityId}', [PaymentController::class, 'initiateExclusivity']);
 
         // ─── LUXE shopping agent ──────────────────────────────────────
         // Session-backed because guest carts + history live on the session.
@@ -413,6 +425,9 @@ Route::middleware('web')->prefix('admin')->group(function () {
         // Affiliate <-> admin conversation, and the stock requests landing in it.
         Route::get   ('/affiliate-inbox',            [AdminAffiliateController::class, 'inbox']);
         // Bless Hive moderation.
+        Route::get   ('/payments',                   [AdminPaymentsController::class, 'index']);
+        Route::put   ('/payments',                   [AdminPaymentsController::class, 'update']);
+        Route::post  ('/payments/reconcile',         [AdminPaymentsController::class, 'reconcile']);
         Route::get   ('/hive/reports',               [AdminHiveController::class, 'reports']);
         Route::put   ('/hive/reports/{id}',          [AdminHiveController::class, 'resolve']);
         Route::get   ('/hive/challenges',              [AdminHiveController::class, 'challenges']);

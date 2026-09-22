@@ -1,18 +1,23 @@
 <script>
 import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
-import { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles } from 'lucide-vue-next';
+import { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
 
 export default {
     name: 'CheckoutPayment',
-    components: { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles },
+    components: { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield },
     data() {
         return {
             cart: null,
             loading: true,
             submitting: false,
             error: '',
-            method: 'paynow',
+            // Ways to pay, as staff have routed them (see /admin/payments). The
+            // chosen one may need a phone number before it can start.
+            options: [],
+            option: null,
+            phone: '',
+            phoneError: '',
             // Bees redemption state.
             bees: null,         // { balance, recent } when signed-in customer has bees; null otherwise
             beesSettings: null, // { enabled, per_usd, max_discount_percent, earn_per_usd }
@@ -30,6 +35,12 @@ export default {
         totalCents() { return Math.max(0, this.subtotalCents - this.discountCents); },
         total() { return (this.totalCents / 100).toFixed(2); },
         itemCount() { return this.cart?.item_count || 0; },
+        chosen() { return this.options.find((o) => o.id === this.option) || null; },
+        needsPhone() { return !!this.chosen?.needs?.includes('phone'); },
+        payLabel() {
+            if (this.submitting) return this.chosen?.needs?.includes('phone') ? 'Sending the prompt…' : `Redirecting to ${this.chosen?.label || 'payment'}…`;
+            return `Pay $${this.total}`;
+        },
         readyToPay() {
             const d = this.draft;
             return d.email && d.shipping_address?.address1 && d.shipping_address?.city;
@@ -47,11 +58,16 @@ export default {
     },
     async mounted() {
         try {
-            const [cartRes, beesRes] = await Promise.all([
+            const [cartRes, beesRes, optRes] = await Promise.all([
                 api.get('/api/store/cart'),
                 api.get('/api/account/bees').catch(() => ({ bees: null, settings: null })),
+                api.get('/api/store/payments/options').catch(() => ({ options: [] })),
             ]);
             this.cart = cartRes.cart;
+            this.options = optRes.options || [];
+            this.option = this.options[0]?.id || null;
+            this.phone = this.draft.phone || '';
+            if (!this.options.length) this.error = "Payments aren't available right now. Please try again shortly.";
             this.bees = beesRes.bees;
             this.beesSettings = beesRes.settings;
             if (!this.cart?.items?.length) {
@@ -81,25 +97,31 @@ export default {
             } catch { /* keep previous preview */ }
             finally { this.previewing = false; }
         },
+        icon(o) { return { smartphone: 'Smartphone', wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard' }[o.icon] || 'Shield'; },
         async pay() {
+            if (!this.chosen) return;
+            this.phoneError = '';
+            if (this.needsPhone && !/\d{9,}/.test(this.phone.replace(/\D/g, ''))) { this.phoneError = 'Enter the phone number that will pay, e.g. 077 123 4567.'; return; }
             this.submitting = true;
             this.error = '';
             try {
                 const payload = {
+                    option: this.option,
+                    phone: this.needsPhone ? this.phone : undefined,
                     email: this.draft.email,
                     auth_name: [this.draft.first_name, this.draft.last_name].filter(Boolean).join(' '),
                     auth_phone: this.draft.phone,
                     shipping_address: this.draft.shipping_address,
                     bees_to_use: this.canUseBees ? this.beesToUse : 0,
                 };
-                const data = await api.post('/api/store/payments/paynow/initiate', payload);
-                if (data.browser_url) {
-                    window.location.href = data.browser_url;
-                    return;
-                }
-                this.error = 'Could not start Paynow checkout.';
+                const data = await api.post('/api/store/payments/initiate', payload);
+                if (data.redirect_url) { window.location.href = data.redirect_url; return; }
+                // No redirect: they approve on their phone while we wait and poll.
+                if (data.return_path) { this.$router.push(data.return_path); return; }
+                this.error = 'Could not start the payment.';
             } catch (e) {
-                this.error = e.payload?.error || 'Payment could not be started.';
+                this.phoneError = e.payload?.errors?.phone?.[0] || '';
+                this.error = this.phoneError ? '' : (e.payload?.error || e.payload?.errors && Object.values(e.payload.errors)[0]?.[0] || 'Payment could not be started.');
             } finally {
                 this.submitting = false;
             }
@@ -200,19 +222,26 @@ export default {
                             </div>
                         </section>
 
-                        <label class="flex items-start gap-3 border-2 border-gold bg-cream-dark/40 px-4 py-4 cursor-pointer">
-                            <input type="radio" v-model="method" value="paynow" class="mt-1 accent-gold" />
-                            <Smartphone class="w-5 h-5 text-gold mt-0.5" />
-                            <div class="flex-1">
-                                <p class="font-display text-base">Paynow</p>
-                                <p class="text-xs text-black/60 mt-1">
-                                    EcoCash, OneMoney, ZIPIT or Visa/Mastercard. You'll be redirected to Paynow's
-                                    secure page to complete payment.
-                                </p>
-                            </div>
-                            <ShieldCheck class="w-5 h-5 text-emerald-500" />
-                        </label>
-
+                        <div class="space-y-2">
+                            <label
+                                v-for="o in options"
+                                :key="o.id"
+                                :class="['flex items-start gap-3 border-2 px-4 py-4 cursor-pointer transition-colors', option === o.id ? 'border-gold bg-cream-dark/40' : 'border-black/10 hover:border-black/25']"
+                            >
+                                <input type="radio" v-model="option" :value="o.id" class="mt-1 accent-gold" />
+                                <component :is="icon(o)" class="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-display text-base">{{ o.label }}</p>
+                                    <p class="text-xs text-black/60 mt-1">{{ o.hint }}</p>
+                                    <div v-if="option === o.id && needsPhone" class="mt-3">
+                                        <label class="block text-xs text-black/60 mb-1">Phone number that will pay</label>
+                                        <input v-model.trim="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="077 123 4567" class="w-full sm:w-72 border border-black/15 px-3 py-2.5 text-sm focus:outline-none focus:border-gold" @click.stop />
+                                        <p v-if="phoneError" class="text-xs text-red-600 mt-1">{{ phoneError }}</p>
+                                    </div>
+                                </div>
+                                <ShieldCheck class="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                            </label>
+                        </div>
                         <p class="flex items-center gap-2 text-xs text-black/55 mt-3">
                             <Lock class="w-3 h-3" />
                             All transactions are encrypted end-to-end.
@@ -223,10 +252,10 @@ export default {
 
                     <button
                         @click="pay"
-                        :disabled="submitting || loading"
+                        :disabled="submitting || loading || !chosen"
                         class="flex items-center justify-center gap-2 w-full bg-gold text-white py-4 mt-6 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-50"
                     >
-                        {{ submitting ? 'Redirecting to Paynow…' : `Pay $${total}` }}
+                        {{ payLabel }}
                         <ArrowRight class="w-4 h-4" />
                     </button>
                 </section>

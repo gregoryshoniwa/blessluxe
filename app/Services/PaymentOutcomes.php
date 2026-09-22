@@ -1,311 +1,51 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Services;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\PackController;
-use App\Services\PackForwarding;
-use App\Services\AffiliatePricing;
-use App\Services\Exclusivity;
 use App\Mail\AffiliateSaleMail;
 use App\Mail\OrderReceiptMail;
 use App\Models\Affiliate;
 use App\Models\AffiliateSale;
 use App\Models\Cart;
-use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\PaymentSession;
 use App\Models\ProductVariant;
-use App\Services\Bees;
-use App\Services\Notifications;
-use App\Services\Paynow;
-use App\Services\Shipping;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use App\Services\Payments\StatusResult;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
-class PaynowController extends Controller
+/**
+ * What a payment's outcome DOES — the same for every gateway.
+ *
+ * A gateway only reports "paid / pending / cancelled / failed". This is where
+ * paid becomes an order (or an exclusivity, or a forwarding fee), stock moves,
+ * affiliates are credited, Bees are earned, receipts go out; and where a
+ * cancelled checkout gives its Bees back. It used to live inside the Paynow
+ * controller, which meant a second gateway could never have produced an order.
+ */
+class PaymentOutcomes
 {
     /**
-     * The request field the PREVIOUS storefront bundle sends for points to
-     * redeem (the programme was renamed to Bees). A browser that loaded the
-     * site before a deploy keeps posting this until it refreshes; ignoring it
-     * would charge that customer full price with no error. Safe to delete a
-     * few weeks after the rename ships.
+     * Apply a provider's word to the session. Idempotent: once `paid`, stays
+     * `paid` (a late `cancelled` can't undo a real payment), and an order is
+     * only ever materialised once.
      */
-    private const LEGACY_POINTS_FIELD = 'bl' . 'its_to_use';
-
-    /**
-     * POST /api/store/payments/paynow/initiate
-     * { email?, shipping_address?, billing_address?, region_id?, auth_phone?, auth_name? }
-     *
-     * Validates the session cart, computes the total, creates a
-     * `payment_session` row, calls Paynow, returns the browser_url so the
-     * SPA can redirect.
-     */
-    public function initiate(Request $request)
+    public static function apply(PaymentSession $session, StatusResult $r): void
     {
-        try {
-            $cartId = $request->session()->get('cart_id');
-            $cart = $cartId ? Cart::find($cartId) : null;
-            if (! $cart) {
-                return response()->json(['error' => 'Your cart is empty.'], 422);
-            }
-
-            $lines = $cart->lineItems()->with('variant.product')->get();
-            if ($lines->isEmpty()) {
-                return response()->json(['error' => 'Your cart is empty.'], 422);
-            }
-
-            $customer = Auth::guard('customer')->user();
-            $data = $request->validate([
-                'email'             => ['nullable', 'email'],
-                'shipping_address'  => ['nullable', 'array'],
-                'billing_address'   => ['nullable', 'array'],
-                'region_id'         => ['nullable', 'string'],
-                'auth_phone'        => ['nullable', 'string'],
-                'auth_name'         => ['nullable', 'string'],
-                // Optional Bees redemption — gated on a logged-in customer.
-                'bees_to_use'      => ['nullable', 'integer', 'min:0'],
-                self::LEGACY_POINTS_FIELD => ['nullable', 'integer', 'min:0'],
-            ]);
-            $email = strtolower(trim((string) ($data['email'] ?? $customer?->email ?? '')));
-            if ($email === '') {
-                return response()->json(['error' => 'Email is required for checkout.'], 422);
-            }
-
-            $subtotal = (int) $lines->sum(fn ($l) => $l->unit_price * $l->quantity);
-
-            // ─── Bees redemption ──────────────────────────────────────
-            // Compute the actual debit + discount, debit immediately with an
-            // idempotency key keyed off the upcoming reference so a retry of
-            // initiate doesn't double-charge the customer.
-            $beesDebited = 0;
-            $discountCents = 0;
-            $beesWanted = (int) ($data['bees_to_use'] ?? $data[self::LEGACY_POINTS_FIELD] ?? 0);
-            if ($beesWanted > 0 && $customer) {
-                $available = (int) $customer->loyalty_points;
-                $preview = Bees::previewDiscount($beesWanted, $subtotal, $available);
-                if ($preview['bees'] > 0) {
-                    $reference   = $this->makeReference();   // reference picked early for idempotency key
-                    $beesResult = Bees::debit(
-                        $customer->id,
-                        $preview['bees'],
-                        'checkout_redeem',
-                        'bees-checkout-' . $reference,
-                        $reference,
-                    );
-                    $beesDebited  = $beesResult['blits_debited'];
-                    $discountCents = $preview['discount_cents'];
-                }
-            }
-            // If we didn't already mint a reference (no bees used), do it now.
-            $reference ??= $this->makeReference();
-
-            $total = max(0, $subtotal - $discountCents);
-            if ($total <= 0) {
-                // Refund the bees we just debited — the order is "free" so we
-                // can't tip the customer into a paid order with $0 due.
-                if ($beesDebited > 0 && $customer) {
-                    Bees::credit($customer->id, $beesDebited, 'checkout_zero_total_refund', $reference);
-                }
-                return response()->json(['error' => 'Order total must be greater than zero.'], 422);
-            }
-            $paynow    = Paynow::fromConfig();
-
-            $init = $paynow->initiateTransaction([
-                'reference'      => $reference,
-                'amount'         => $total / 100,   // Paynow takes major units
-                'additionalInfo' => 'BLESSLUXE order',
-                'authEmail'      => $email,
-                'authPhone'      => $data['auth_phone'] ?? null,
-                'authName'       => $data['auth_name']  ?? null,
-            ]);
-            if (! $init['ok']) {
-                Log::warning('[paynow initiate] failed', ['error' => $init['error'], 'raw' => $init['raw']]);
-                return response()->json(['error' => $init['error']], 502);
-            }
-
-            $session = PaymentSession::create([
-                'id'                => 'payses_' . Str::random(20),
-                'reference'         => $reference,
-                'provider'          => 'paynow',
-                'status'            => 'pending',
-                'poll_url'          => $init['pollUrl'],
-                'amount'            => $total,
-                'currency_code'     => 'usd',
-                'email'             => $email,
-                'customer_id'       => $customer?->id,
-                'cart_snapshot'     => [
-                    'cart_id'  => $cart->id,
-                    'items'    => $lines->map(fn ($l) => [
-                        'variant_id' => $l->variant_id,
-                        'quantity'   => $l->quantity,
-                        'unit_price' => $l->unit_price,
-                        // Carry the per-line affiliate attribution through so
-                        // we can credit the right partner when the order is
-                        // materialised on `paid`.
-                        'metadata'   => $l->metadata,
-                    ])->values()->all(),
-                    'subtotal'         => $subtotal,
-                    'discount_total'   => $discountCents,
-                    'total'            => $total,
-                    'blits_debited'    => $beesDebited,
-                    'shipping_address' => $data['shipping_address'] ?? null,
-                    'billing_address'  => $data['billing_address']  ?? null,
-                    'region_id'        => $data['region_id']        ?? null,
-                ],
-                'raw_init_response' => $init['raw'],
-            ]);
-
-            return [
-                'browser_url' => $init['browserUrl'],
-                'poll_url'    => $init['pollUrl'],
-                'reference'   => $reference,
-                'session_id'  => $session->id,
-            ];
-        } catch (\Throwable $e) {
-            Log::error('[paynow initiate] '.$e->getMessage(), ['exception' => $e]);
-            return response()->json(['error' => 'Could not start Paynow checkout: '.$e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * POST /api/store/payments/paynow/ipn
-     *
-     * Paynow server-to-server status callback. application/x-www-form-urlencoded
-     * body. CSRF is disabled on the route — we authenticate the payload
-     * via the SHA512 hash.
-     */
-    public function ipn(Request $request)
-    {
-        try {
-            $paynow = Paynow::fromConfig();
-            $fields = [];
-            foreach ($request->all() as $k => $v) {
-                $fields[strtolower($k)] = (string) $v;
-            }
-            if (! $paynow->verifyHash($fields)) {
-                Log::warning('[paynow ipn] hash mismatch', ['reference' => $fields['reference'] ?? null]);
-                return response()->json(['error' => 'hash mismatch'], 400);
-            }
-            $this->applyStatusUpdate($fields, $paynow);
-            return response('OK');
-        } catch (\Throwable $e) {
-            Log::error('[paynow ipn] '.$e->getMessage(), ['exception' => $e]);
-            return response('error', 500);
-        }
-    }
-
-    /**
-     * GET /api/store/payments/paynow/return?reference=...
-     *
-     * Customer-facing redirect after Paynow checkout. We never trust the
-     * URL params for state: look up our session, poll for the latest
-     * status, then redirect to confirmation (paid) or back to the return
-     * page (pending).
-     */
-    public function return(Request $request)
-    {
-        try {
-            $reference = (string) $request->query('reference', '');
-            if ($reference === '') {
-                return redirect('/cart');
-            }
-
-            $session = PaymentSession::where('reference', $reference)->first();
-            if (! $session) {
-                return redirect('/cart');
-            }
-
-            // Poll once for a fresh status (IPN can lag a few seconds).
-            if ($session->status === 'pending' && $session->poll_url) {
-                try {
-                    $paynow = Paynow::fromConfig();
-                    $poll = $paynow->pollStatus($session->poll_url);
-                    if ($poll['ok']) {
-                        $this->applyStatusUpdate($poll['data'], $paynow);
-                    }
-                } catch (\Throwable $e) {
-                    // Swallow — the IPN will catch up.
-                }
-            }
-
-            $fresh = PaymentSession::where('reference', $reference)->first();
-            if ($fresh?->status === 'paid' && $fresh->order_id) {
-                $order = Order::find($fresh->order_id);
-                // Relative redirect — resolves against whatever host:port served
-                // this request, so it works regardless of APP_URL.
-                return redirect('/checkout/confirmation?order=' . urlencode($order?->order_number ?? $reference));
-            }
-            return redirect('/checkout/paynow/return?reference=' . urlencode($reference));
-        } catch (\Throwable $e) {
-            Log::error('[paynow return] '.$e->getMessage(), ['exception' => $e]);
-            return redirect('/');
-        }
-    }
-
-    /**
-     * GET /api/store/payments/paynow/status/{reference}
-     *
-     * Polled by the Vue return page every few seconds while the session is
-     * still pending; flips to paid as soon as Paynow's IPN lands.
-     */
-    public function status(string $reference)
-    {
-        $session = PaymentSession::where('reference', $reference)->first();
-        if (! $session) {
-            return response()->json(['error' => 'Not found'], 404);
-        }
-        return [
-            'session' => [
-                'reference'       => $session->reference,
-                'status'          => $session->status,
-                'provider_status' => $session->provider_status,
-                'amount'          => $session->amount,
-                'currency_code'   => $session->currency_code,
-                'order_id'        => $session->order_id,
-                'updated_at'      => optional($session->updated_at)->toIso8601String(),
-            ],
-        ];
-    }
-
-    // ─── Internals ──────────────────────────────────────────────────────
-
-    /**
-     * Apply a Paynow status payload to the session row. Idempotent: once
-     * `paid`, stays `paid` (a late `cancelled` callback won't undo a real
-     * payment). Materialises an order on first paid event.
-     *
-     * @param array<string, string> $fields
-     */
-    private function applyStatusUpdate(array $fields, Paynow $paynow): void
-    {
-        $reference = $fields['reference'] ?? '';
-        if ($reference === '') return;
-
-        $session = PaymentSession::where('reference', $reference)->first();
-        if (! $session) {
-            Log::warning('[paynow] no session for reference', ['reference' => $reference]);
-            return;
-        }
-
-        $status     = $fields['status'] ?? '';
-        $classified = $paynow->classifyStatus($status);
-
-        // Once paid stays paid.
+        $classified = $r->status;
         if ($session->status === 'paid' && $classified !== 'paid') return;
 
         $session->update([
             'status'             => $classified,
-            'provider_status'    => $status,
-            'provider_reference' => $fields['paynowreference'] ?? $session->provider_reference,
-            'poll_url'           => $fields['pollurl'] ?? $session->poll_url,
-            'raw_ipn_payload'    => json_encode($fields),
+            'provider_status'    => $r->providerStatus,
+            'provider_reference' => $r->providerReference ?? $session->provider_reference,
+            'poll_url'           => $r->pollHandle ?? $session->poll_url,
+            'provider_meta'      => array_merge((array) ($session->provider_meta ?? []), $r->meta) ?: null,
+            'raw_ipn_payload'    => $r->raw !== '' ? $r->raw : $session->raw_ipn_payload,
         ]);
 
         // ─── Discriminate on session kind ──────────────────────────────────
@@ -322,13 +62,13 @@ class PaynowController extends Controller
                 PackForwarding::SESSION_KIND => PackForwarding::markFeePaid($fresh),
                 // Exclusivity only goes live once the money is in — first to PAY
                 // wins, and activate() re-checks nobody beat them to it.
-                Exclusivity::SESSION_KIND    => $this->activateExclusivity($fresh, $snap),
-                default                      => $fresh->order_id ? null : $this->createOrderFromSession($fresh),
+                Exclusivity::SESSION_KIND    => self::activateExclusivity($fresh, $snap),
+                default                      => $fresh->order_id ? null : self::createOrderFromSession($fresh),
             };
         }
 
         // Refund any debited Bees when the payment ends up cancelled/failed.
-        // Guarded against double-refund via session.metadata.blits_refunded.
+        // Guarded against double-refund via cart_snapshot.blits_refunded.
         // Only order sessions ever debit Bees, so a forwarding fee must not
         // take this path.
         if ($session->kind === 'order' && in_array($classified, ['cancelled', 'failed'], true)) {
@@ -344,13 +84,7 @@ class PaynowController extends Controller
         }
     }
 
-    /**
-     * A paid exclusivity goes live, or the fee is flagged refundable.
-     *
-     * Two affiliates can both reach Paynow for the same piece; only one can hold
-     * it, so the loser is told plainly rather than silently losing their money.
-     */
-    private function activateExclusivity(PaymentSession $session, array $snap): void
+    private static function activateExclusivity(PaymentSession $session, array $snap): void
     {
         $id = $snap['exclusivity_id'] ?? null;
         if (! $id) return;
@@ -377,84 +111,9 @@ class PaynowController extends Controller
             Notifications::forAllAdmins(
                 'exclusivity_refund_due',
                 'Exclusivity fee to refund',
-                "{$affiliate->code} paid for {$product} but lost the race. Refund in Paynow.",
+                "{$affiliate->code} paid for {$product} but lost the race. Refund it through " . ucfirst($session->provider) . ".",
                 '/admin/affiliates',
             );
-        }
-    }
-
-    /**
-     * POST /api/store/payments/paynow/exclusivity/{exclusivityId}
-     *
-     * Starts payment for a reserved exclusivity. Kept out of the cart flow
-     * entirely: this buys a right, not goods, and must never become an Order.
-     */
-    public function initiateExclusivity(Request $request, string $exclusivityId)
-    {
-        $customer = Auth::guard('customer')->user();
-        if (! $customer) return response()->json(['error' => 'Sign in first.'], 401);
-
-        $row = DB::table('product_exclusivities')->where('id', $exclusivityId)->first();
-        if (! $row) return response()->json(['error' => 'That reservation no longer exists.'], 404);
-
-        // Scoped to the owner — an id alone is never enough.
-        $affiliate = Affiliate::where('id', $row->affiliate_id)->where('customer_id', $customer->id)->first();
-        if (! $affiliate) return response()->json(['error' => 'That is not yours.'], 403);
-
-        if ($row->status !== Exclusivity::PENDING) {
-            return response()->json(['error' => 'That reservation has already been settled.'], 422);
-        }
-
-        // Somebody may have taken it while this one sat unpaid.
-        if (Exclusivity::holderOf($row->product_id)) {
-            return response()->json(['error' => 'Another affiliate now holds this piece.'], 409);
-        }
-
-        try {
-            $reference = $this->makeReference();
-            $paynow    = Paynow::fromConfig();
-
-            $init = $paynow->initiateTransaction([
-                'reference'      => $reference,
-                'amount'         => $row->fee_amount / 100,
-                'additionalInfo' => 'BLESSLUXE exclusivity',
-                'authEmail'      => $customer->email,
-            ]);
-
-            if (! $init['ok']) {
-                return response()->json(['error' => $init['error']], 502);
-            }
-
-            $session = PaymentSession::create([
-                'id'            => 'payses_' . Str::random(20),
-                'reference'     => $reference,
-                'provider'      => 'paynow',
-                'kind'          => Exclusivity::SESSION_KIND,
-                'status'        => 'pending',
-                'poll_url'      => $init['pollUrl'],
-                'amount'        => (int) $row->fee_amount,
-                'currency_code' => 'usd',
-                'email'         => $customer->email,
-                'customer_id'   => $customer->id,
-                // cart_snapshot is NOT NULL, and this is where the branch above
-                // finds which reservation the money belongs to.
-                'cart_snapshot' => [
-                    'kind'           => Exclusivity::SESSION_KIND,
-                    'exclusivity_id' => $exclusivityId,
-                    'product_id'     => $row->product_id,
-                    'affiliate_id'   => $row->affiliate_id,
-                    'fee_amount'     => (int) $row->fee_amount,
-                ],
-                'raw_init_response' => $init['raw'],
-            ]);
-
-            DB::table('product_exclusivities')->where('id', $exclusivityId)
-                ->update(['payment_session_id' => $session->id, 'updated_at' => now()]);
-
-            return ['browser_url' => $init['browserUrl'], 'reference' => $reference];
-        } catch (\Throwable $e) {
-            Log::error('[exclusivity initiate] ' . $e->getMessage());
-            return response()->json(['error' => 'Could not start that payment.'], 500);
         }
     }
 
@@ -462,7 +121,7 @@ class PaynowController extends Controller
      * Materialise a shop_order from the payment session's cart snapshot.
      * Wrapped in a transaction so a partial failure leaves no orphan rows.
      */
-    private function createOrderFromSession(PaymentSession $session): void
+    private static function createOrderFromSession(PaymentSession $session): void
     {
         $snap = $session->cart_snapshot ?? [];
         $items = $snap['items'] ?? [];
@@ -492,7 +151,7 @@ class PaynowController extends Controller
                 'discount_total'  => (int) ($snap['discount_total'] ?? 0),
                 'total'           => $total,
                 'status'          => 'completed',
-                'payment_method'  => 'paynow',
+                'payment_method'  => $session->method ?: $session->provider,
                 'payment_status'  => 'paid',
                 'shipping_address' => $snap['shipping_address'] ?? null,
                 'billing_address'  => $snap['billing_address']  ?? null,
@@ -533,7 +192,8 @@ class PaynowController extends Controller
                 if ($variant->manage_inventory) {
                     ProductVariant::where('id', $variant->id)
                         ->update([
-                            'inventory_quantity' => DB::raw('GREATEST(0, inventory_quantity - ' . (int) $it['quantity'] . ')'),
+                            // CASE, not GREATEST(): MySQL has GREATEST, the SQLite the tests run on doesn't. Never below zero either way.
+                            'inventory_quantity' => DB::raw('CASE WHEN inventory_quantity > ' . (int) $it['quantity'] . ' THEN inventory_quantity - ' . (int) $it['quantity'] . ' ELSE 0 END'),
                         ]);
                     $lowStockCheckVariantIds[] = $variant->id;
                 }
@@ -699,7 +359,7 @@ class PaynowController extends Controller
             // they don't already have one matching, so future checkouts can
             // pre-fill. Guests + duplicates skip silently.
             if ($orderForNotify->customer_id && is_array($orderForNotify->shipping_address)) {
-                $this->saveAddressToCustomerBook($orderForNotify->customer_id, $orderForNotify->shipping_address);
+                self::saveAddressToCustomerBook($orderForNotify->customer_id, $orderForNotify->shipping_address);
             }
         }
 
@@ -722,7 +382,7 @@ class PaynowController extends Controller
     }
 
     /** Idempotent: skip if a row with the same line1 + city already exists. */
-    private function saveAddressToCustomerBook(string $customerId, array $addr): void
+    private static function saveAddressToCustomerBook(string $customerId, array $addr): void
     {
         // Checkout posts {address1, province, country: "Zimbabwe"}; this table wants
         // {line1, region, country: "ZW"}. Reading the raw keys meant $line1 was always
@@ -755,13 +415,5 @@ class PaynowController extends Controller
             'is_default_shipping' => ! $hasAny,
             'is_default_billing'  => ! $hasAny,
         ]);
-    }
-
-    /** Short, sortable, human-friendly reference. Matches Node app shape. */
-    private function makeReference(): string
-    {
-        $time = strtoupper(base_convert((string) round(microtime(true) * 1000), 10, 36));
-        $rand = strtoupper(substr(Str::random(8), 0, 4));
-        return "BL-{$time}-{$rand}";
     }
 }

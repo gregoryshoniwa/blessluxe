@@ -16,6 +16,7 @@ class PaymentSession extends Model
     protected $guarded = [];
     protected $casts = [
         'cart_snapshot' => 'array',
+        'provider_meta' => 'array',
     ];
 
     public function customer(): BelongsTo

@@ -38,10 +38,12 @@ class Paynow
      */
     public static function fromConfig(): self
     {
-        $id  = trim((string) env('PAYNOW_INTEGRATION_ID'));
-        $key = trim((string) env('PAYNOW_INTEGRATION_KEY'));
-        $resultUrl = trim((string) env('PAYNOW_RESULT_URL'));
-        $returnUrl = trim((string) env('PAYNOW_RETURN_URL'));
+        // config(), not env(): with `config:cache` in production env() is empty.
+        $cfg = (array) config('services.paynow', []);
+        $id  = trim((string) ($cfg['id'] ?? ''));
+        $key = trim((string) ($cfg['key'] ?? ''));
+        $resultUrl = trim((string) ($cfg['result_url'] ?? ''));
+        $returnUrl = trim((string) ($cfg['return_url'] ?? ''));
         if ($id === '' || $key === '') {
             throw new \RuntimeException('PAYNOW_INTEGRATION_ID and PAYNOW_INTEGRATION_KEY are required');
         }
@@ -53,8 +55,13 @@ class Paynow
             integrationKey:   $key,
             resultUrl:        $resultUrl,
             returnUrl:        $returnUrl,
-            authEmailOverride: trim((string) env('PAYNOW_AUTH_EMAIL_OVERRIDE')) ?: null,
+            authEmailOverride: trim((string) ($cfg['auth_email_override'] ?? '')) ?: null,
         );
+    }
+
+    public static function configured(): bool
+    {
+        return trim((string) config('services.paynow.id')) !== '' && trim((string) config('services.paynow.key')) !== '';
     }
 
     /**

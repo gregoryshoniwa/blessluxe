@@ -3,11 +3,13 @@ import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
 
 export default {
-    name: 'PaynowReturn',
+    name: 'PaymentReturn',
     data() {
         return {
             state: 'pending',          // pending | paid | failed | cancelled | unknown
             providerStatus: null,
+            providerLabel: '',
+            instruction: null,
             attempts: 0,
             interval: null,
             cleared: false,
@@ -39,7 +41,7 @@ export default {
         async tick() {
             this.attempts += 1;
             try {
-                const data = await api.get(`/api/store/payments/paynow/status/${encodeURIComponent(this.reference)}`);
+                const data = await api.get(`/api/store/payments/status/${encodeURIComponent(this.reference)}`);
                 const s = data.session;
                 if (!s) {
                     this.state = 'unknown';
@@ -47,6 +49,8 @@ export default {
                 }
                 this.state = s.status;
                 this.providerStatus = s.provider_status;
+                this.providerLabel = s.provider_label || '';
+                this.instruction = s.instruction || null;
                 if (s.status === 'paid' && !this.cleared) {
                     this.cleared = true;
                     checkoutStore.clear();
@@ -73,7 +77,7 @@ export default {
             <template v-else-if="state === 'failed' || state === 'cancelled'">
                 <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Payment {{ state }}</h1>
                 <p class="text-sm text-black/65 mb-4">
-                    {{ providerStatus ? `Paynow status: ${providerStatus}` : "We couldn't complete this transaction." }}
+                    {{ providerStatus ? `${providerLabel || 'Gateway'} status: ${providerStatus}` : "We couldn't complete this transaction." }}
                 </p>
                 <router-link to="/cart" class="inline-block bg-gold text-white px-6 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
                     Back to cart
@@ -92,9 +96,11 @@ export default {
 
             <template v-else>
                 <p class="font-script text-3xl text-gold mb-2">Just a moment</p>
-                <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Confirming payment</h1>
-                <p class="text-sm text-black/65">
-                    Paynow is finalising your transaction.
+                <h1 class="font-display text-2xl tracking-widest uppercase mb-2">{{ instruction ? 'Approve on your phone' : 'Confirming payment' }}</h1>
+                <p class="text-sm text-black/65">{{ instruction || `${providerLabel || 'Your payment provider'} is finalising your transaction.` }}</p>
+                <p v-if="attempts >= 40" class="text-xs text-black/55 mt-4">
+                    Taking longer than usual? {{ instruction ? "If no prompt arrived, check the number and try again." : "You can wait, or check your orders later — we'll record it the moment it clears." }}
+                    <router-link to="/checkout/payment" class="underline underline-offset-4 text-gold-dark ml-1">Try again</router-link>
                 </p>
                 <p class="text-[10px] tracking-widest uppercase text-black/40 mt-4">
                     Reference: <span class="font-mono">{{ reference }}</span><span v-if="attempts > 0"> · check {{ attempts }}</span>
