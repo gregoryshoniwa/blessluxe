@@ -51,7 +51,8 @@ class VelocityAfricaGatewayTest extends TestCase
     private function fakeVelocity(array $poll = ['PENDING', 'SUCCESS'], array $txExtra = []): void
     {
         Http::fake([
-            'api.velocityafrica.net/sales-orders' => Http::response(['externalId' => 'so-trace-1', 'body' => ['grandTotal' => 90.0, 'status' => 'UNPAID']], 201),
+            // The real shape, captured live: body.id is the order, externalId (= body.trace) is its trace.
+            'api.velocityafrica.net/sales-orders' => Http::response(['state' => 'salesOrder', 'status' => 'manual', 'body' => ['id' => 'so-id-1', 'trace' => 'so-trace-1', 'name' => 'SORD-02389', 'grandTotal' => 90.0, 'status' => 'UNPAID'], 'workflowId' => '5000', 'externalId' => 'so-trace-1'], 201),
             'api.velocityafrica.net/transactions' => Http::response(['body' => ['trace' => 'tx-trace-1', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING'] + $txExtra], 201),
             'api.velocityafrica.net/transactions/poll/*' => Http::sequence(array_map(fn ($s) => Http::response(['body' => ['pollStatus' => $s, 'paymentStatus' => $s]]), $poll)),
             'api.velocityafrica.net/sales-orders/update-workflow/*' => Http::response(['body' => ['salesOrder' => ['status' => 'PAID']]]),
@@ -76,12 +77,12 @@ class VelocityAfricaGatewayTest extends TestCase
             fn (ClientRequest $r) => str_ends_with($r->url(), '/sales-orders') && $r['currencyCodeString'] === 'USD' && $r['items'][0]['amount'] == 90.0 && $r['items'][0]['itemCode'] === 'BLESSLUXE-ORDER' && $r->hasHeader('X-API-Key', 'vk_test'),
             fn (ClientRequest $r) => str_ends_with($r->url(), '/transactions') && $r['paymentProcessorLabel'] === 'ECOCASH' && $r['authType'] === 'REMOTE'
                 && $r['debitPhone'] === '+263771234567' && $r['creditPhone'] === '+263772364284' && $r['creditAccount'] === '263772364284'
-                && $r['salesOrderId'] === 'so-trace-1' && $r['amount'] == 90.0 && $r['debitRef'] === $res->json('reference') && ! isset($r['successUrl']),
+                && $r['salesOrderId'] === 'so-id-1' && $r['amount'] == 90.0 && $r['debitRef'] === $res->json('reference') && ! isset($r['successUrl']),
         ]);
 
         $s = PaymentSession::where('reference', $res->json('reference'))->first();
         $this->assertSame(['velocityafrica', 'ecocash', 'pending', 'tx-trace-1'], [$s->provider, $s->method, $s->status, $s->poll_url]);
-        $this->assertSame('so-trace-1', $s->provider_meta['sales_order_id']);
+        $this->assertSame(['so-id-1', 'so-trace-1', 'SORD-02389'], [$s->provider_meta['sales_order_id'], $s->provider_meta['sales_order_trace'], $s->provider_meta['sales_order_name']]);
         $this->assertSame(0, DB::table('orders')->count());
 
         // First status check: still pending, and the page is told what to say.

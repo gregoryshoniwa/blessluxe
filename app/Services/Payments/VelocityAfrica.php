@@ -76,7 +76,7 @@ class VelocityAfrica
      * need every SKU to exist in Velocity's inventory; one configured item
      * code doesn't.
      *
-     * @return array{ok:bool, id?:string, raw:string, error?:string}
+     * @return array{ok:bool, id?:string, trace?:string, name?:?string, raw:string, error?:string}
      */
     public function createSalesOrder(PaymentIntent $intent): array
     {
@@ -97,12 +97,16 @@ class VelocityAfrica
 
         $json = $res->json() ?: [];
         $body = self::body($json);
-        $id = self::firstString($json, ['externalId', 'salesOrderTrace', 'trace', 'id', 'uid']) ?? self::firstString($body, ['externalId', 'trace', 'id', 'uid']);
+        // Two UUIDs come back and they are NOT interchangeable (learned live):
+        //   body.id                   → what POST /transactions wants as salesOrderId
+        //   externalId (= body.trace) → what PUT /sales-orders/update-workflow/{trace} wants
+        $id    = self::firstString($body, ['id', 'uid']);
+        $trace = self::firstString($json, ['externalId']) ?? self::firstString($body, ['trace', 'externalId']) ?? $id;
         if (! $res->successful() || ! $id) {
             return ['ok' => false, 'error' => self::errorFrom($json, 'VelocityAfrica did not create the sales order.'), 'raw' => $res->body()];
         }
 
-        return ['ok' => true, 'id' => $id, 'raw' => $res->body()];
+        return ['ok' => true, 'id' => $id, 'trace' => $trace, 'name' => self::firstString($body, ['name']), 'raw' => $res->body()];
     }
 
     /**

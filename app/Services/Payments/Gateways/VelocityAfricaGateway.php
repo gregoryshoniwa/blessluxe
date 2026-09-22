@@ -43,12 +43,13 @@ class VelocityAfricaGateway implements Gateway
         $card = $intent->method === Method::CARD;
         $tx = $client->charge($intent, $so['id'], $card ? VelocityAfrica::PROCESSOR_CARD : VelocityAfrica::PROCESSOR_ECOCASH, $card ? 'WEB' : 'REMOTE', $intent->returnUrl);
         if (! $tx['ok']) {
-            Log::warning('[velocityafrica] charge failed', ['reference' => $intent->reference, 'raw' => $tx['raw']]);
+            // The sales order response is logged too: the transaction is keyed by an id from it, and the docs don't say which.
+            Log::warning('[velocityafrica] charge failed', ['reference' => $intent->reference, 'sales_order_id_sent' => $so['id'], 'sales_order_raw' => $so['raw'], 'raw' => $tx['raw']]);
 
             return InitiateResult::failed($tx['error'], $tx['raw']);
         }
 
-        $meta = ['sales_order_id' => $so['id'], 'trace' => $tx['trace'], 'processor' => $card ? 'VMC' : 'ECOCASH'];
+        $meta = ['sales_order_id' => $so['id'], 'sales_order_trace' => $so['trace'], 'sales_order_name' => $so['name'], 'trace' => $tx['trace'], 'processor' => $card ? 'VMC' : 'ECOCASH'];
         $raw = json_encode(['sales_order' => json_decode($so['raw'], true) ?? $so['raw'], 'transaction' => json_decode($tx['raw'], true) ?? $tx['raw']]);
 
         if ($card) {
@@ -77,7 +78,8 @@ class VelocityAfricaGateway implements Gateway
 
         $extra = [];
         if ($poll['status'] === StatusResult::PAID && ! empty($meta['sales_order_id']) && empty($meta['sales_order_completed'])) {
-            $extra['sales_order_completed'] = $client->completeSalesOrder($meta['sales_order_id']);
+            // update-workflow is keyed by the sales order's TRACE (older sessions only have the id).
+            $extra['sales_order_completed'] = $client->completeSalesOrder($meta['sales_order_trace'] ?? $meta['sales_order_id']);
         }
 
         return new StatusResult(
