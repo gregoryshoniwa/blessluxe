@@ -215,8 +215,18 @@ class VelocityAfrica
         return null;
     }
 
+    /**
+     * Velocity answers `{ success, message, body, errors: [...] }`, and the
+     * useful part is in `errors` ("Insufficient inventory for item …") while
+     * `message` is just "Invalid request". Prefer the specific one.
+     */
     private static function errorFrom(array $json, string $fallback): string
     {
+        $errors = $json['errors'] ?? self::body($json)['errors'] ?? null;
+        if (is_array($errors) && $errors) {
+            $lines = array_values(array_filter(array_map(fn ($e) => is_string($e) ? $e : (is_array($e) ? self::firstString($e, ['message', 'error', 'detail']) : null), $errors)));
+            if ($lines) return 'VelocityAfrica: ' . implode(' ', array_slice($lines, 0, 2));
+        }
         $m = self::firstString($json, ['message', 'error', 'detail']) ?? self::firstString(self::body($json), ['message', 'error', 'detail']);
 
         return $m ? "VelocityAfrica: {$m}" : $fallback;

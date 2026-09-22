@@ -172,11 +172,12 @@ class VelocityAfricaGatewayTest extends TestCase
     #[Test]
     public function velocitys_own_error_message_is_passed_on_when_it_refuses(): void
     {
-        Http::fake(['api.velocityafrica.net/sales-orders' => Http::response(['message' => 'Invalid item code'], 422)]);
+        // Their real shape: a generic `message` and the reason in `errors`.
+        Http::fake(['api.velocityafrica.net/sales-orders' => Http::response(['success' => false, 'message' => 'Invalid request', 'body' => null, 'errors' => ["Insufficient inventory for item 'BLESSLUXE-ITEM' (BLESSLUXE-CODE). Required: 1, Available: 0"], 'status' => 400], 400)]);
 
         $res = $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'velocityafrica:ecocash', 'phone' => '0771234567'])->assertStatus(502);
 
-        $this->assertSame('VelocityAfrica: Invalid item code', $res->json('error'));
+        $this->assertSame("VelocityAfrica: Insufficient inventory for item 'BLESSLUXE-ITEM' (BLESSLUXE-CODE). Required: 1, Available: 0", $res->json('error'));
         $this->assertSame(0, PaymentSession::count());
     }
 
