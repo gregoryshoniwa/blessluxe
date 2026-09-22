@@ -17,6 +17,7 @@ class AdminPaymentsController extends Controller
         return $this->shape() + [
             'recent' => PaymentSession::orderByDesc('created_at')->limit(25)->get()->map(fn ($s) => [
                 'reference' => $s->reference, 'provider' => $s->provider, 'method' => $s->method, 'kind' => $s->kind,
+                'provider_reference' => $s->provider_reference,
                 'status' => $s->status, 'provider_status' => $s->provider_status,
                 'amount_label' => '$' . number_format($s->amount / 100, 2), 'email' => $s->email,
                 'order_id' => $s->order_id, 'created_at' => $s->created_at?->toIso8601String(),

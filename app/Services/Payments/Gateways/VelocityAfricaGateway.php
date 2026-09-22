@@ -49,7 +49,9 @@ class VelocityAfricaGateway implements Gateway
             return InitiateResult::failed($tx['error'], $tx['raw']);
         }
 
-        $meta = ['sales_order_id' => $so['id'], 'sales_order_trace' => $so['trace'], 'sales_order_name' => $so['name'], 'trace' => $tx['trace'], 'processor' => $card ? 'VMC' : 'ECOCASH'];
+        $meta = ['sales_order_id' => $so['id'], 'sales_order_trace' => $so['trace'], 'sales_order_name' => $so['name'], 'trace' => $tx['trace'], 'processor' => $card ? 'VMC' : 'ECOCASH'] + $tx['recon'];
+        // The reference staff reconcile against is Velocity's own TXN number, not the trace UUID.
+        $providerRef = $tx['recon']['transaction_name'] ?? $tx['trace'];
         $raw = json_encode(['sales_order' => json_decode($so['raw'], true) ?? $so['raw'], 'transaction' => json_decode($tx['raw'], true) ?? $tx['raw']]);
 
         if ($card) {
@@ -60,10 +62,10 @@ class VelocityAfricaGateway implements Gateway
                 return InitiateResult::failed("VelocityAfrica didn't return a card checkout link. Please try another way to pay.", $raw);
             }
 
-            return InitiateResult::redirect($tx['redirectUrl'], $tx['trace'], $tx['trace'], $meta, $raw);
+            return InitiateResult::redirect($tx['redirectUrl'], $tx['trace'], $providerRef, $meta, $raw);
         }
 
-        return InitiateResult::wait("Approve the EcoCash prompt on {$phone}. It can take up to a minute to arrive.", $tx['trace'], $tx['trace'], $meta, $raw);
+        return InitiateResult::wait("Approve the EcoCash prompt on {$phone}. It can take up to a minute to arrive.", $tx['trace'], $providerRef, $meta, $raw);
     }
 
     public function refresh(PaymentSession $session): ?StatusResult
@@ -76,7 +78,7 @@ class VelocityAfricaGateway implements Gateway
         $poll = $client->poll($trace);
         if (! $poll['ok']) return null;
 
-        $extra = [];
+        $extra = $poll['recon'];       // fees are final only once it's paid; a later poll may refine them
         if ($poll['status'] === StatusResult::PAID && ! empty($meta['sales_order_id']) && empty($meta['sales_order_completed'])) {
             // update-workflow is keyed by the sales order's TRACE (older sessions only have the id).
             $extra['sales_order_completed'] = $client->completeSalesOrder($meta['sales_order_trace'] ?? $meta['sales_order_id']);
@@ -86,7 +88,7 @@ class VelocityAfricaGateway implements Gateway
             reference: $session->reference,
             status: $poll['status'],
             providerStatus: $poll['providerStatus'],
-            providerReference: $trace,
+            providerReference: $poll['recon']['transaction_name'] ?? $meta['transaction_name'] ?? $trace,
             pollHandle: $trace,
             meta: $extra,
             raw: $poll['raw'],

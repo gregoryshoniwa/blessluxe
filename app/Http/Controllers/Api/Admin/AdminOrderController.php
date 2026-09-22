@@ -184,8 +184,13 @@ class AdminOrderController extends Controller
             'payment_session' => $session ? [
                 'reference'         => $session->reference,
                 'provider'          => $session->provider,
+                'provider_label'    => \App\Services\Payments\Payments::gateway($session->provider)?->label() ?? ucfirst($session->provider),
+                'method'            => $session->method ? \App\Services\Payments\Method::label($session->method) : null,
                 'provider_status'   => $session->provider_status,
                 'provider_reference'=> $session->provider_reference,
+                'amount_label'      => '$' . number_format($session->amount / 100, 2),
+                // Gateway-specific reconciliation details, labelled, never raw JSON.
+                'recon'             => self::reconLines($session),
                 'created_at'        => $session->created_at?->toIso8601String(),
             ] : null,
             'affiliate_sales' => $affiliateSales->map(fn ($s) => [
@@ -239,5 +244,20 @@ class AdminOrderController extends Controller
         }
 
         return ['ok' => true, 'refund' => $result];
+    }
+
+    /** Label → value pairs from provider_meta worth putting in front of staff. Money is formatted here. */
+    private static function reconLines(\App\Models\PaymentSession $session): array
+    {
+        $m = (array) ($session->provider_meta ?? []);
+        $out = [];
+        if (! empty($m['sales_order_name'])) $out[] = ['label' => 'Velocity sales order', 'value' => $m['sales_order_name']];
+        if (! empty($m['trace'])) $out[] = ['label' => 'Transaction trace', 'value' => $m['trace']];
+        if (! empty($m['sales_order_id'])) $out[] = ['label' => 'Sales order id', 'value' => $m['sales_order_id']];
+        foreach (['gateway_charge' => 'Gateway charge', 'merchant_commission' => 'Merchant commission', 'tax' => 'Tax', 'total_charged' => 'Total charged', 'net' => 'Net'] as $k => $label) {
+            if (isset($m['fees'][$k])) $out[] = ['label' => $label, 'value' => '$' . number_format($m['fees'][$k] / 100, 2)];
+        }
+
+        return $out;
     }
 }

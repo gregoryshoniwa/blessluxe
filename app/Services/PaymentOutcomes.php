@@ -156,7 +156,11 @@ class PaymentOutcomes
                 'shipping_address' => $snap['shipping_address'] ?? null,
                 'billing_address'  => $snap['billing_address']  ?? null,
                 'metadata'        => [
-                    'blits_debited' => (int) ($snap['blits_debited'] ?? 0),
+                    'blits_debited'     => (int) ($snap['blits_debited'] ?? 0),
+                    // For reconciliation and disputes: the gateway's own reference (Paynow's
+                    // paynowreference, Velocity's TXN number), as the statement shows it.
+                    'payment_gateway'   => $session->provider,
+                    'payment_reference' => $session->provider_reference,
                 ],
             ]);
 

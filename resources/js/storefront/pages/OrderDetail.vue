@@ -71,8 +71,9 @@ export default {
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-[10px] tracking-widest uppercase px-3 py-1 bg-cream-dark/60">{{ order.status }}</span>
-                    <span v-if="order.payment_status === 'paid'" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-emerald-100 text-emerald-700">Paid</span>
+                    <span v-if="order.payment_status === 'paid'" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-emerald-100 text-emerald-700" :title="order.payment?.reference ? `Ref ${order.payment.reference}` : ''">Paid<template v-if="order.payment?.method"> · {{ order.payment.method }}</template></span>
                     <!-- Payment and fulfilment answer different questions — show both. -->
+                    <span v-if="order.payment?.reference" class="text-[10px] text-black/45 font-mono">{{ order.payment.gateway }} ref {{ order.payment.reference }}</span>
                     <span v-if="order.fulfillment_label" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-gold/15 text-gold-dark">{{ order.fulfillment_label }}</span>
                     <router-link v-if="order.tracking_code" :to="`/track/${order.tracking_code}`" class="text-[10px] tracking-widest uppercase px-3 py-1 bg-gold text-white hover:bg-gold-dark transition-colors">
                         Track →

@@ -146,7 +146,7 @@ class VelocityAfrica
             return ['ok' => false, 'error' => self::errorFrom($json, 'VelocityAfrica refused the payment.'), 'raw' => $res->body()];
         }
 
-        return ['ok' => true, 'trace' => $trace, 'redirectUrl' => self::findUrl($json), 'raw' => $res->body()] + self::classify($body);
+        return ['ok' => true, 'trace' => $trace, 'redirectUrl' => self::findUrl($json), 'recon' => self::recon($body), 'raw' => $res->body()] + self::classify($body);
     }
 
     /** @return array{ok:bool, status?:string, providerStatus?:?string, raw:string} */
@@ -159,7 +159,9 @@ class VelocityAfrica
         }
         if (! $res->successful()) return ['ok' => false, 'raw' => $res->body()];
 
-        return ['ok' => true, 'raw' => $res->body()] + self::classify(self::body($res->json() ?: []));
+        $body = self::body($res->json() ?: []);
+
+        return ['ok' => true, 'raw' => $res->body(), 'recon' => self::recon($body)] + self::classify($body);
     }
 
     /** Best effort: the money has moved either way; this only keeps Velocity's books tidy. */
@@ -175,6 +177,26 @@ class VelocityAfrica
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────
+
+    /**
+     * The fields worth keeping off a transaction body, for reconciliation:
+     * `name` (TXN-0002271 — what Velocity's dashboard and statements show),
+     * the trace, and the fees they took.
+     */
+    public static function recon(array $body): array
+    {
+        $out = [];
+        if ($n = self::firstString($body, ['name'])) $out['transaction_name'] = $n;
+        if ($t = self::firstString($body, ['trace'])) $out['trace'] = $t;
+        if ($c = self::firstString($body, ['responseCode'])) $out['response_code'] = $c;
+        $fees = [];
+        foreach (['gatewayCharge' => 'gateway_charge', 'merchantCommission' => 'merchant_commission', 'charge' => 'charge', 'tax' => 'tax', 'totalAmount' => 'total_charged', 'netAmount' => 'net'] as $k => $ours) {
+            if (isset($body[$k]) && is_numeric($body[$k])) $fees[$ours] = (int) round((float) $body[$k] * 100);   // cents, like everything else here
+        }
+        if ($fees) $out['fees'] = $fees;
+
+        return $out;
+    }
 
     /** pollStatus / paymentStatus → our status. Unknown words stay pending, never failed. */
     public static function classify(array $body): array

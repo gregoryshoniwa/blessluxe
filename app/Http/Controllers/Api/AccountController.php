@@ -306,6 +306,11 @@ class AccountController extends Controller
                 'status'           => $order->status,
                 'payment_status'   => $order->payment_status,
                 'payment_method'   => $order->payment_method,
+                'payment'          => [
+                    'method'    => $order->payment_method ? (\App\Services\Payments\Method::valid($order->payment_method) ? \App\Services\Payments\Method::label($order->payment_method) : ucfirst($order->payment_method)) : null,
+                    'gateway'   => ($g = $order->metadata['payment_gateway'] ?? null) ? (\App\Services\Payments\Payments::gateway($g)?->label() ?? ucfirst($g)) : null,
+                    'reference' => $order->metadata['payment_reference'] ?? null,
+                ],
                 'currency_code'    => $order->currency_code,
                 'subtotal_label'   => $this->money((int) $order->subtotal),
                 'shipping_label'   => $this->money((int) $order->shipping_total),

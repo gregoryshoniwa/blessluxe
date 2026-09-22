@@ -115,11 +115,12 @@ export default {
                     <button @click="reconcile" :disabled="reconciling" class="text-xs px-3 py-1.5 border border-zinc-300 hover:bg-zinc-50 disabled:opacity-50">{{ reconciling ? 'Checking…' : `Check ${pendingCount} pending with the gateways` }}</button>
                 </div>
                 <div class="overflow-x-auto"><table class="w-full text-sm">
-                    <thead class="text-left text-xs text-zinc-500 border-b border-zinc-200"><tr><th class="p-3">Reference</th><th class="p-3">Gateway</th><th class="p-3">Method</th><th class="p-3">Kind</th><th class="p-3">Amount</th><th class="p-3">Status</th><th class="p-3">When</th></tr></thead>
+                    <thead class="text-left text-xs text-zinc-500 border-b border-zinc-200"><tr><th class="p-3">Reference</th><th class="p-3">Gateway ref</th><th class="p-3">Gateway</th><th class="p-3">Method</th><th class="p-3">Kind</th><th class="p-3">Amount</th><th class="p-3">Status</th><th class="p-3">When</th></tr></thead>
                     <tbody>
-                        <tr v-if="!recent.length"><td colspan="7" class="p-6 text-center text-zinc-500">No payments yet.</td></tr>
+                        <tr v-if="!recent.length"><td colspan="8" class="p-6 text-center text-zinc-500">No payments yet.</td></tr>
                         <tr v-for="s in recent" :key="s.reference" class="border-b border-zinc-100 last:border-0">
                             <td class="p-3 font-mono text-xs"><router-link v-if="s.order_id" :to="`/admin/orders/${s.order_id}`" class="underline underline-offset-2">{{ s.reference }}</router-link><template v-else>{{ s.reference }}</template></td>
+                            <td class="p-3 font-mono text-xs select-all">{{ s.provider_reference || '—' }}</td>
                             <td class="p-3 capitalize">{{ s.provider }}</td>
                             <td class="p-3">{{ s.method || '—' }}</td>
                             <td class="p-3">{{ s.kind }}</td>

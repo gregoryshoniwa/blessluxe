@@ -58,7 +58,7 @@
 
                 <tr><td style="padding:24px 48px 32px;">
                     <p style="margin:0 0 8px;font-size:13px;color:#666;text-transform:uppercase;letter-spacing:.18em;">Status</p>
-                    <p style="margin:0 0 20px;font-size:14px;">Payment received · {{ ucfirst($order->payment_method ?? 'paid') }}</p>
+                    <p style="margin:0 0 20px;font-size:14px;">Payment received · {{ \App\Services\Payments\Method::valid($order->payment_method) ? \App\Services\Payments\Method::label($order->payment_method) : ucfirst($order->payment_method ?? 'paid') }}@if(!empty($order->metadata['payment_reference'])) · ref {{ $order->metadata['payment_reference'] }}@endif</p>
                     @if ($trackingCode)
                         <p style="margin:0 0 8px;font-size:13px;color:#666;text-transform:uppercase;letter-spacing:.18em;">Tracking code</p>
                         <p style="margin:0 0 20px;font-family:'Courier New',monospace;font-size:16px;">{{ $trackingCode }}</p>

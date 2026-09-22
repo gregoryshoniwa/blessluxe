@@ -53,8 +53,10 @@ class VelocityAfricaGatewayTest extends TestCase
         Http::fake([
             // The real shape, captured live: body.id is the order, externalId (= body.trace) is its trace.
             'api.velocityafrica.net/sales-orders' => Http::response(['state' => 'salesOrder', 'status' => 'manual', 'body' => ['id' => 'so-id-1', 'trace' => 'so-trace-1', 'name' => 'SORD-02389', 'grandTotal' => 90.0, 'status' => 'UNPAID'], 'workflowId' => '5000', 'externalId' => 'so-trace-1'], 201),
-            'api.velocityafrica.net/transactions' => Http::response(['body' => ['trace' => 'tx-trace-1', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING'] + $txExtra], 201),
-            'api.velocityafrica.net/transactions/poll/*' => Http::sequence(array_map(fn ($s) => Http::response(['body' => ['pollStatus' => $s, 'paymentStatus' => $s]]), $poll)),
+            'api.velocityafrica.net/transactions' => Http::response(['body' => ['trace' => 'tx-trace-1', 'name' => 'TXN-0002271', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING'] + $txExtra], 201),
+            // The paid poll carries what Velocity's statements show: their TXN number and the fees they took.
+            'api.velocityafrica.net/transactions/poll/*' => Http::sequence(array_map(fn ($s) => Http::response(['body' => ['trace' => 'tx-trace-1', 'name' => 'TXN-0002271', 'pollStatus' => $s, 'paymentStatus' => $s, 'responseCode' => '42',
+                'amount' => 90.0, 'gatewayCharge' => 2.25, 'merchantCommission' => 1.8, 'tax' => 0, 'totalAmount' => 92.25, 'netAmount' => 90.0]]), $poll)),
             'api.velocityafrica.net/sales-orders/update-workflow/*' => Http::response(['body' => ['salesOrder' => ['status' => 'PAID']]]),
         ]);
     }
@@ -81,7 +83,7 @@ class VelocityAfricaGatewayTest extends TestCase
         ]);
 
         $s = PaymentSession::where('reference', $res->json('reference'))->first();
-        $this->assertSame(['velocityafrica', 'ecocash', 'pending', 'tx-trace-1'], [$s->provider, $s->method, $s->status, $s->poll_url]);
+        $this->assertSame(['velocityafrica', 'ecocash', 'pending', 'tx-trace-1', 'TXN-0002271'], [$s->provider, $s->method, $s->status, $s->poll_url, $s->provider_reference]);
         $this->assertSame(['so-id-1', 'so-trace-1', 'SORD-02389'], [$s->provider_meta['sales_order_id'], $s->provider_meta['sales_order_trace'], $s->provider_meta['sales_order_name']]);
         $this->assertSame(0, DB::table('orders')->count());
 
@@ -99,6 +101,12 @@ class VelocityAfricaGatewayTest extends TestCase
         $this->assertSame(['ecocash', 'paid', 9000], [$order->payment_method, $order->payment_status, (int) $order->total]);
         $this->assertSame(3, (int) DB::table('product_variants')->where('id', 'var_1')->value('inventory_quantity'));
         $this->assertTrue($s->provider_meta['sales_order_completed']);
+        // Reconciliation: their reference and their fees, in cents, kept with the payment.
+        $this->assertSame('TXN-0002271', $s->provider_reference);
+        $this->assertSame(['gateway_charge' => 225, 'merchant_commission' => 180, 'tax' => 0, 'total_charged' => 9225, 'net' => 9000], $s->provider_meta['fees']);
+        $this->assertSame(['velocityafrica', 'TXN-0002271'], [$order->metadata ? json_decode($order->metadata, true)['payment_gateway'] : null, json_decode($order->metadata, true)['payment_reference']]);
+        $mine = $this->getJson('/api/account/orders/' . $order->order_number)->assertOk()->json('order.payment');
+        $this->assertSame(['method' => 'EcoCash', 'gateway' => 'VelocityAfrica', 'reference' => 'TXN-0002271'], $mine);
         Http::assertSent(fn (ClientRequest $r) => str_ends_with($r->url(), '/sales-orders/update-workflow/so-trace-1') && $r->method() === 'PUT');
         $this->assertSame(0, DB::table('cart_line_items')->count());
 

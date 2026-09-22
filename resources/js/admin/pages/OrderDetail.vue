@@ -236,9 +236,13 @@ export default {
 
                     <section v-if="data.payment_session" class="bg-white border border-zinc-200 p-4">
                         <p class="text-xs tracking-widest uppercase text-zinc-500 mb-2">Payment</p>
-                        <p class="text-sm capitalize">{{ data.payment_session.provider }}</p>
-                        <p class="font-mono text-xs">{{ data.payment_session.reference }}</p>
-                        <p class="text-xs text-zinc-500 mt-1">{{ data.payment_session.provider_status }}</p>
+                        <p class="text-sm">{{ data.payment_session.provider_label }}<span v-if="data.payment_session.method" class="text-zinc-500"> · {{ data.payment_session.method }}</span></p>
+                        <p class="text-xs text-zinc-500 mt-1">{{ data.payment_session.amount_label }} · {{ data.payment_session.provider_status }}</p>
+                        <dl class="mt-3 space-y-1.5 text-xs">
+                            <div class="flex justify-between gap-3"><dt class="text-zinc-500">Our reference</dt><dd class="font-mono select-all">{{ data.payment_session.reference }}</dd></div>
+                            <div v-if="data.payment_session.provider_reference" class="flex justify-between gap-3"><dt class="text-zinc-500">Gateway reference</dt><dd class="font-mono select-all font-semibold">{{ data.payment_session.provider_reference }}</dd></div>
+                            <div v-for="r in data.payment_session.recon" :key="r.label" class="flex justify-between gap-3"><dt class="text-zinc-500">{{ r.label }}</dt><dd class="font-mono select-all break-all text-right">{{ r.value }}</dd></div>
+                        </dl>
                     </section>
 
                     <section v-if="data.affiliate_sales.length" class="bg-white border border-zinc-200 p-4">
