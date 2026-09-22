@@ -10,6 +10,7 @@ export default {
             providerStatus: null,
             providerLabel: '',
             instruction: null,
+            reason: null,              // the gateway's own words when it failed
             attempts: 0,
             interval: null,
             cleared: false,
@@ -51,6 +52,7 @@ export default {
                 this.providerStatus = s.provider_status;
                 this.providerLabel = s.provider_label || '';
                 this.instruction = s.instruction || null;
+                this.reason = s.reason || null;
                 if (s.status === 'paid' && !this.cleared) {
                     this.cleared = true;
                     checkoutStore.clear();
@@ -75,13 +77,20 @@ export default {
             </template>
 
             <template v-else-if="state === 'failed' || state === 'cancelled'">
-                <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Payment {{ state }}</h1>
-                <p class="text-sm text-black/65 mb-4">
-                    {{ providerStatus ? `${providerLabel || 'Gateway'} status: ${providerStatus}` : "We couldn't complete this transaction." }}
+                <h1 class="font-display text-2xl tracking-widest uppercase mb-2">{{ state === 'cancelled' ? 'Payment cancelled' : "Payment didn't go through" }}</h1>
+                <p class="text-sm text-black/65 mb-1">
+                    {{ reason ? `${providerLabel || 'Your payment provider'} said: ${reason}.` : (state === 'cancelled' ? 'The payment was cancelled before it completed.' : "Your payment provider couldn't complete this transaction.") }}
                 </p>
-                <router-link to="/cart" class="inline-block bg-gold text-white px-6 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
-                    Back to cart
-                </router-link>
+                <p class="text-sm text-black/65 mb-6">Nothing was charged and your bag is as you left it{{ instruction || reason ? ' — check the number and try again' : '' }}.</p>
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <router-link to="/checkout/payment" class="inline-block bg-gold text-white px-6 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
+                        Try again
+                    </router-link>
+                    <router-link to="/cart" class="inline-block border border-black/15 px-6 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:border-black/40 transition-colors">
+                        Back to cart
+                    </router-link>
+                </div>
+                <p class="text-[10px] tracking-widest uppercase text-black/40 mt-6">Reference: <span class="font-mono">{{ reference }}</span></p>
             </template>
 
             <template v-else-if="state === 'unknown'">

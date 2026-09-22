@@ -58,6 +58,20 @@ class PaymentOutcomes
             $fresh = $session->fresh();
             $snap  = $fresh->cart_snapshot ?? [];
 
+            // A gateway that said "failed" and then "paid" (the shopper approved a
+            // prompt late) has had its Bees returned below — take them again, so
+            // the discount on the order is paid for. Idempotent per session.
+            if ($fresh->kind === 'order' && ! empty($snap['blits_refunded']) && (int) ($snap['blits_debited'] ?? 0) > 0 && $fresh->customer_id) {
+                try {
+                    Bees::debit($fresh->customer_id, (int) $snap['blits_debited'], 'checkout_redeem', $fresh->id . ':redebit', $fresh->reference);
+                    unset($snap['blits_refunded']);
+                    $fresh->update(['cart_snapshot' => $snap]);
+                    $fresh = $fresh->fresh();
+                } catch (\Throwable $e) {
+                    Log::warning('[payments] could not re-debit Bees for a late paid', ['reference' => $fresh->reference, 'error' => $e->getMessage()]);
+                }
+            }
+
             match ($fresh->kind) {
                 PackForwarding::SESSION_KIND => PackForwarding::markFeePaid($fresh),
                 // Exclusivity only goes live once the money is in — first to PAY

@@ -189,6 +189,7 @@ class VelocityAfrica
         if ($n = self::firstString($body, ['name'])) $out['transaction_name'] = $n;
         if ($t = self::firstString($body, ['trace'])) $out['trace'] = $t;
         if ($c = self::firstString($body, ['responseCode'])) $out['response_code'] = $c;
+        if ($e = self::firstString($body, ['errorMessage'])) $out['error_message'] = $e;
         $fees = [];
         foreach (['gatewayCharge' => 'gateway_charge', 'merchantCommission' => 'merchant_commission', 'charge' => 'charge', 'tax' => 'tax', 'totalAmount' => 'total_charged', 'netAmount' => 'net'] as $k => $ours) {
             if (isset($body[$k]) && is_numeric($body[$k])) $fees[$ours] = (int) round((float) $body[$k] * 100);   // cents, like everything else here
@@ -201,9 +202,16 @@ class VelocityAfrica
     /** pollStatus / paymentStatus → our status. Unknown words stay pending, never failed. */
     public static function classify(array $body): array
     {
+        // Three status fields, "tracking different event types" (their words). The
+        // guide says read pollStatus — but a push that EcoCash rejects leaves
+        // paymentStatus and pollStatus PENDING for ever while the transaction's own
+        // `status` says FAILED with an errorMessage (seen live: status FAILED,
+        // responseCode 01, "Transaction failed", still PENDING after 36 polls).
+        // Read all three; a success anywhere wins over a failure anywhere.
         $poll = strtoupper((string) ($body['pollStatus'] ?? ''));
-        $pay  = strtoupper((string) ($body['paymentStatus'] ?? $body['status'] ?? ''));
-        $any  = [$poll, $pay];
+        $pay  = strtoupper((string) ($body['paymentStatus'] ?? ''));
+        $own  = strtoupper((string) ($body['status'] ?? ''));
+        $any  = [$poll, $pay, $own];
 
         $status = match (true) {
             in_array('SUCCESS', $any, true) || in_array('PAID', $any, true) || in_array('COMPLETED', $any, true) => StatusResult::PAID,
@@ -212,7 +220,11 @@ class VelocityAfrica
             default                                                                                                => StatusResult::PENDING,
         };
 
-        return ['status' => $status, 'providerStatus' => trim("{$pay} {$poll}") ?: null];
+        $err = trim((string) ($body['errorMessage'] ?? ''));
+        $providerStatus = trim("{$pay} {$poll}") ?: ($own ?: null);
+        if ($status !== StatusResult::PENDING && $err !== '') $providerStatus = trim("{$own} · {$err}", ' ·');
+
+        return ['status' => $status, 'providerStatus' => $providerStatus];
     }
 
     /** Zimbabwean numbers in the +263 form Velocity shows. Null if it can't be one. */

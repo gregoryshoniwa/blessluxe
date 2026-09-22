@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\PaymentSession;
 use App\Services\Payments\Payments;
+use App\Services\PaymentOutcomes;
 use App\Services\Payments\VelocityAfrica;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
@@ -55,8 +56,10 @@ class VelocityAfricaGatewayTest extends TestCase
             'api.velocityafrica.net/sales-orders' => Http::response(['state' => 'salesOrder', 'status' => 'manual', 'body' => ['id' => 'so-id-1', 'trace' => 'so-trace-1', 'name' => 'SORD-02389', 'grandTotal' => 90.0, 'status' => 'UNPAID'], 'workflowId' => '5000', 'externalId' => 'so-trace-1'], 201),
             'api.velocityafrica.net/transactions' => Http::response(['body' => ['trace' => 'tx-trace-1', 'name' => 'TXN-0002271', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING'] + $txExtra], 201),
             // The paid poll carries what Velocity's statements show: their TXN number and the fees they took.
-            'api.velocityafrica.net/transactions/poll/*' => Http::sequence(array_map(fn ($s) => Http::response(['body' => ['trace' => 'tx-trace-1', 'name' => 'TXN-0002271', 'pollStatus' => $s, 'paymentStatus' => $s, 'responseCode' => '42',
-                'amount' => 90.0, 'gatewayCharge' => 2.25, 'merchantCommission' => 1.8, 'tax' => 0, 'totalAmount' => 92.25, 'netAmount' => 90.0]]), $poll)),
+            // Each $poll entry is a status string, or an array merged over the body (to pin a shape seen live).
+            'api.velocityafrica.net/transactions/poll/*' => Http::sequence(array_map(fn ($s) => Http::response(['body' => ['trace' => 'tx-trace-1', 'name' => 'TXN-0002271', 'responseCode' => '42',
+                'amount' => 90.0, 'gatewayCharge' => 2.25, 'merchantCommission' => 1.8, 'tax' => 0, 'totalAmount' => 92.25, 'netAmount' => 90.0]
+                + (is_array($s) ? $s : ['pollStatus' => $s, 'paymentStatus' => $s, 'status' => $s])]), $poll)),
             'api.velocityafrica.net/sales-orders/update-workflow/*' => Http::response(['body' => ['salesOrder' => ['status' => 'PAID']]]),
         ]);
     }
@@ -129,6 +132,70 @@ class VelocityAfricaGatewayTest extends TestCase
         $this->assertSame(500, (int) DB::table('customers')->where('id', 'cust_1')->value('loyalty_points'));   // …and returned
         $this->assertSame(0, DB::table('orders')->count());
         Http::assertNotSent(fn (ClientRequest $r) => str_contains($r->url(), 'update-workflow'));
+    }
+
+    /** Seen live: EcoCash rejects the push, and only the transaction's own `status` says so — pollStatus/paymentStatus stay PENDING for ever. */
+    private const REJECTED_PUSH = ['status' => 'FAILED', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING', 'responseCode' => '01', 'errorMessage' => 'Transaction failed', 'pollAttempts' => 36];
+
+    #[Test]
+    public function a_push_ecocash_rejects_is_failed_from_its_own_status_not_left_pending_for_ever(): void
+    {
+        $this->fakeVelocity([self::REJECTED_PUSH]);
+
+        $res = $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'velocityafrica:ecocash', 'phone' => '0771234567', 'bees_to_use' => 200])->assertOk();
+
+        $check = $this->getJson('/api/store/payments/status/' . $res->json('reference'))->assertOk();
+        $check->assertJsonPath('session.status', 'failed')->assertJsonPath('session.reason', 'Transaction failed')->assertJsonPath('session.provider_status', 'FAILED · Transaction failed');
+
+        $s = PaymentSession::where('reference', $res->json('reference'))->first();
+        $this->assertSame('Transaction failed', $s->provider_meta['error_message']);
+        $this->assertSame(500, (int) DB::table('customers')->where('id', 'cust_1')->value('loyalty_points'));   // Bees back
+        $this->assertSame(0, DB::table('orders')->count());
+    }
+
+    #[Test]
+    public function a_push_that_is_already_failed_when_created_never_reaches_the_waiting_page(): void
+    {
+        $this->fakeVelocity([], self::REJECTED_PUSH);
+
+        $res = $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'velocityafrica:ecocash', 'phone' => '0771234567', 'bees_to_use' => 100])->assertStatus(502);
+
+        $this->assertSame('VelocityAfrica could not send the prompt (Transaction failed). Check the number and try again.', $res->json('error'));
+        $this->assertSame(0, PaymentSession::count());
+        $this->assertSame(500, (int) DB::table('customers')->where('id', 'cust_1')->value('loyalty_points'));
+    }
+
+    #[Test]
+    public function a_prompt_approved_after_we_gave_up_still_pays_and_takes_the_bees_again(): void
+    {
+        $this->fakeVelocity([self::REJECTED_PUSH, 'SUCCESS']);
+
+        $res = $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'velocityafrica:ecocash', 'phone' => '0771234567', 'bees_to_use' => 200])->assertOk();
+        $ref = $res->json('reference');
+        $this->getJson('/api/store/payments/status/' . $ref)->assertJsonPath('session.status', 'failed');
+        $this->assertSame(500, (int) DB::table('customers')->where('id', 'cust_1')->value('loyalty_points'));
+
+        // The status page stops asking once failed; reconcile is what would notice a late approval.
+        $s = PaymentSession::where('reference', $ref)->first();
+        $this->assertSame('failed', Payments::refresh($s, force: true)->status);
+        Http::assertSentCount(3);
+
+        PaymentOutcomes::apply($s->fresh(), Payments::gateway('velocityafrica')->refresh($s->fresh()));
+
+        $s = $s->fresh();
+        $this->assertSame('paid', $s->status);
+        $this->assertNotNull($s->order_id);
+        // Taken again, once: two redeem debits, one refund, plus whatever the order itself earned.
+        $ledger = DB::table('blits_ledger')->where('customer_id', 'cust_1')->get();
+        $this->assertSame([-200, -200], $ledger->where('reason', 'checkout_redeem')->pluck('delta')->map(fn ($d) => (int) $d)->all());
+        $this->assertSame(1, $ledger->where('reason', 'checkout_cancel_refund')->count());
+        $earned = (int) $ledger->where('reason', 'order_earn')->sum('delta');
+        $this->assertGreaterThan(0, $earned);
+        $this->assertSame(300 + $earned, (int) DB::table('customers')->where('id', 'cust_1')->value('loyalty_points'));
+        $this->assertArrayNotHasKey('blits_refunded', $s->cart_snapshot);
+        // …and applying the same late "paid" twice can't take them a third time.
+        PaymentOutcomes::apply($s, new \App\Services\Payments\StatusResult(reference: $s->reference, status: 'paid', providerStatus: 'SUCCESS SUCCESS'));
+        $this->assertSame(2, DB::table('blits_ledger')->where('reason', 'checkout_redeem')->count());
     }
 
     // ─── Cards: a redirect ─────────────────────────────────────────────────

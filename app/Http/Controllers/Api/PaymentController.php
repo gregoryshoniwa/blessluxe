@@ -201,6 +201,8 @@ class PaymentController extends Controller
             'method'          => $session->method,
             'provider_status' => $session->provider_status,
             'instruction'     => $session->status === 'pending' ? (($session->provider_meta ?? [])['instruction'] ?? null) : null,
+            // What the gateway said when it failed, in its words (e.g. "Transaction failed").
+            'reason'          => in_array($session->status, ['failed', 'cancelled'], true) ? (($session->provider_meta ?? [])['error_message'] ?? null) : null,
             'amount'          => $session->amount,
             'currency_code'   => $session->currency_code,
             'order_id'        => $session->order_id,

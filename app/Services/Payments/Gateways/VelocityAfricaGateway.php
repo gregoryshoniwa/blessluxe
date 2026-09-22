@@ -49,6 +49,16 @@ class VelocityAfricaGateway implements Gateway
             return InitiateResult::failed($tx['error'], $tx['raw']);
         }
 
+        // The create response can already say FAILED (a number EcoCash won't
+        // prompt, a wallet that can't be reached). Don't park the shopper on the
+        // waiting page for a prompt that will never come.
+        if (! $card && in_array($tx['status'], [StatusResult::FAILED, StatusResult::CANCELLED], true)) {
+            Log::warning('[velocityafrica] push refused at initiation', ['reference' => $intent->reference, 'raw' => $tx['raw']]);
+            $said = $tx['recon']['error_message'] ?? null;
+
+            return InitiateResult::failed('VelocityAfrica could not send the prompt' . ($said ? " ({$said})" : '') . '. Check the number and try again.', $tx['raw']);
+        }
+
         $meta = ['sales_order_id' => $so['id'], 'sales_order_trace' => $so['trace'], 'sales_order_name' => $so['name'], 'trace' => $tx['trace'], 'processor' => $card ? 'VMC' : 'ECOCASH'] + $tx['recon'];
         // The reference staff reconcile against is Velocity's own TXN number, not the trace UUID.
         $providerRef = $tx['recon']['transaction_name'] ?? $tx['trace'];

@@ -254,6 +254,7 @@ class AdminOrderController extends Controller
         if (! empty($m['sales_order_name'])) $out[] = ['label' => 'Velocity sales order', 'value' => $m['sales_order_name']];
         if (! empty($m['trace'])) $out[] = ['label' => 'Transaction trace', 'value' => $m['trace']];
         if (! empty($m['sales_order_id'])) $out[] = ['label' => 'Sales order id', 'value' => $m['sales_order_id']];
+        if (! empty($m['error_message'])) $out[] = ['label' => 'Gateway said', 'value' => $m['error_message']];
         foreach (['gateway_charge' => 'Gateway charge', 'merchant_commission' => 'Merchant commission', 'tax' => 'Tax', 'total_charged' => 'Total charged', 'net' => 'Net'] as $k => $label) {
             if (isset($m['fees'][$k])) $out[] = ['label' => $label, 'value' => '$' . number_format($m['fees'][$k] / 100, 2)];
         }
