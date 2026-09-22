@@ -1,5 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
+import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
 import { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
 
@@ -118,10 +119,11 @@ export default {
                 if (data.redirect_url) { window.location.href = data.redirect_url; return; }
                 // No redirect: they approve on their phone while we wait and poll.
                 if (data.return_path) { this.$router.push(data.return_path); return; }
-                this.error = 'Could not start the payment.';
+                toast('Could not start the payment.', { tone: 'error' });
             } catch (e) {
+                // A field problem sits under the field; anything the gateway said is a notification.
                 this.phoneError = e.payload?.errors?.phone?.[0] || '';
-                this.error = this.phoneError ? '' : (e.payload?.error || e.payload?.errors && Object.values(e.payload.errors)[0]?.[0] || 'Payment could not be started.');
+                if (!this.phoneError) toast(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Payment could not be started.', { tone: 'error' });
             } finally {
                 this.submitting = false;
             }
