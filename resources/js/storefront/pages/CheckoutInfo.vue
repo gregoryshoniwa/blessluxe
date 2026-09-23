@@ -1,7 +1,8 @@
 <script>
 import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
-import { Lock, ArrowRight, Mail, MapPin, Truck, Check, ChevronDown } from 'lucide-vue-next';
+import { Lock, ArrowRight, Mail, MapPin, Truck } from 'lucide-vue-next';
+import CheckoutSection from '../components/CheckoutSection.vue';
 
 /**
  * Step 1 of checkout. A returning customer's details are already known, so
@@ -10,11 +11,12 @@ import { Lock, ArrowRight, Mail, MapPin, Truck, Check, ChevronDown } from 'lucid
  * starts open when there is nothing to confirm (a guest, or details we don't
  * have yet). Saved addresses are radio cards; the last one is "Ship to a
  * different address", which reveals the fields. The contact block doubles as
- * the recipient, so it's where a different contact person is typed.
+ * the recipient, so it's where a different contact person is typed. Delivery
+ * always has a choice made, so it is the one card that never starts open.
  */
 export default {
     name: 'CheckoutInfo',
-    components: { Lock, ArrowRight, Mail, MapPin, Truck, Check, ChevronDown },
+    components: { Lock, ArrowRight, Mail, MapPin, Truck, CheckoutSection },
     data() {
         const draft = checkoutStore.draft;
         return {
@@ -33,10 +35,14 @@ export default {
                 country: draft.shipping_address.country || 'Zimbabwe',
             },
             shipping_method: draft.shipping_method || 'standard',
+            // The ways we deliver. One today; the card is built to hold more.
+            deliveryMethods: [
+                { id: 'standard', label: 'Standard delivery', detail: '3–5 business days', price: 'Free' },
+            ],
             cart: null,
             savedAddresses: [],
             selectedAddressId: '',      // '' = the typed address below
-            open: { contact: false, shipping: false },
+            open: { contact: false, shipping: false, delivery: false },
             loading: true,
             saving: false,
             error: '',
@@ -65,6 +71,14 @@ export default {
                 postal_code: a.postal_code || '',
                 country: a.country || this.addr.country,
             };
+        },
+        chosenDelivery() {
+            return this.deliveryMethods.find((m) => m.id === this.shipping_method) || this.deliveryMethods[0];
+        },
+        deliverySummary() {
+            const m = this.chosenDelivery;
+
+            return m ? [m.label, m.detail, m.price].filter(Boolean).join(' · ') : '';
         },
         contactComplete() {
             return !!(this.email && this.first_name && this.last_name);
@@ -118,7 +132,6 @@ export default {
     },
     methods: {
         money(cents) { return `$${(cents / 100).toFixed(2)}`; },
-        toggle(section) { this.open[section] = !this.open[section]; },
         addressLine(a) {
             return [a.line1, a.line2, a.city, a.region, a.country].filter(Boolean).join(', ');
         },
@@ -212,28 +225,15 @@ export default {
                 <!-- Form column -->
                 <form @submit.prevent="next" class="lg:col-span-7 space-y-4">
                     <!-- ─── Contact ─────────────────────────────────────── -->
-                    <section :class="['border transition-colors', open.contact ? 'border-black/15' : 'border-gold/30 bg-cream-dark/40']">
-                        <button
-                            type="button"
-                            @click="toggle('contact')"
-                            :aria-expanded="open.contact"
-                            class="w-full flex items-center gap-3 px-4 py-4 min-h-11 text-left"
-                        >
-                            <Mail class="w-4 h-4 text-gold flex-shrink-0" />
-                            <div class="flex-1 min-w-0">
-                                <p class="font-display text-sm tracking-widest uppercase flex items-center gap-2">
-                                    Contact
-                                    <Check v-if="contactComplete && !open.contact" class="w-3.5 h-3.5 text-emerald-600" />
-                                </p>
-                                <p v-if="!open.contact" class="text-sm text-black/65 mt-0.5 truncate">{{ contactSummary || 'Add your email and name' }}</p>
-                                <p v-if="!open.contact && contactComplete && !phone" class="text-xs text-black/45 mt-0.5">No phone number — add one for delivery updates</p>
-                            </div>
-                            <span class="text-[10px] tracking-widest uppercase text-gold-dark flex items-center gap-1 flex-shrink-0">
-                                {{ open.contact ? 'Close' : 'Change' }}
-                                <ChevronDown :class="['w-3.5 h-3.5 transition-transform', open.contact && 'rotate-180']" />
-                            </span>
-                        </button>
-                        <div v-if="open.contact" class="px-4 pb-4 space-y-3">
+                    <CheckoutSection
+                        title="Contact"
+                        :summary="contactSummary || 'Add your email and name'"
+                        :hint="contactComplete && !phone ? 'No phone number — add one for delivery updates' : ''"
+                        :complete="contactComplete"
+                        v-model:open="open.contact"
+                    >
+                        <template #icon><Mail class="w-4 h-4 text-gold flex-shrink-0" /></template>
+                        <div class="space-y-3">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <input v-model="email" type="email" placeholder="Email address" required autocomplete="email"
                                     class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
@@ -246,30 +246,17 @@ export default {
                             </div>
                             <p class="text-xs text-black/50">Sending this to someone else? Put the person receiving it here — we'll use their name and number for the delivery.</p>
                         </div>
-                    </section>
+                    </CheckoutSection>
 
                     <!-- ─── Shipping address ────────────────────────────── -->
-                    <section :class="['border transition-colors', open.shipping ? 'border-black/15' : 'border-gold/30 bg-cream-dark/40']">
-                        <button
-                            type="button"
-                            @click="toggle('shipping')"
-                            :aria-expanded="open.shipping"
-                            class="w-full flex items-center gap-3 px-4 py-4 min-h-11 text-left"
-                        >
-                            <MapPin class="w-4 h-4 text-gold flex-shrink-0" />
-                            <div class="flex-1 min-w-0">
-                                <p class="font-display text-sm tracking-widest uppercase flex items-center gap-2">
-                                    Shipping address
-                                    <Check v-if="addressComplete && !open.shipping" class="w-3.5 h-3.5 text-emerald-600" />
-                                </p>
-                                <p v-if="!open.shipping" class="text-sm text-black/65 mt-0.5 truncate">{{ addressSummary || 'Add a delivery address' }}</p>
-                            </div>
-                            <span class="text-[10px] tracking-widest uppercase text-gold-dark flex items-center gap-1 flex-shrink-0">
-                                {{ open.shipping ? 'Close' : 'Change' }}
-                                <ChevronDown :class="['w-3.5 h-3.5 transition-transform', open.shipping && 'rotate-180']" />
-                            </span>
-                        </button>
-                        <div v-if="open.shipping" class="px-4 pb-4 space-y-2">
+                    <CheckoutSection
+                        title="Shipping address"
+                        :summary="addressSummary || 'Add a delivery address'"
+                        :complete="addressComplete"
+                        v-model:open="open.shipping"
+                    >
+                        <template #icon><MapPin class="w-4 h-4 text-gold flex-shrink-0" /></template>
+                        <div class="space-y-2">
                             <template v-if="savedAddresses.length">
                                 <label
                                     v-for="a in savedAddresses"
@@ -310,25 +297,31 @@ export default {
                                     class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
                             </div>
                         </div>
-                    </section>
+                    </CheckoutSection>
 
                     <!-- ─── Delivery method ─────────────────────────────── -->
-                    <section class="border border-black/15">
-                        <div class="flex items-center gap-3 px-4 pt-4">
-                            <Truck class="w-4 h-4 text-gold flex-shrink-0" />
-                            <p class="font-display text-sm tracking-widest uppercase">Delivery method</p>
-                        </div>
-                        <div class="px-4 pb-4 pt-3">
-                            <label class="flex items-center gap-3 border border-gold/30 bg-cream-dark/40 px-4 py-3 cursor-pointer">
-                                <input type="radio" v-model="shipping_method" value="standard" class="accent-gold" />
-                                <div class="flex-1">
-                                    <p class="font-medium">Standard delivery</p>
-                                    <p class="text-xs text-black/60">3–5 business days</p>
+                    <CheckoutSection
+                        title="Delivery method"
+                        :summary="deliverySummary"
+                        :complete="!!chosenDelivery"
+                        v-model:open="open.delivery"
+                    >
+                        <template #icon><Truck class="w-4 h-4 text-gold flex-shrink-0" /></template>
+                        <div class="space-y-2">
+                            <label
+                                v-for="m in deliveryMethods"
+                                :key="m.id"
+                                :class="['flex items-center gap-3 border px-4 py-3 cursor-pointer transition-colors', shipping_method === m.id ? 'border-gold bg-cream-dark/40' : 'border-black/15 hover:border-black/25']"
+                            >
+                                <input type="radio" v-model="shipping_method" :value="m.id" class="accent-gold" />
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-medium">{{ m.label }}</p>
+                                    <p class="text-xs text-black/60">{{ m.detail }}</p>
                                 </div>
-                                <span class="text-gold font-semibold">Free</span>
+                                <span class="text-gold font-semibold flex-shrink-0">{{ m.price }}</span>
                             </label>
                         </div>
-                    </section>
+                    </CheckoutSection>
 
                     <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
