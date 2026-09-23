@@ -113,25 +113,27 @@ export default {
                 {{ product.title }}
             </p>
             <p v-if="product.subtitle" class="text-[10px] text-black/55 line-clamp-1">{{ product.subtitle }}</p>
-            <p class="text-xs text-black mt-0.5">{{ product.price_label || '—' }}</p>
-
-            <!-- What other people made of it. Each part appears only once it's
-                 true, so a new piece shows a clean card rather than three zeros. -->
-            <p v-if="signals.length" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-black/55 mt-1.5">
-                <span v-if="product.rating" class="inline-flex items-center gap-1" :title="`${product.rating.average_label} out of 5 from ${product.rating.count} rating${product.rating.count === 1 ? '' : 's'}`">
-                    <Star class="w-3 h-3 text-gold fill-gold" />
-                    <span class="font-medium text-black/75">{{ product.rating.average_label }}</span>
-                    <span>({{ product.rating.count }})</span>
-                </span>
-                <span v-if="product.likes" class="inline-flex items-center gap-1" :title="`Loved by ${product.likes}`">
-                    <Heart class="w-3 h-3 text-gold fill-gold" />
-                    {{ product.likes }}
-                </span>
-                <span v-if="product.purchases" class="inline-flex items-center gap-1" :title="`${product.purchases} bought`">
-                    <ShoppingBag class="w-3 h-3 text-gold" />
-                    {{ product.purchases }} bought
-                </span>
-            </p>
+            <!-- Price leads; what other people made of it answers from the right.
+                 Each signal appears only once it's true, so a new piece shows a
+                 clean card rather than three zeros. The numbers stand alone —
+                 the words that explained them are in the hover hints. -->
+            <div class="flex items-baseline justify-between gap-2 mt-0.5">
+                <p class="text-xs text-black truncate">{{ product.price_label || '—' }}</p>
+                <p v-if="signals.length" class="flex items-center gap-2 text-[11px] text-black/55 flex-shrink-0">
+                    <span v-if="product.rating" class="inline-flex items-center gap-1" :title="`Rated ${product.rating.average_label} out of 5 by ${product.rating.count} ${product.rating.count === 1 ? 'person' : 'people'}`">
+                        <Star class="w-3 h-3 text-gold fill-gold" />
+                        <span class="font-medium text-black/75">{{ product.rating.average_label }}</span>
+                    </span>
+                    <span v-if="product.likes" class="inline-flex items-center gap-1" :title="`Loved by ${product.likes}`">
+                        <Heart class="w-3 h-3 text-gold fill-gold" />
+                        {{ product.likes }}
+                    </span>
+                    <span v-if="product.purchases" class="inline-flex items-center gap-1" :title="`${product.purchases} bought`">
+                        <ShoppingBag class="w-3 h-3 text-gold" />
+                        {{ product.purchases }}
+                    </span>
+                </p>
+            </div>
         </div>
     </router-link>
 </template>
