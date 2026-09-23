@@ -177,6 +177,15 @@ Plan, research and phase gates: [docs/bless-pages-plan.md](docs/bless-pages-plan
 - Feeds are keyset-paged on `(created_at, id)`; follower/look/like counters are denormalised and only move when a row really changed.
 - Handles are URLs: `Hive::RESERVED` blocks route collisions and brand impersonation. Share-card meta for `/hive` and `/@handle` is in [SeoController](app/Http/Controllers/SeoController.php).
 
+### Series (group buys) — `/shop/series`
+
+A **series** is a group buy: each buyer claims one size slot, and when every slot is paid the run is imported as one consignment. It was called a "pack" until shoppers said they call it a series.
+
+- **The rename follows the Bees rule**: nothing a person can read says "pack" — copy, URLs (`/shop/series`, `/admin/series`) and API paths (`/api/{store,admin}/series/*`). **Storage, models and controllers keep the old word** (`pack_campaigns`, `pack_slots`, `pack_definitions`, `PackController`), and `/shop/packs` + `/api/**/packs/*` stay as permanent aliases — those links are already shared. Don't "finish the rename" into the tables.
+- A campaign is `open | filled | closed | cancelled` with an optional `expires_at`; slots are `available | reserved` (a 10-minute TTL) `| paid`. Reservations are swept back on every read (`reapExpired`) rather than by a cron — the page heals the campaign.
+- **A series wears the piece's reputation, not its own** (`PackController::reputation()`): the product's rating, hearts, sales and sourcing promise. Never start a second scoreboard for a campaign.
+- [ShareButton](resources/js/storefront/components/ShareButton.vue) uses the phone's share sheet where there is one and copies the link otherwise — sharing is how a series fills.
+
 ## Files and uploads
 
 **Never write a file next to the code** (`public_path()`, `->move()`, `->store(…, 'public')`, `Storage::disk('public')`). Laravel Cloud rebuilds the app's disk on every deploy, so those files vanish. Everything goes through [Media](app/Services/Media.php):

@@ -31,7 +31,7 @@ export default {
         return {
             q: '',
             tab: 'all',
-            tabs: [{ key: 'all', label: 'All' }, { key: 'packs', label: 'Packs' }],
+            tabs: [{ key: 'all', label: 'All' }, { key: 'packs', label: 'Series' }],
             items: [],
             page: 1,
             hasMore: false,

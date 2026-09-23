@@ -1,10 +1,11 @@
 <script>
+import ShareButton from '../components/ShareButton.vue';
 import { api } from '../../lib/api.js';
-import { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles } from 'lucide-vue-next';
+import { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane } from 'lucide-vue-next';
 
 export default {
     name: 'PackCampaign',
-    components: { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles },
+    components: { Clock, Lock, Check, X, Plus, ShoppingBag, LoaderCircle, Sparkles, ShareButton, Star, Heart, MapPin, Plane },
     data() {
         return {
             data: null,
@@ -38,10 +39,10 @@ export default {
         async fetch() {
             this.loading = true;
             try {
-                this.data = await api.get(`/api/store/packs/${encodeURIComponent(this.code)}`);
+                this.data = await api.get(`/api/store/series/${encodeURIComponent(this.code)}`);
             } catch (e) {
                 if (e.status === 404) this.notFound = true;
-                else this.error = e.payload?.error || 'Could not load this pack.';
+                else this.error = e.payload?.error || 'Could not load this series.';
             } finally { this.loading = false; }
         },
         async fetchMe() {
@@ -62,13 +63,13 @@ export default {
         },
         async reserve(slot) {
             if (!this.customer) {
-                this.$router.push(`/account/login?next=/shop/packs/${this.code}`);
+                this.$router.push(`/account/login?next=/shop/series/${this.code}`);
                 return;
             }
             this.actingOnSlotId = slot.id;
             this.error = '';
             try {
-                await api.post(`/api/store/packs/${encodeURIComponent(this.code)}/slots/${slot.id}/reserve`);
+                await api.post(`/api/store/series/${encodeURIComponent(this.code)}/slots/${slot.id}/reserve`);
                 window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
                 await this.fetch();
             } catch (e) {
@@ -79,7 +80,7 @@ export default {
         async release(slot) {
             this.actingOnSlotId = slot.id;
             try {
-                await api.post(`/api/store/packs/${encodeURIComponent(this.code)}/slots/${slot.id}/release`);
+                await api.post(`/api/store/series/${encodeURIComponent(this.code)}/slots/${slot.id}/release`);
                 window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
                 await this.fetch();
             } finally { this.actingOnSlotId = null; }
@@ -90,12 +91,12 @@ export default {
 
 <template>
     <div class="max-w-[1200px] mx-auto px-[5%] py-12 min-h-[60vh]">
-        <div v-if="loading" class="text-center py-20 text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Loading pack</div>
+        <div v-if="loading" class="text-center py-20 text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Loading series</div>
 
         <div v-else-if="notFound" class="text-center py-20 max-w-md mx-auto">
             <p class="font-script text-3xl text-gold">404</p>
-            <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Pack not found</h1>
-            <router-link to="/shop/packs" class="text-gold underline">Back to packs</router-link>
+            <h1 class="font-display text-2xl tracking-widest uppercase mb-2">Series not found</h1>
+            <router-link to="/shop/series" class="text-gold underline">Back to series</router-link>
         </div>
 
         <div v-else>
@@ -104,18 +105,48 @@ export default {
                 <p class="font-script text-3xl text-gold">{{ campaign.host_kind === 'customer' ? 'Customer-hosted drop' : 'Limited drop' }}</p>
                 <h1 class="font-display text-3xl md:text-4xl tracking-widest uppercase">{{ campaign.title || campaign.definition?.title }}</h1>
                 <p v-if="campaign.definition?.description" class="text-sm text-black/65 mt-3 max-w-xl mx-auto">{{ campaign.definition.description }}</p>
-                <div class="flex items-center justify-center gap-3 mt-4 text-xs text-black/55">
+                <!-- What people made of the piece itself, inherited from its page. -->
+                <div v-if="campaign.reputation" class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-4 text-sm text-black/60">
+                    <span v-if="campaign.reputation.rating" class="inline-flex items-center gap-1.5" :title="`Rated ${campaign.reputation.rating.average_label} out of 5 by ${campaign.reputation.rating.count} ${campaign.reputation.rating.count === 1 ? 'person' : 'people'}`">
+                        <span class="flex items-center">
+                            <Star v-for="n in 5" :key="n" class="w-3.5 h-3.5" :class="n <= Math.round(campaign.reputation.rating.average) ? 'text-gold fill-gold' : 'text-black/15'" />
+                        </span>
+                        <span class="font-medium text-black/80">{{ campaign.reputation.rating.average_label }}</span>
+                    </span>
+                    <span v-if="campaign.reputation.likes" class="inline-flex items-center gap-1.5" :title="`Loved by ${campaign.reputation.likes}`">
+                        <Heart class="w-3.5 h-3.5 text-gold fill-gold" /> {{ campaign.reputation.likes }}
+                    </span>
+                    <span v-if="campaign.reputation.purchases" class="inline-flex items-center gap-1.5" :title="`${campaign.reputation.purchases} bought`">
+                        <ShoppingBag class="w-3.5 h-3.5 text-gold" /> {{ campaign.reputation.purchases }}
+                    </span>
+                    <span v-if="campaign.reputation.sourcing" class="inline-flex items-center gap-1.5" :title="campaign.reputation.sourcing.note">
+                        <component :is="campaign.reputation.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-3.5 h-3.5" :class="campaign.reputation.sourcing.kind === 'local' ? 'text-emerald-600' : 'text-black/50'" />
+                        {{ campaign.reputation.sourcing.eta }}
+                    </span>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-center gap-3 mt-4 text-xs text-black/55">
                     <span class="font-mono text-gold-dark">{{ campaign.public_code }}</span>
                     <span>·</span>
                     <span>Reservation holds for {{ campaign.reservation_minutes }} minutes</span>
+                </div>
+
+                <!-- A series fills because someone passes it on; make that one tap. -->
+                <div class="mt-5">
+                    <ShareButton
+                        :path="`/shop/series/${campaign.public_code}`"
+                        :title="campaign.title || campaign.definition?.title || 'BLESSLUXE series'"
+                        :text="`Claim a size in this BLESSLUXE series — ${totals.available} of ${totals.total} still open.`"
+                        label="Share this series"
+                    />
                 </div>
             </header>
 
             <!-- Status banner -->
             <div v-if="campaign.status !== 'open'" class="bg-zinc-100 border border-zinc-200 px-4 py-3 mb-6 text-sm text-center">
-                <span v-if="campaign.status === 'filled'">This pack has sold out. Watch your inbox for the next drop.</span>
-                <span v-else-if="campaign.status === 'cancelled'">This pack was cancelled.</span>
-                <span v-else>This pack is closed.</span>
+                <span v-if="campaign.status === 'filled'">This series has sold out. Watch your inbox for the next drop.</span>
+                <span v-else-if="campaign.status === 'cancelled'">This series was cancelled.</span>
+                <span v-else>This series is closed.</span>
             </div>
 
             <!-- Totals -->

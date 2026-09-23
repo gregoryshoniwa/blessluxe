@@ -73,7 +73,7 @@ export default {
 
         /** Where a referenced item opens for a customer: its page in the shop. */
         refUrl(ref) {
-            return ref.type === 'pack' ? `/shop/packs/${ref.handle}` : `/shop/${ref.handle}`;
+            return ref.type === 'pack' ? `/shop/series/${ref.handle}` : `/shop/${ref.handle}`;
         },
 
         /** A failed call is worth surfacing — it is usually a permission prompt

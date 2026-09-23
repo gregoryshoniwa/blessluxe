@@ -17,7 +17,8 @@ const routes = [
     { path: '/admin/bees',      name: 'admin-bees',     component: () => import('./pages/Bees.vue') },
     // Renamed programme — old bookmarks land on the new page.
     { path: '/admin/' + 'bl' + 'its', redirect: '/admin/bees' },
-    { path: '/admin/packs',      name: 'admin-packs',     component: () => import('./pages/Packs.vue') },
+    { path: '/admin/series',     name: 'admin-series',    component: () => import('./pages/Packs.vue') },
+    { path: '/admin/series',      redirect: '/admin/series' },
     { path: '/admin/packages',   name: 'admin-packages',  component: () => import('./pages/Packages.vue') },
     // Package detail was pure component state, so it could not be linked to —
     // which is why the order screen linked to the list instead.

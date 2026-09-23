@@ -40,7 +40,7 @@ class ShipmentUpdateMail extends Mailable
                 PackageStatus::Shipped   => 'Your BLESSLUXE pack has left the supplier',
                 PackageStatus::Delivered => 'Your piece has arrived — here is your collection code',
                 PackageStatus::Returned  => 'Your BLESSLUXE pack was returned',
-                default                  => 'Update on your BLESSLUXE pack',
+                default                  => 'Update on your BLESSLUXE series',
             }
             : match ($this->status) {
                 PackageStatus::Shipped        => "Your BLESSLUXE order {$this->orderNumber} has shipped",

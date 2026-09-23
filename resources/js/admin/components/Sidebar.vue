@@ -55,7 +55,7 @@ export default {
                         { to: '/admin/affiliate-inbox', label: 'Affiliate inbox', badge: 'inbox' },
                         { to: '/admin/payments',  label: 'Payments' },
                         { to: '/admin/bees',      label: 'Bees' },
-                        { to: '/admin/packs',      label: 'Packs' },
+                        { to: '/admin/series',      label: 'Series' },
                         { to: '/admin/regions',    label: 'Regions' },
                     ],
                 },

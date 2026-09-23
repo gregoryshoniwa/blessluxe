@@ -16,7 +16,7 @@ export default {
             headings: [],
             bag: bagState,        // the one bag: badge here, lines in the drawer
             wishCount: 0,
-            // Shared, so the menu, Home and the Packs page all agree on whose
+            // Shared, so the menu, Home and the Series page all agree on whose
             // shop this is (see affiliate-store.js).
             shop: affiliateStore.state,
             auth: authStore.state,
@@ -174,11 +174,11 @@ export default {
                          own drops, never part of someone's hand-picked line. -->
                     <router-link
                         v-if="!curated"
-                        to="/shop/packs"
+                        to="/shop/series"
                         active-class="text-gold"
                         class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
                     >
-                        Packs
+                        Series
                     </router-link>
                     <div
                         v-for="link in navLinks"

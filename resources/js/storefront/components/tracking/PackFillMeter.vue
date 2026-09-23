@@ -38,11 +38,11 @@ export default {
         </div>
 
         <p class="text-sm text-black/70 mt-3">
-            <template v-if="isFull">This pack is full and is being prepared to ship.</template>
+            <template v-if="isFull">This series is full and is being prepared to ship.</template>
             <template v-else-if="pack.ships_when_full">
                 Ships once the pack is full — {{ remaining }} slot<template v-if="remaining !== 1">s</template> still open.
             </template>
-            <template v-else>This pack is {{ pack.status }}.</template>
+            <template v-else>This series is {{ pack.status }}.</template>
         </p>
 
         <ul v-if="pack.your_items?.length" class="mt-3 flex flex-wrap gap-2">

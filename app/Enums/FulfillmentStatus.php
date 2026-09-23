@@ -27,7 +27,7 @@ enum FulfillmentStatus: string
     {
         return match ($this) {
             self::Unfulfilled        => 'Unfulfilled',
-            self::AwaitingPack       => 'Waiting for pack to fill',
+            self::AwaitingPack       => 'Waiting for the series to fill',
             self::InProgress         => 'Being prepared',
             self::PartiallyShipped   => 'Partially shipped',
             self::Shipped            => 'Shipped',

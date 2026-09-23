@@ -33,8 +33,8 @@ export default {
             this.loading = true;
             try {
                 const [d, c, p] = await Promise.all([
-                    api.get('/api/admin/packs/definitions'),
-                    api.get('/api/admin/packs/campaigns'),
+                    api.get('/api/admin/series/definitions'),
+                    api.get('/api/admin/series/campaigns'),
                     api.get('/api/admin/products?limit=60'),
                 ]);
                 this.definitions = d.definitions;
@@ -44,7 +44,7 @@ export default {
         },
         publicUrl(code) {
             if (typeof window === 'undefined') return '';
-            return `${window.location.origin}/shop/packs/${code}`;
+            return `${window.location.origin}/shop/series/${code}`;
         },
         async copyCode(code) {
             try {
@@ -60,7 +60,7 @@ export default {
         async saveDef() {
             this.defSaving = true; this.defError = '';
             try {
-                await api.post('/api/admin/packs/definitions', this.defForm);
+                await api.post('/api/admin/series/definitions', this.defForm);
                 this.showDefForm = false;
                 await this.fetchAll();
             } catch (e) {
@@ -71,7 +71,7 @@ export default {
         },
         async removeDef(d) {
             if (!await confirmDialog({ title: `Delete pack "${d.title}"? Open campaigns will be cancelled.`, confirmLabel: 'Delete', tone: 'danger' })) return;
-            await api.del(`/api/admin/packs/definitions/${d.id}`);
+            await api.del(`/api/admin/series/definitions/${d.id}`);
             await this.fetchAll();
         },
         startLaunch(def) {
@@ -81,7 +81,7 @@ export default {
         async launch() {
             this.launchSaving = true; this.launchError = '';
             try {
-                await api.post('/api/admin/packs/campaigns', this.launchForm);
+                await api.post('/api/admin/series/campaigns', this.launchForm);
                 this.showLaunchForm = false;
                 this.tab = 'campaigns';
                 await this.fetchAll();
@@ -91,7 +91,7 @@ export default {
         },
         async cancelCampaign(c) {
             if (!await confirmDialog({ title: `Cancel campaign ${c.public_code}? Slots will be released.`, confirmLabel: 'Delete', tone: 'danger' })) return;
-            await api.post(`/api/admin/packs/campaigns/${c.id}/cancel`);
+            await api.post(`/api/admin/series/campaigns/${c.id}/cancel`);
             await this.fetchAll();
         },
     },
@@ -103,7 +103,7 @@ export default {
         <header class="flex flex-wrap items-center justify-between gap-3 mb-8">
             <div>
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Group buy</p>
-                <h1 class="text-2xl font-semibold">Packs</h1>
+                <h1 class="text-2xl font-semibold">Series</h1>
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <button @click="startDef" class="border border-zinc-300 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-gold hover:text-gold">
@@ -123,7 +123,7 @@ export default {
 
         <!-- Definition form -->
         <section v-if="showDefForm" class="bg-white border border-gold/30 p-5 mb-6">
-            <h2 class="font-semibold mb-3">New pack definition</h2>
+            <h2 class="font-semibold mb-3">New series</h2>
             <div class="grid grid-cols-2 gap-3">
                 <input v-model="defForm.title" placeholder="Title (e.g. Summer Limited Drop)" class="border border-zinc-300 px-3 py-2 col-span-2" />
                 <textarea v-model="defForm.description" placeholder="Description" rows="2" class="border border-zinc-300 px-3 py-2 col-span-2"></textarea>
@@ -216,7 +216,7 @@ export default {
                         <td class="px-5 py-3 text-zinc-500 text-xs">{{ c.expires_at ? new Date(c.expires_at).toLocaleDateString() : '—' }}</td>
                         <td class="px-5 py-3 text-right">
                             <div class="inline-flex items-center gap-1">
-                                <a :href="`/shop/packs/${c.public_code}`" target="_blank" class="inline-flex items-center justify-center w-8 h-8 text-zinc-500 hover:text-gold hover:bg-gold/10 rounded" title="Open public link" :aria-label="'Open ' + c.public_code">
+                                <a :href="`/shop/series/${c.public_code}`" target="_blank" class="inline-flex items-center justify-center w-8 h-8 text-zinc-500 hover:text-gold hover:bg-gold/10 rounded" title="Open public link" :aria-label="'Open ' + c.public_code">
                                     <ExternalLink class="w-4 h-4" />
                                 </a>
                                 <IconButton v-if="c.status === 'open'" label="Cancel campaign" tone="danger" @click="cancelCampaign(c)">

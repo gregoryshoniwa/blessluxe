@@ -24,7 +24,7 @@ class SeoController extends Controller
     private const STATIC_META = [
         ''            => ['BLESSLUXE — Luxury Atelier', 'Curated drops, group buys and Bees loyalty for the BLESSLUXE woman.'],
         'shop'        => ['Shop — BLESSLUXE',           'Browse the latest BLESSLUXE arrivals across dresses, tops, bags and more.'],
-        'shop/packs'  => ['Packs — BLESSLUXE',          'Curated group-buy drops. Claim a slot before the pack closes.'],
+        'shop/series' => ['Series — BLESSLUXE',         'Curated group buys. Claim your size before the series fills.'],
         'cart'        => ['Cart — BLESSLUXE',           'Review your bag before checkout.'],
         'wishlist'    => ['Wishlist — BLESSLUXE',       'Pieces you\'ve saved for later.'],
         'account'     => ['Account — BLESSLUXE',        'Manage your BLESSLUXE account, orders, Bees and addresses.'],
@@ -60,7 +60,7 @@ class SeoController extends Controller
 
         // Static priorities.
         $urls[] = ['loc' => $base . '/',              'lastmod' => $now, 'priority' => '1.0', 'changefreq' => 'daily'];
-        foreach (['shop', 'shop/packs', 'hive', 'affiliate', 'faq', 'track'] as $path) {
+        foreach (['shop', 'shop/series', 'hive', 'affiliate', 'faq', 'track'] as $path) {
             $urls[] = ['loc' => $base . '/' . $path,  'lastmod' => $now, 'priority' => '0.8', 'changefreq' => 'weekly'];
         }
 
@@ -138,8 +138,9 @@ class SeoController extends Controller
             'json_ld'      => null,
         ];
 
-        // Product detail: /shop/{handle} but NOT /shop/packs* nor /shop (the index).
-        if (Str::startsWith($path, 'shop/') && ! Str::startsWith($path, 'shop/packs')) {
+        // Product detail: /shop/{handle} but NOT a series listing nor /shop (the
+        // index). Both spellings — /shop/packs links are still out in the world.
+        if (Str::startsWith($path, 'shop/') && ! Str::startsWith($path, 'shop/packs') && ! Str::startsWith($path, 'shop/series')) {
             $handle = Str::after($path, 'shop/');
             // Strip any trailing query-ish bits if a router happened to pass them.
             $handle = Str::before($handle, '?');

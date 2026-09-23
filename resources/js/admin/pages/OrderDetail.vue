@@ -208,7 +208,7 @@ export default {
                                     </router-link>
                                     <p class="text-sm">{{ p.status_label || p.status }}</p>
                                 </div>
-                                <span v-if="p.is_pack" class="text-[10px] tracking-widest uppercase px-2 py-0.5 bg-gold/15 text-gold-dark shrink-0">Pack</span>
+                                <span v-if="p.is_pack" class="text-[10px] tracking-widest uppercase px-2 py-0.5 bg-gold/15 text-gold-dark shrink-0">Series</span>
                             </div>
 
                             <p v-if="p.is_pack && p.pack_public_code" class="text-xs text-zinc-500 mt-1">

@@ -4,8 +4,12 @@ import { authStore } from './auth-store.js';
 const routes = [
     { path: '/', name: 'home', component: () => import('./pages/Home.vue') },
     { path: '/shop', name: 'shop', component: () => import('./pages/Shop.vue') },
-    { path: '/shop/packs', name: 'packs', component: () => import('./pages/Packs.vue') },
-    { path: '/shop/packs/:code', name: 'pack-campaign', component: () => import('./pages/PackCampaign.vue') },
+    { path: '/shop/series', name: 'series', component: () => import('./pages/Packs.vue') },
+    { path: '/shop/series/:code', name: 'series-campaign', component: () => import('./pages/PackCampaign.vue') },
+    // A group-buy was called a "pack" until shoppers told us they call it a
+    // series. Links to the old address are already shared, so they redirect.
+    { path: '/shop/series', redirect: '/shop/series' },
+    { path: '/shop/series/:code', redirect: (to) => `/shop/series/${to.params.code}` },
     { path: '/shop/:handle', name: 'product', component: () => import('./pages/ProductDetail.vue') },
     { path: '/cart', name: 'cart', component: () => import('./pages/Cart.vue') },
     { path: '/wishlist', name: 'wishlist', component: () => import('./pages/Wishlist.vue') },

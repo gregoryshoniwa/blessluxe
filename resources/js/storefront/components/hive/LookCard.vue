@@ -92,7 +92,7 @@ export default {
             hiveStore.shopVia(this.$router, { look_id: this.look.id }, this.refPath(r));
         },
 
-        refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
+        refPath(r) { return r.type === 'pack' ? `/shop/series/${r.handle}` : `/shop/${r.handle}`; },
 
         onSwipe(e) {
             const el = e.target;

@@ -74,8 +74,8 @@ export default {
 
                     <!-- Primary nav -->
                     <nav class="py-2">
-                        <router-link v-if="showPacks" to="/shop/packs" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
-                            Packs
+                        <router-link v-if="showPacks" to="/shop/series" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
+                            Series
                         </router-link>
                         <div v-for="link in navLinks" :key="link.handle">
                             <button

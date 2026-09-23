@@ -318,7 +318,7 @@ export default {
          * the product's editor, or the packs screen.
          */
         refUrl(ref) {
-            return ref.type === 'pack' ? '/admin/packs' : `/admin/products/${ref.id}`;
+            return ref.type === 'pack' ? '/admin/series' : `/admin/products/${ref.id}`;
         },
 
         async reply(payload) {

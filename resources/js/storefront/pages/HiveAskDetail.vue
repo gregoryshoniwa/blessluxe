@@ -24,7 +24,7 @@ export default {
     mounted() { this.load(); },
     methods: {
         timeAgo,
-        refPath(r) { return r.type === 'pack' ? `/shop/packs/${r.handle}` : `/shop/${r.handle}`; },
+        refPath(r) { return r.type === 'pack' ? `/shop/series/${r.handle}` : `/shop/${r.handle}`; },
         openRef(e, a, r) {
             if (!a.author.seller || e.metaKey || e.ctrlKey) return;
             e.preventDefault();

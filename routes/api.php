@@ -143,10 +143,15 @@ Route::prefix('store')->group(function () {
         // Courier choices + prices, so a buyer can compare before committing.
         Route::get  ('/couriers',                             [PackController::class, 'couriers']);
 
-        Route::get  ('/packs',                                [PackController::class, 'index']);
-        Route::get  ('/packs/{code}',                         [PackController::class, 'show']);
-        Route::post ('/packs/{code}/slots/{slotId}/reserve',  [PackController::class, 'reserve']);
-        Route::post ('/packs/{code}/slots/{slotId}/release',  [PackController::class, 'release']);
+        // A group-buy is a SERIES to everyone who uses it; `pack` survives only
+        // in storage and class names. The old paths stay as aliases — links to
+        // them are out in the world.
+        foreach (['series', 'packs'] as $word) {
+            Route::get  ("/{$word}",                                [PackController::class, 'index']);
+            Route::get  ("/{$word}/{code}",                         [PackController::class, 'show']);
+            Route::post ("/{$word}/{code}/slots/{slotId}/reserve",  [PackController::class, 'reserve']);
+            Route::post ("/{$word}/{code}/slots/{slotId}/release",  [PackController::class, 'release']);
+        }
 
         // ─── Payments — any gateway (App\Services\Payments) ─────────────
         Route::get ('/payments/options',              [PaymentController::class, 'options']);
@@ -465,14 +470,17 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::get('/bees', [AdminBeesController::class, 'index']);
         Route::put('/bees', [AdminBeesController::class, 'update']);
 
-        // Pack campaigns + definitions.
-        Route::get   ('/packs/definitions',       [AdminPackController::class, 'indexDefinitions']);
-        Route::post  ('/packs/definitions',       [AdminPackController::class, 'storeDefinition']);
-        Route::delete('/packs/definitions/{id}',  [AdminPackController::class, 'destroyDefinition']);
+        // Series campaigns + definitions. `packs` stays as an alias of every
+        // path, since a staff browser may have one bookmarked.
+        foreach (['series', 'packs'] as $word) {
+            Route::get   ("/{$word}/definitions",       [AdminPackController::class, 'indexDefinitions']);
+            Route::post  ("/{$word}/definitions",       [AdminPackController::class, 'storeDefinition']);
+            Route::delete("/{$word}/definitions/{id}",  [AdminPackController::class, 'destroyDefinition']);
 
-        Route::get   ('/packs/campaigns',         [AdminPackController::class, 'indexCampaigns']);
-        Route::post  ('/packs/campaigns',         [AdminPackController::class, 'launchCampaign']);
-        Route::post  ('/packs/campaigns/{id}/cancel', [AdminPackController::class, 'cancelCampaign']);
+            Route::get   ("/{$word}/campaigns",         [AdminPackController::class, 'indexCampaigns']);
+            Route::post  ("/{$word}/campaigns",         [AdminPackController::class, 'launchCampaign']);
+            Route::post  ("/{$word}/campaigns/{id}/cancel", [AdminPackController::class, 'cancelCampaign']);
+        }
 
         // Announcements (hero slides + top bar).
         Route::get   ('/announcements',       [AdminAnnouncementController::class, 'index']);

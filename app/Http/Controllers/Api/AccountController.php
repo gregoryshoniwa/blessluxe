@@ -340,7 +340,7 @@ class AccountController extends Controller
 
                 // The customer's own order page used to show LESS than the anonymous
                 // /track page — no status, no events, no ETA. Full shipments now.
-                // Pack consignment contents are filtered to this buyer's slots
+                // Series consignment contents are filtered to this buyer's slots
                 // server-side; sub_codes are included because the caller is
                 // authenticated as the buyer who owns them.
                 'shipments' => Shipping::packagesForOrder($order)

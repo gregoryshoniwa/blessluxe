@@ -151,7 +151,7 @@ export default {
                     <header class="flex items-end justify-between gap-4 flex-wrap mb-5">
                         <div>
                             <h2 class="font-display text-sm tracking-widest uppercase">
-                                {{ s.is_pack ? 'Pack consignment' : 'Shipment' }}
+                                {{ s.is_pack ? 'Series consignment' : 'Shipment' }}
                             </h2>
                             <p class="font-mono text-xs text-gold-dark mt-1">{{ s.code }}</p>
                         </div>

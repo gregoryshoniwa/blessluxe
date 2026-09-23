@@ -28,6 +28,26 @@ class PackController extends Controller
     public const RESERVATION_MINUTES = 10;
 
     /**
+     * Rating, hearts and sales of the piece a series is for — the same numbers
+     * its product card shows, never a separate tally.
+     *
+     * @return array{rating:?array,likes:int,purchases:int}|null
+     */
+    public static function reputation($product): ?array
+    {
+        if (! $product) return null;
+        $count = (int) ($product->rating_count ?? 0);
+        $avg = $count > 0 ? round(((int) $product->rating_sum) / $count, 1) : null;
+
+        return [
+            'rating'    => $avg === null ? null : ['average' => $avg, 'average_label' => number_format($avg, 1), 'count' => $count],
+            'likes'     => (int) ($product->likes_count ?? 0),
+            'purchases' => (int) ($product->purchases_count ?? 0),
+            'sourcing'  => \App\Services\Couriers::promise($product->sourcing ?? null),
+        ];
+    }
+
+    /**
      * Sweeps expired reservations back to `available`. Runs on every read so
      * we don't need a cron — the storefront page itself heals the campaign.
      */
@@ -80,11 +100,14 @@ class PackController extends Controller
                 // Cherry-pick the first available slot's thumbnail as the
                 // hero image so the listing tile has something to render.
                 $firstSlot = $c->slots()
-                    ->with('variant.product:id,thumbnail')
+                    ->with('variant.product:id,thumbnail,sourcing,rating_count,rating_sum,likes_count,purchases_count')
                     ->where('status', 'available')
                     ->first();
                 return [
                     'public_code'    => $c->public_code,
+                    // A series is a way to buy a piece, so it wears that piece's
+                    // reputation rather than growing a second one of its own.
+                    'reputation'     => self::reputation($firstSlot?->variant?->product),
                     'title'          => $c->title ?? $c->definition?->title,
                     'description'    => $c->definition?->description,
                     'thumbnail'      => optional($firstSlot?->variant?->product)->thumbnail,
@@ -116,7 +139,7 @@ class PackController extends Controller
         $slots = PackSlot::query()
             ->where('pack_campaign_id', $campaign->id)
             ->with([
-                'variant.product:id,title,handle,thumbnail',
+                'variant.product:id,title,handle,thumbnail,sourcing,rating_count,rating_sum,likes_count,purchases_count',
                 'variant.prices' => fn ($q) => $q->where('currency_code', 'usd'),
             ])
             ->orderBy('size_label')
@@ -155,6 +178,9 @@ class PackController extends Controller
             'campaign' => [
                 'id'          => $campaign->id,
                 'public_code' => $campaign->public_code,
+                // Inherited from the piece, so the series page says what the
+                // product page says rather than starting a second scoreboard.
+                'reputation'  => self::reputation($slots->isNotEmpty() ? PackSlot::where('pack_campaign_id', $campaign->id)->with('variant.product')->first()?->variant?->product : null),
                 'title'       => $campaign->title,
                 'status'      => $campaign->status,
                 'host_kind'   => $campaign->host_kind,

@@ -1,11 +1,11 @@
 <script>
 import { api } from '../../lib/api.js';
 import { affiliateStore } from '../affiliate-store.js';
-import { Sparkles, Users } from 'lucide-vue-next';
+import { Sparkles, Users, Star, Heart, MapPin, Plane } from 'lucide-vue-next';
 
 export default {
     name: 'PacksPage',
-    components: { Sparkles, Users },
+    components: { Sparkles, Users, Star, Heart, MapPin, Plane },
     data() {
         return { packs: [], loading: true, hiddenByShop: false };
     },
@@ -23,7 +23,7 @@ export default {
         async load() {
             this.loading = true;
             try {
-                const data = await api.get('/api/store/packs');
+                const data = await api.get('/api/store/series');
                 this.packs = data.packs || [];
                 // The SERVER says why it is empty — a curated affiliate shop
                 // lists no packs — so this page can say so, rather than claiming
@@ -51,13 +51,13 @@ export default {
             <p class="font-script text-3xl text-gold mb-2 flex items-center justify-center gap-2">
                 <Sparkles class="w-5 h-5" /> Group buy
             </p>
-            <h1 class="font-display text-4xl md:text-5xl tracking-widest uppercase">Packs</h1>
+            <h1 class="font-display text-4xl md:text-5xl tracking-widest uppercase">Series</h1>
             <p class="text-sm text-black/65 mt-4 max-w-xl mx-auto">
                 Claim a slot in a limited drop. Each pack is a curated bundle; once every slot is locked in, the pack ships.
             </p>
         </header>
 
-        <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             <div v-for="n in 8" :key="n">
                 <div class="aspect-[3/4] bg-cream-dark animate-pulse mb-2" />
                 <div class="h-3 bg-cream-dark animate-pulse w-2/3 mb-1" />
@@ -67,29 +67,41 @@ export default {
 
         <!-- Reached by a saved link while shopping a curated affiliate shop. -->
         <div v-else-if="hiddenByShop" class="text-center py-20 max-w-md mx-auto">
-            <p class="font-display text-lg tracking-wide mb-2">Packs aren't part of {{ shopName }}'s shop</p>
-            <p class="text-sm text-black/55 leading-relaxed mb-6">You're browsing a hand-picked collection. Packs are BLESSLUXE group-buys, available from the main shop.</p>
+            <p class="font-display text-lg tracking-wide mb-2">Series aren't part of {{ shopName }}'s shop</p>
+            <p class="text-sm text-black/55 leading-relaxed mb-6">You're browsing a hand-picked collection. Series are BLESSLUXE group-buys, available from the main shop.</p>
             <button @click="leaveShop" class="text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold">Browse the full collection</button>
         </div>
 
         <div v-else-if="!packs.length" class="text-center py-20 max-w-md mx-auto">
-            <p class="text-sm text-black/55 mb-6">No open packs right now. Check back soon, or follow your favourite affiliate for hosted drops.</p>
+            <p class="text-sm text-black/55 mb-6">No open series right now. Check back soon, or follow your favourite affiliate for hosted drops.</p>
             <router-link to="/shop" class="inline-block bg-gold text-white px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors">
                 Continue Shopping
             </router-link>
         </div>
 
-        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             <router-link
                 v-for="p in packs"
                 :key="p.public_code"
-                :to="`/shop/packs/${p.public_code}`"
-                class="block group relative"
+                :to="`/shop/series/${p.public_code}`"
+                class="block group relative border border-black/10 hover:border-gold/40 transition-colors"
             >
                 <span v-if="p.expires_at" class="absolute top-2 right-2 z-10 text-[9px] tracking-widest uppercase bg-amber-100 text-amber-700 px-2 py-0.5">
                     ends {{ fmtExpires(p.expires_at) }}
                 </span>
-                <div class="aspect-[3/4] bg-cream-dark mb-2 overflow-hidden group-hover:opacity-90 transition-opacity">
+                <!-- Same square as a product card: icon only, words on hover. -->
+                <span
+                    v-if="p.reputation?.sourcing"
+                    :class="['absolute top-0 left-0 z-10 inline-flex items-center h-7 px-2 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
+                             p.reputation.sourcing.kind === 'local' ? 'bg-emerald-600/95' : 'bg-black/70 backdrop-blur-sm']"
+                    :title="p.reputation.sourcing.note"
+                >
+                    <component :is="p.reputation.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-3 h-3 flex-shrink-0" />
+                    <span class="max-w-0 opacity-0 overflow-hidden whitespace-nowrap pl-1 transition-all duration-300 group-hover:max-w-[8rem] group-hover:opacity-100">
+                        {{ p.reputation.sourcing.eta }}
+                    </span>
+                </span>
+                <div class="aspect-[3/4] bg-cream-dark overflow-hidden group-hover:opacity-90 transition-opacity">
                     <img
                         v-if="p.thumbnail"
                         :src="p.thumbnail"
@@ -97,14 +109,31 @@ export default {
                         class="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                     />
                 </div>
-                <p class="font-display text-sm leading-tight line-clamp-1 group-hover:text-gold transition-colors">
-                    {{ p.title }}
-                </p>
-                <p class="text-[10px] text-black/55 line-clamp-1 inline-flex items-center gap-1">
-                    <Users class="w-3 h-3" /> {{ p.slots_paid }}/{{ p.slots_total }} claimed
-                </p>
-                <div class="bg-cream-dark/40 h-1 overflow-hidden mt-1">
-                    <div class="bg-gold h-full" :style="{ width: fillPct(p) + '%' }"></div>
+                <div class="p-3">
+                    <p class="font-display text-sm leading-tight line-clamp-1 group-hover:text-gold transition-colors">
+                        {{ p.title }}
+                    </p>
+                    <!-- How full it is, read the same way as a product's price row. -->
+                    <div class="flex items-baseline justify-between gap-2 mt-0.5">
+                        <p class="text-xs text-black truncate">{{ p.slots_total - p.slots_paid }} left</p>
+                        <!-- The piece's own reputation, alongside how full the series is. -->
+                        <p class="flex items-center gap-2 text-[11px] text-black/55 flex-shrink-0">
+                            <span v-if="p.reputation?.rating" class="inline-flex items-center gap-1" :title="`Rated ${p.reputation.rating.average_label} out of 5 by ${p.reputation.rating.count} ${p.reputation.rating.count === 1 ? 'person' : 'people'}`">
+                                <Star class="w-3 h-3 text-gold fill-gold" />
+                                <span class="font-medium text-black/75">{{ p.reputation.rating.average_label }}</span>
+                            </span>
+                            <span v-if="p.reputation?.likes" class="inline-flex items-center gap-1" :title="`Loved by ${p.reputation.likes}`">
+                                <Heart class="w-3 h-3 text-gold fill-gold" />
+                                {{ p.reputation.likes }}
+                            </span>
+                            <span class="inline-flex items-center gap-1" :title="`${p.slots_paid} of ${p.slots_total} sizes claimed`">
+                                <Users class="w-3 h-3 text-gold" /> {{ p.slots_paid }}/{{ p.slots_total }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="bg-cream-dark/60 h-1 overflow-hidden mt-2">
+                        <div class="bg-gold h-full transition-all" :style="{ width: fillPct(p) + '%' }"></div>
+                    </div>
                 </div>
             </router-link>
         </div>

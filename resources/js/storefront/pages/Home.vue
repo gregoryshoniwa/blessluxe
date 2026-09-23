@@ -30,7 +30,7 @@ export default {
             },
             featured: [],
             loadingFeatured: true,
-            // Cover image for the "Packs" category card — the newest open
+            // Cover image for the "Series" category card — the newest open
             // pack campaign's thumbnail (falls back to a gradient).
             packThumb: null,
             // Every active slide; the slideshow falls back to `heroSlide`'s copy
@@ -66,12 +66,12 @@ export default {
             if (!res.ok) return;
             const data = await res.json();
             // Up to four tiles. The server already narrows these to a curated
-            // shop's own categories; the Packs card takes one slot when shown.
+            // shop's own categories; the Series card takes one slot when shown.
             this.allHeadings = (data.headings || []).filter((h) => !h.is_sale);
         },
         async fetchPackThumb() {
             try {
-                const res = await fetch('/api/store/packs');
+                const res = await fetch('/api/store/series');
                 if (!res.ok) return;
                 const data = await res.json();
                 this.packThumb = (data.packs || []).find((p) => p.thumbnail)?.thumbnail || null;
@@ -112,16 +112,16 @@ export default {
                 <h2 class="font-display text-3xl md:text-4xl tracking-widest uppercase">Shop By Category</h2>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Packs — group-buy drops at /shop/packs. Leads the grid,
+                <!-- Packs — group-buy drops at /shop/series. Leads the grid,
                      except inside a curated affiliate shop: packs are
                      BLESSLUXE's own, never part of someone's chosen line. -->
                 <router-link
                     v-if="!curated"
-                    to="/shop/packs"
+                    to="/shop/series"
                     class="group relative aspect-[3/4] overflow-hidden cursor-pointer bg-gradient-to-br from-amber-200/40 to-rose-200/30"
                 >
                     <template v-if="packThumb">
-                        <img :src="packThumb" alt="Packs" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+                        <img :src="packThumb" alt="Series" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
                         <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent"></div>
                     </template>
                     <div class="absolute inset-0 flex items-end justify-center pb-10">
