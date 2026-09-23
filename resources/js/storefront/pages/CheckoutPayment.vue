@@ -4,6 +4,14 @@ import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
 import { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
 
+// Acceptance marks, by the method they stand for. A method with no entry falls
+// back to its line icon, so a missing file is never a broken image. Files and
+// provenance: public/payments/README.md
+const LOGOS = {
+    ecocash: [{ src: '/payments/ecocash.svg', alt: 'EcoCash' }],
+    card:    [{ src: '/payments/visa.svg', alt: 'Visa' }, { src: '/payments/mastercard.svg', alt: 'Mastercard' }],
+};
+
 export default {
     name: 'CheckoutPayment',
     components: { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield },
@@ -17,6 +25,7 @@ export default {
             // chosen one may need a phone number before it can start.
             options: [],
             option: null,
+            tax: null,          // VAT disclosure settings (Zimbabwe: prices are tax-INCLUSIVE)
             phone: '',
             phoneError: '',
             phoneRevealed: false, // the gateway rejected the number we sent quietly — let them fix it
@@ -37,6 +46,31 @@ export default {
         totalCents() { return Math.max(0, this.subtotalCents - this.discountCents); },
         total() { return (this.totalCents / 100).toFixed(2); },
         itemCount() { return this.cart?.item_count || 0; },
+        /**
+         * What the chosen gateway ADDS for paying this way. Velocity debits the
+         * order total plus its charge, so the customer must see that before
+         * they approve it. Mirrors Payments::quote() on the server.
+         */
+        surchargeLines() {
+            const r = this.chosen?.surcharge;
+            if (!r?.percent) return [];
+            const charge = Math.round(this.totalCents * r.percent / 100);
+            if (charge <= 0) return [];
+            const out = [{ label: `${r.label} (${this.pct(r.percent)}%)`, cents: charge }];
+            const tax = r.tax_percent > 0 ? Math.round(charge * r.tax_percent / 100) : 0;
+            if (tax > 0) out.push({ label: `${r.tax_label} (${this.pct(r.tax_percent)}%)`, cents: tax });
+
+            return out;
+        },
+        feesCents() { return this.surchargeLines.reduce((n, l) => n + l.cents, 0); },
+        payTotalCents() { return this.totalCents + this.feesCents; },
+        payTotal() { return (this.payTotalCents / 100).toFixed(2); },
+        /** VAT already inside the price, not added to it — what Zimbabwe requires us to show. */
+        taxIncludedCents() {
+            if (!this.tax?.enabled || !this.tax.rate) return 0;
+
+            return Math.round(this.totalCents * this.tax.rate / (100 + this.tax.rate));
+        },
         chosen() { return this.options.find((o) => o.id === this.option) || null; },
         needsPhone() { return !!this.chosen?.needs?.includes('phone'); },
         // A wallet prompt lands on a phone, so the shopper must confirm WHICH one.
@@ -47,7 +81,7 @@ export default {
         askPhone() { return this.needsPhone && (this.promptsPhone || this.phoneRevealed || !this.phoneLooksValid(this.draft.phone)); },
         payLabel() {
             if (this.submitting) return this.promptsPhone ? 'Sending the prompt…' : `Redirecting to ${this.chosen?.label || 'payment'}…`;
-            return `Pay $${this.total}`;
+            return `Pay $${this.payTotal}`;
         },
         readyToPay() {
             const d = this.draft;
@@ -73,6 +107,7 @@ export default {
             ]);
             this.cart = cartRes.cart;
             this.options = optRes.options || [];
+            this.tax = optRes.tax || null;
             this.option = this.options[0]?.id || null;
             this.phone = this.draft.phone || '';
             if (!this.options.length) this.error = "Payments aren't available right now. Please try again shortly.";
@@ -107,6 +142,8 @@ export default {
         },
         phoneLooksValid(v) { return /\d{9,}/.test(String(v || '').replace(/\D/g, '')); },
         icon(o) { return { smartphone: 'Smartphone', wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard' }[o.icon] || 'Shield'; },
+        logos(o) { return LOGOS[o.method] || []; },
+        pct(n) { return String(Number(n)).replace(/\.0+$/, ''); },
         async pay() {
             if (!this.chosen) return;
             this.phoneError = '';
@@ -238,25 +275,33 @@ export default {
                             </div>
                         </section>
 
-                        <div class="space-y-2">
+                        <!-- One button per way to pay, all the same size, each wearing its own mark. -->
+                        <div class="grid gap-3 sm:grid-cols-2">
                             <label
                                 v-for="o in options"
                                 :key="o.id"
-                                :class="['flex items-start gap-3 border-2 px-4 py-4 cursor-pointer transition-colors', option === o.id ? 'border-gold bg-cream-dark/40' : 'border-black/10 hover:border-black/25']"
+                                :class="['relative flex flex-col items-center text-center gap-3 border-2 px-4 pt-10 pb-5 cursor-pointer transition-colors', option === o.id ? 'border-gold bg-cream-dark/40' : 'border-black/10 hover:border-black/25']"
                             >
-                                <input type="radio" v-model="option" :value="o.id" class="mt-1 accent-gold" />
-                                <component :is="icon(o)" class="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-display text-base">{{ o.label }}</p>
-                                    <p class="text-xs text-black/60 mt-1">{{ o.hint }}</p>
-                                    <div v-if="option === o.id && askPhone" class="mt-3">
-                                        <label class="block text-xs text-black/60 mb-1">{{ promptsPhone ? 'Phone number that will pay' : 'Mobile number for your receipt' }}</label>
-                                        <input v-model.trim="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="077 123 4567" class="w-full sm:w-72 border border-black/15 px-3 py-2.5 text-sm focus:outline-none focus:border-gold" @click.stop />
-                                        <p v-if="phoneError" class="text-xs text-red-600 mt-1">{{ phoneError }}</p>
-                                    </div>
-                                </div>
-                                <ShieldCheck class="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                                <input type="radio" v-model="option" :value="o.id" class="absolute top-4 left-4 accent-gold" />
+                                <ShieldCheck class="absolute top-4 right-4 w-5 h-5 text-emerald-500" />
+
+                                <span class="flex items-center justify-center gap-4 h-9">
+                                    <img v-for="l in logos(o)" :key="l.src" :src="l.src" :alt="l.alt" class="h-6 sm:h-7 w-auto max-w-[6.5rem] object-contain" />
+                                    <component :is="icon(o)" v-if="!logos(o).length" class="w-7 h-7 text-gold" />
+                                </span>
+
+                                <span class="block">
+                                    <span class="block font-display text-base">{{ o.label }}</span>
+                                    <span class="block text-xs text-black/60 mt-1">{{ o.hint }}</span>
+                                </span>
                             </label>
+                        </div>
+
+                        <!-- Asked once, under the buttons, so choosing one never resizes them. -->
+                        <div v-if="askPhone" class="border border-black/15 px-4 py-4">
+                            <label class="block text-xs text-black/60 mb-1">{{ promptsPhone ? 'Phone number that will pay' : 'Mobile number for your receipt' }}</label>
+                            <input v-model.trim="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="077 123 4567" class="w-full sm:w-72 border border-black/15 px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
+                            <p v-if="phoneError" class="text-xs text-red-600 mt-1">{{ phoneError }}</p>
                         </div>
                         <p class="flex items-center gap-2 text-xs text-black/55 mt-3">
                             <Lock class="w-3 h-3" />
@@ -298,10 +343,20 @@ export default {
                                 <span>Bees ({{ beesPreview.bees }})</span>
                                 <span>-${{ discount }}</span>
                             </div>
+                            <div v-for="l in surchargeLines" :key="l.label" class="flex justify-between">
+                                <span class="text-black/60">{{ l.label }}</span>
+                                <span>{{ money(l.cents) }}</span>
+                            </div>
                             <div class="flex justify-between pt-2 border-t border-gold/20 text-base font-semibold">
                                 <span>Total</span>
-                                <span>${{ total }}</span>
+                                <span>${{ payTotal }}</span>
                             </div>
+                            <p v-if="feesCents > 0" class="text-xs text-black/50">
+                                {{ chosen?.label }} charges {{ money(feesCents) }} to take this payment. It's added by them, not by us.
+                            </p>
+                            <p v-if="taxIncludedCents > 0" class="text-xs text-black/50">
+                                Price includes {{ tax.label }} at {{ pct(tax.rate) }}% · {{ money(taxIncludedCents) }}
+                            </p>
                         </div>
 
                         <!-- Pay sits under the total it charges, and rides the sticky panel. -->

@@ -66,6 +66,10 @@ return [
         'region'           => env('VELOCITY_REGION', 'ZW'),
         // Every charge is one sales-order line with this item code. If Velocity
         // insists the code exists in its inventory, create it there once.
+        // What Velocity adds to the payer's bill (live: 2.5%). Their own `tax`
+        // field returned 0.00, so nothing is added for tax until told otherwise.
+        'charge_percent'     => (float) env('VELOCITY_CHARGE_PERCENT', 2.5),
+        'charge_tax_percent' => (float) env('VELOCITY_CHARGE_TAX_PERCENT', 0),
         'item_code'        => env('VELOCITY_ITEM_CODE', 'BLESSLUXE-ORDER'),
     ],
 ];

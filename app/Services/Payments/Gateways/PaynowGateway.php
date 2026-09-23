@@ -26,6 +26,9 @@ class PaynowGateway implements Gateway
     public function isConfigured(): bool { return Paynow::configured(); }
     public function needs(?string $method): array { return []; }
 
+    /** Paynow's fee comes out of what they settle to us — the shopper pays the order total. */
+    public function surcharge(?string $method): ?array { return null; }
+
     public function initiate(PaymentIntent $intent): InitiateResult
     {
         $init = Paynow::fromConfig()->initiateTransaction([

@@ -27,7 +27,7 @@ export default {
             this.saving = true;
             try {
                 const gateways = {}; for (const g of this.gatewayList) gateways[g.id] = { enabled: g.enabled };
-                this.apply(await api.put('/api/admin/payments', { gateways, routes: this.settings.routes }));
+                this.apply(await api.put('/api/admin/payments', { gateways, routes: this.settings.routes, tax: this.settings.tax }));
                 toast('Payment settings saved');
             } catch (e) { toastError(e); await this.load(); }
             finally { this.saving = false; }
@@ -73,6 +73,34 @@ export default {
                     <span class="text-xs text-zinc-500">{{ g.mode === 'hosted' ? 'Hosted page — the customer chooses the method there' : 'Direct — we take the method and phone number' }}</span>
                     <span class="text-xs text-zinc-500 ml-auto">Takes: {{ g.methods.map((m) => methods.find((x) => x.id === m)?.label || m).join(', ') }}</span>
                     <p v-if="!g.configured" class="w-full text-xs text-zinc-500">Add its keys to the environment (see <code>.env.example</code>) and it can be switched on.</p>
+                </div>
+            </section>
+
+            <!-- Tax shown to customers -->
+            <section class="bg-white border border-zinc-200 mb-6">
+                <h2 class="px-4 py-3 border-b border-zinc-200 text-xs tracking-widest uppercase text-zinc-500">Tax</h2>
+                <div class="p-4 space-y-3">
+                    <label class="flex items-center gap-3">
+                        <input type="checkbox" v-model="settings.tax.enabled" class="accent-gold w-4 h-4" />
+                        <span class="text-sm font-medium">Tell customers how much {{ settings.tax.label }} is inside the price</span>
+                    </label>
+                    <div class="flex flex-wrap items-end gap-4">
+                        <label class="text-xs text-zinc-500">
+                            Rate
+                            <span class="flex items-center gap-1 mt-1">
+                                <input type="number" step="0.1" min="0" max="100" v-model.number="settings.tax.rate" class="border border-zinc-300 px-3 py-2 w-24 text-sm text-zinc-900" />
+                                <span class="text-sm text-zinc-900">%</span>
+                            </span>
+                        </label>
+                        <label class="text-xs text-zinc-500">
+                            Called
+                            <input v-model="settings.tax.label" maxlength="24" class="block border border-zinc-300 px-3 py-2 w-32 text-sm text-zinc-900 mt-1" />
+                        </label>
+                    </div>
+                    <p class="text-xs text-zinc-500 max-w-3xl">
+                        Zimbabwe requires prices quoted to the public to already include VAT, so this only <strong>discloses</strong> the tax inside a price — it never adds to what a customer pays.
+                        The standard rate is 15.5% from 1 January 2026 (Finance Act 2025). Only switch it on if BLESSLUXE is VAT-registered, which is required once turnover passes US$25,000 in any 12 months.
+                    </p>
                 </div>
             </section>
 

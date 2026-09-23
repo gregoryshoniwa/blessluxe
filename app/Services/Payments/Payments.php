@@ -50,6 +50,56 @@ class Payments
     /**
      * @return array{gateways: array<string,array>, routes: array<string,?string>}
      */
+    /**
+     * Price of paying, quoted against an amount. Gateway charges are added to
+     * what the customer pays; they are NOT revenue and never touch the order
+     * total — we still send the goods amount to the gateway.
+     *
+     * @return array{lines:array<int,array{label:string,amount:int}>,fees:int,total:int}
+     */
+    public static function quote(int $amountCents, ?array $rule): array
+    {
+        $lines = [];
+        if ($rule && ($rule['percent'] ?? 0) > 0) {
+            $charge = (int) round($amountCents * $rule['percent'] / 100);
+            if ($charge > 0) {
+                $lines[] = ['label' => sprintf('%s (%s%%)', $rule['label'], rtrim(rtrim(number_format($rule['percent'], 2, '.', ''), '0'), '.')), 'amount' => $charge];
+                $taxPct = (float) ($rule['tax_percent'] ?? 0);
+                if ($taxPct > 0) {
+                    $tax = (int) round($charge * $taxPct / 100);
+                    if ($tax > 0) $lines[] = ['label' => sprintf('%s (%s%%)', $rule['tax_label'] ?? 'Tax', rtrim(rtrim(number_format($taxPct, 2, '.', ''), '0'), '.')), 'amount' => $tax];
+                }
+            }
+        }
+        $fees = array_sum(array_column($lines, 'amount'));
+
+        return ['lines' => $lines, 'fees' => $fees, 'total' => $amountCents + $fees];
+    }
+
+    /**
+     * VAT as Zimbabwe requires it: prices quoted to the public are already
+     * tax-inclusive, so this is a DISCLOSURE of the tax inside the total, never
+     * an amount added to it. Off until staff confirm we're registered.
+     *
+     * @return array{enabled:bool,rate:float,label:string}
+     */
+    public static function taxSettings(): array
+    {
+        $raw = json_decode((string) DB::table('settings')->where('key', self::KEY_TAX)->value('value'), true);
+        if (! is_array($raw)) {
+            $raw = ['enabled' => false, 'rate' => 15.5, 'label' => 'VAT'];
+            DB::table('settings')->updateOrInsert(['key' => self::KEY_TAX], ['value' => json_encode($raw), 'updated_at' => now()]);
+        }
+
+        return [
+            'enabled' => (bool) ($raw['enabled'] ?? false),
+            'rate'    => (float) ($raw['rate'] ?? 15.5),
+            'label'   => (string) ($raw['label'] ?? 'VAT'),
+        ];
+    }
+
+    public const KEY_TAX = 'payments.tax';
+
     public static function settings(): array
     {
         $rows = DB::table('settings')->whereIn('key', [self::KEY_ROUTES, self::KEY_GATEWAYS])->pluck('value', 'key')->all();
@@ -63,7 +113,7 @@ class Payments
             DB::table('settings')->updateOrInsert(['key' => self::KEY_ROUTES], ['value' => json_encode($routes), 'updated_at' => now()]);
         }
 
-        $out = ['gateways' => [], 'routes' => []];
+        $out = ['gateways' => [], 'routes' => [], 'tax' => self::taxSettings()];
         foreach (self::gateways() as $id => $g) {
             $out['gateways'][$id] = [
                 'id' => $id, 'label' => $g->label(), 'mode' => $g->mode(), 'methods' => $g->methods(),
@@ -121,6 +171,17 @@ class Payments
             $routes[$m] = $gid;
         }
 
+        if (array_key_exists('tax', $patch)) {
+            $tax = (array) $patch['tax'];
+            $rate = (float) ($tax['rate'] ?? $current['tax']['rate']);
+            if ($rate < 0 || $rate > 100) return 'A tax rate has to be between 0 and 100.';
+            DB::table('settings')->updateOrInsert(['key' => self::KEY_TAX], ['value' => json_encode([
+                'enabled' => (bool) ($tax['enabled'] ?? $current['tax']['enabled']),
+                'rate'    => $rate,
+                'label'   => trim((string) ($tax['label'] ?? $current['tax']['label'])) ?: 'VAT',
+            ]), 'updated_at' => now()]);
+        }
+
         DB::table('settings')->updateOrInsert(['key' => self::KEY_GATEWAYS], ['value' => json_encode($gateways), 'updated_at' => now()]);
         DB::table('settings')->updateOrInsert(['key' => self::KEY_ROUTES], ['value' => json_encode($routes), 'updated_at' => now()]);
 
@@ -153,6 +214,7 @@ class Payments
                     'id' => $gid, 'gateway' => $gid, 'method' => null, 'label' => $g->label(),
                     'hint' => implode(', ', array_map(fn ($m) => Method::label($m), $methods)) . " — you choose on {$g->label()}'s secure page",
                     'methods' => $methods, 'needs' => $g->needs(null), 'icon' => 'shield',
+                    'surcharge' => $g->surcharge(null),
                 ];
             } else {
                 foreach ($methods as $m) {
@@ -160,6 +222,7 @@ class Payments
                         'id' => "{$gid}:{$m}", 'gateway' => $gid, 'method' => $m, 'label' => Method::label($m),
                         'hint' => Method::ALL[$m]['hint'] . " · via {$g->label()}",
                         'methods' => [$m], 'needs' => $g->needs($m), 'icon' => Method::ALL[$m]['icon'],
+                        'surcharge' => $g->surcharge($m),
                     ];
                 }
             }
@@ -200,7 +263,12 @@ class Payments
             'status'            => 'pending',
             'poll_url'          => $result->pollHandle,
             'provider_reference' => $result->providerReference,
-            'provider_meta'     => array_filter($result->meta + ['instruction' => $result->instruction]) ?: null,
+            'provider_meta'     => array_filter($result->meta + [
+                'instruction' => $result->instruction,
+                // What we told the customer they'd be debited, to check against
+                // the gateway's own figures when the payment settles.
+                'quoted_fees'  => self::quote($intent->amountCents, $gateway->surcharge($intent->method))['fees'] ?: null,
+            ]) ?: null,
             'amount'            => $intent->amountCents,
             'currency_code'     => $intent->currency,
             'email'             => $intent->email,

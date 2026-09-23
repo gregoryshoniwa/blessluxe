@@ -27,6 +27,26 @@ class VelocityAfricaGateway implements Gateway
     /** Every Velocity transaction names the paying phone, cards included. */
     public function needs(?string $method): array { return ['phone']; }
 
+    /**
+     * Velocity bills the payer, not us: we send the order total as `amount` and
+     * they debit that plus their charge (live: $799.00 + $19.98 = $818.98, a
+     * flat 2.5%). Their `tax` field came back 0.00, so tax on the charge is
+     * configured off; set VELOCITY_CHARGE_TAX_PERCENT if that ever changes.
+     */
+    public function surcharge(?string $method): ?array
+    {
+        $c = (array) config('services.velocityafrica');
+        $percent = (float) ($c['charge_percent'] ?? 0);
+        if ($percent <= 0) return null;
+
+        return [
+            'percent'     => $percent,
+            'label'       => 'Gateway charge',
+            'tax_percent' => (float) ($c['charge_tax_percent'] ?? 0),
+            'tax_label'   => 'Tax on charge',
+        ];
+    }
+
     public function initiate(PaymentIntent $intent): InitiateResult
     {
         $client = VelocityAfrica::fromConfig();

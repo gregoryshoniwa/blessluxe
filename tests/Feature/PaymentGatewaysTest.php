@@ -31,7 +31,7 @@ class PaymentGatewaysTest extends TestCase
 
     private function velocityOn(): void
     {
-        config(['services.velocityafrica' => ['api_key' => 'vk', 'base_url' => 'https://api.velocityafrica.net', 'merchant_phone' => '+263772364284', 'merchant_account' => '263772364284', 'region' => 'ZW', 'item_code' => 'BLESSLUXE-ORDER']]);
+        config(['services.velocityafrica' => ['api_key' => 'vk', 'base_url' => 'https://api.velocityafrica.net', 'merchant_phone' => '+263772364284', 'merchant_account' => '263772364284', 'region' => 'ZW', 'item_code' => 'BLESSLUXE-ORDER', 'charge_percent' => 2.5, 'charge_tax_percent' => 0]]);
     }
 
     private function admin(): static
@@ -131,6 +131,55 @@ class PaymentGatewaysTest extends TestCase
         // Members are not staff.
         Auth::forgetGuards();
         $this->getJson('/api/admin/payments')->assertUnauthorized();
+    }
+
+    // ─── What paying costs on top ──────────────────────────────────────────
+
+    #[Test]
+    public function velocity_quotes_the_charge_it_adds_and_paynow_adds_nothing(): void
+    {
+        $this->paynowOn(); $this->velocityOn();
+
+        // The live figures: $799.00 + 2.5% = $19.98 charge, $818.98 debited.
+        $q = Payments::quote(79900, Payments::gateway('velocityafrica')->surcharge('ecocash'));
+        $this->assertSame([['label' => 'Gateway charge (2.5%)', 'amount' => 1998]], $q['lines']);
+        $this->assertSame([1998, 81898], [$q['fees'], $q['total']]);
+
+        // Their `tax` field came back 0.00, so nothing is added for it until configured.
+        config(['services.velocityafrica.charge_tax_percent' => 15.5]);
+        $q = Payments::quote(79900, Payments::gateway('velocityafrica')->surcharge('ecocash'));
+        $this->assertSame(['Gateway charge (2.5%)', 'Tax on charge (15.5%)'], array_column($q['lines'], 'label'));
+        $this->assertSame([1998, 310], array_column($q['lines'], 'amount'));
+
+        // Paynow's fee comes out of the settlement: the shopper pays the order total.
+        $this->assertNull(Payments::gateway('paynow')->surcharge('ecocash'));
+        $this->assertSame(['lines' => [], 'fees' => 0, 'total' => 79900], Payments::quote(79900, null));
+
+        // The rule rides on each checkout option so the page can show it.
+        $this->admin()->putJson('/api/admin/payments', [
+            'gateways' => ['velocityafrica' => ['enabled' => true]],
+            'routes'   => ['ecocash' => 'velocityafrica'],
+        ])->assertOk();
+        $eco = collect($this->getJson('/api/store/payments/options')->json('options'))->firstWhere('id', 'velocityafrica:ecocash');
+        $this->assertSame(2.5, $eco['surcharge']['percent']);
+    }
+
+    #[Test]
+    public function tax_is_a_disclosure_of_what_is_already_in_the_price_never_an_addition(): void
+    {
+        $this->paynowOn();
+
+        // Off until staff say we're registered.
+        $this->assertSame(['enabled' => false, 'rate' => 15.5, 'label' => 'VAT'], Payments::taxSettings());
+        $this->assertSame(['enabled' => false, 'rate' => 15.5, 'label' => 'VAT'], $this->getJson('/api/store/payments/options')->json('tax'));
+
+        $this->admin()->putJson('/api/admin/payments', ['tax' => ['enabled' => true, 'rate' => 15.5, 'label' => 'VAT']])->assertOk()
+            ->assertJsonPath('settings.tax.enabled', true);
+        $this->admin()->putJson('/api/admin/payments', ['tax' => ['rate' => 120]])->assertStatus(422);
+
+        // Switching it on must not move a single cent of what is charged.
+        $before = Payments::quote(79900, null);
+        $this->assertSame(79900, $before['total']);
     }
 
     // ─── The old Paynow URLs ───────────────────────────────────────────────

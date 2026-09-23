@@ -34,6 +34,10 @@ class AdminPaymentsController extends Controller
             'gateways.*.enabled' => ['boolean'],
             'routes'             => ['sometimes', 'array'],
             'routes.*'           => ['nullable', 'string', 'max:40'],
+            'tax'                => ['sometimes', 'array'],
+            'tax.enabled'        => ['boolean'],
+            'tax.rate'           => ['numeric', 'min:0', 'max:100'],
+            'tax.label'          => ['nullable', 'string', 'max:24'],
         ]);
 
         $result = Payments::setConfig($data);

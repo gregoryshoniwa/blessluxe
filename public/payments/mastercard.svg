@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 320" role="img" aria-label="Mastercard">
+  <title>Mastercard</title>
+  <!-- The symbol is two equal circles overlapping; the lens is the left circle clipped by the right. -->
+  <defs><clipPath id="mc-right"><circle cx="352" cy="160" r="160"/></clipPath></defs>
+  <circle cx="160" cy="160" r="160" fill="#EB001B"/>
+  <circle cx="352" cy="160" r="160" fill="#F79E1B"/>
+  <circle cx="160" cy="160" r="160" fill="#FF5F00" clip-path="url(#mc-right)"/>
+</svg>

@@ -37,7 +37,7 @@ class PaymentController extends Controller
     /** GET /api/store/payments/options — what this shopper can pay with, right now. */
     public function options()
     {
-        return ['options' => Payments::checkoutOptions()];
+        return ['options' => Payments::checkoutOptions(), 'tax' => Payments::taxSettings()];
     }
 
     /**

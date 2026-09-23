@@ -45,6 +45,17 @@ interface Gateway
     /** @return string[] What checkout must collect first for this method: [] or ['phone']. */
     public function needs(?string $method): array;
 
+    /**
+     * What this gateway ADDS to the customer's bill for paying this way — a
+     * rule, not an amount, so it can be quoted against any total:
+     * ['percent' => 2.5, 'label' => 'Gateway charge', 'tax_percent' => 0.0,
+     * 'tax_label' => 'Tax on charge'], or null when the shopper pays exactly
+     * the order total (a gateway that takes its cut out of the settlement).
+     *
+     * @return array{percent:float,label:string,tax_percent:float,tax_label:string}|null
+     */
+    public function surcharge(?string $method): ?array;
+
     public function initiate(PaymentIntent $intent): InitiateResult;
 
     /** Ask the provider for the current state. Null when it can't be reached — leave the session as it is. */

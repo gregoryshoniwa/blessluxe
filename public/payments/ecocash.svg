@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" role="img" aria-label="EcoCash">
+  <title>EcoCash</title>
+  <!-- Wordmark set in the system's bold sans, in EcoCash's own blue and red
+       (sampled from their mark). Swap in an official file if they issue one. -->
+  <text x="100" y="37" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="40" font-weight="700" letter-spacing="-1">
+    <tspan fill="#075CA8">Eco</tspan><tspan fill="#EB2528">Cash</tspan>
+  </text>
+</svg>

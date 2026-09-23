@@ -29,7 +29,7 @@ class VelocityAfricaGatewayTest extends TestCase
         parent::setUp();
         config([
             'services.paynow' => [],
-            'services.velocityafrica' => ['api_key' => 'vk_test', 'base_url' => 'https://api.velocityafrica.net', 'merchant_phone' => '0772364284', 'merchant_account' => '', 'region' => 'ZW', 'item_code' => 'BLESSLUXE-ORDER'],
+            'services.velocityafrica' => ['api_key' => 'vk_test', 'base_url' => 'https://api.velocityafrica.net', 'merchant_phone' => '0772364284', 'merchant_account' => '', 'region' => 'ZW', 'item_code' => 'BLESSLUXE-ORDER', 'charge_percent' => 2.5, 'charge_tax_percent' => 0],
             'app.url' => 'https://shop.test',
         ]);
         DB::table('customers')->insert(['id' => 'cust_1', 'email' => 'rudo@example.test', 'password' => bcrypt('x'), 'first_name' => 'Rudo', 'last_name' => 'Moyo', 'loyalty_points' => 500, 'created_at' => now(), 'updated_at' => now()]);
