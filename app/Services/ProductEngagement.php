@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
  *   - at most DAILY_PAID_ACTIONS paid actions a day per customer. Past that the
  *     action still happens, it just pays 0 — never a refusal, which would read
  *     as a bug to someone who only wanted to say something.
- *   - a comment has to be worth 20 Bees: MIN_LENGTH characters, and only the
+ *   - a comment has to be worth its Bees: MIN_LENGTH characters, and only the
  *     first comment on a product pays.
  *   - nothing pays while Bees are switched off.
  *
@@ -26,9 +26,9 @@ use Illuminate\Support\Str;
  */
 class ProductEngagement
 {
-    public const RATE_BEES    = 10;
-    public const LIKE_BEES    = 10;
-    public const COMMENT_BEES = 20;
+    public const RATE_BEES    = 1;
+    public const LIKE_BEES    = 1;
+    public const COMMENT_BEES = 2;
 
     /** Per customer per day, across every product and action. */
     public const DAILY_PAID_ACTIONS = 5;

@@ -61,10 +61,10 @@ class ProductEngagementTest extends TestCase
         $c = $this->shopper();
         $this->product();
 
-        $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => 5])->assertOk()->assertJsonPath('bees', 10);
-        $this->as($c)->postJson('/api/account/products/dress/like')->assertOk()->assertJsonPath('bees', 10);
-        $this->as($c)->postJson('/api/account/products/dress/comments', ['body' => 'Fits beautifully, wore it to a wedding.'])->assertOk()->assertJsonPath('bees', 20);
-        $this->assertSame(40, $this->bees('cust_1'));
+        $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => 5])->assertOk()->assertJsonPath('bees', 1);
+        $this->as($c)->postJson('/api/account/products/dress/like')->assertOk()->assertJsonPath('bees', 1);
+        $this->as($c)->postJson('/api/account/products/dress/comments', ['body' => 'Fits beautifully, wore it to a wedding.'])->assertOk()->assertJsonPath('bees', 2);
+        $this->assertSame(4, $this->bees('cust_1'));
 
         // Changing your mind about the stars pays nothing more.
         $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => 3])->assertOk()->assertJsonPath('bees', 0);
@@ -78,7 +78,7 @@ class ProductEngagementTest extends TestCase
         $this->as($c)->deleteJson('/api/account/product-comments/' . $id)->assertOk();
         $this->as($c)->postJson('/api/account/products/dress/comments', ['body' => 'Second go at saying something nice.'])->assertOk()->assertJsonPath('bees', 0);
 
-        $this->assertSame(40, $this->bees('cust_1'));
+        $this->assertSame(4, $this->bees('cust_1'));
         $this->assertSame(3, DB::table('product_engagement_rewards')->count());
     }
 
@@ -90,9 +90,9 @@ class ProductEngagementTest extends TestCase
 
         // Five paid actions, one per piece.
         for ($i = 1; $i <= 5; $i++) {
-            $this->as($c)->postJson("/api/account/products/piece-$i/like")->assertOk()->assertJsonPath('bees', 10);
+            $this->as($c)->postJson("/api/account/products/piece-$i/like")->assertOk()->assertJsonPath('bees', 1);
         }
-        $this->assertSame(50, $this->bees('cust_1'));
+        $this->assertSame(5, $this->bees('cust_1'));
 
         // The sixth still counts as a like — it simply earns nothing.
         $res = $this->as($c)->postJson('/api/account/products/piece-6/like')->assertOk();
@@ -100,12 +100,12 @@ class ProductEngagementTest extends TestCase
         $this->assertSame(0, $res->json('remaining_today'));
         $this->assertTrue($res->json('summary.mine.liked'));
         $this->assertSame(1, (int) DB::table('products')->where('id', 'prod_6')->value('likes_count'));
-        $this->assertSame(50, $this->bees('cust_1'));
+        $this->assertSame(5, $this->bees('cust_1'));
 
         // Tomorrow the allowance is back.
         $this->travel(1)->day();
-        $this->as($c)->postJson('/api/account/products/piece-7/like')->assertOk()->assertJsonPath('bees', 10);
-        $this->assertSame(60, $this->bees('cust_1'));
+        $this->as($c)->postJson('/api/account/products/piece-7/like')->assertOk()->assertJsonPath('bees', 1);
+        $this->assertSame(6, $this->bees('cust_1'));
     }
 
     #[Test]
