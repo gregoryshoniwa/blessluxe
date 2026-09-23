@@ -58,15 +58,24 @@ export default {
             <Heart :class="['w-4 h-4 transition-colors', liked ? 'fill-gold text-gold' : 'text-black/55 hover:text-gold']" />
         </button>
         <div class="relative aspect-[3/4] bg-cream-dark overflow-hidden group-hover:opacity-90 transition-opacity">
-            <!-- How soon it can be here: the other half of the price decision. -->
+            <!-- How soon it can be here: the other half of the price decision.
+                 A small square by default so it never sits on the part of the
+                 photo someone wants to see; the words unfurl on hover, and the
+                 hint carries them either way. -->
             <span
                 v-if="product.sourcing"
-                :class="['absolute top-0 left-0 z-10 inline-flex items-center justify-center gap-1 min-w-[7.25rem] px-2 py-1 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
+                :class="['absolute top-0 left-0 z-10 inline-flex items-center h-7 px-2 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
                          product.sourcing.kind === 'local' ? 'bg-emerald-600/95' : 'bg-black/70 backdrop-blur-sm']"
                 :title="product.sourcing.note"
             >
-                <component :is="product.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-2.5 h-2.5" />
-                {{ product.sourcing.eta }}
+                <component :is="product.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-3 h-3 flex-shrink-0" />
+                <!-- The square comes out of the maths, not a fixed width: 8px
+                     padding + a 12px icon + 0 + 8px = 28px, which is h-7. The
+                     label animates on max-width (display can't be animated),
+                     and box-border clips its padding while it's closed. -->
+                <span class="max-w-0 opacity-0 overflow-hidden whitespace-nowrap pl-1 transition-all duration-300 group-hover:max-w-[8rem] group-hover:opacity-100">
+                    {{ product.sourcing.eta }}
+                </span>
             </span>
 
             <img
