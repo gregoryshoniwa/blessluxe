@@ -134,6 +134,8 @@ public/
 - Staff hide a review from the product editor (`PUT /api/admin/product-comments/{id}`); hiding keeps the row and drops it out of the count, so a wrong call is undoable.
 - Named limiters `product-engage` / `product-tap` / `product-read` — never plain `throttle:N,1`, for the same reason the Hive doesn't.
 
+- **Sourcing is a promise, not a flag.** `Couriers::promise($product->sourcing)` owns the wording once — local is "In Zimbabwe · Ready in a day", import is "Imported · 3–5 days" — and the card's top-left ribbon, the product page and anything else all read it from there. Only IMPORT stock is carried by a courier, which is why `products.sourcing` defaults to `local`.
+
 ### Notifications
 
 - Polymorphic [notifications](database/migrations/2026_01_01_000080_create_notifications.php) table (`recipient_type` = customer|admin). Fires on order paid, refund, affiliate sale, affiliate payout, low stock, return status, admin application. Bells poll every 45–60s.

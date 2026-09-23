@@ -5,11 +5,11 @@ import ProductTryOns from '../components/hive/ProductTryOns.vue';
 import ProductEngagement from '../components/ProductEngagement.vue';
 import { recentlyViewed } from '../recently-viewed.js';
 import { cart } from '../cart-store.js';
-import { Check, ArrowRight } from 'lucide-vue-next';
+import { Check, ArrowRight, Plane, MapPin } from 'lucide-vue-next';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip, ProductTryOns, ProductEngagement, Check, ArrowRight },
+    components: { ProductStrip, ProductTryOns, ProductEngagement, Check, ArrowRight, Plane, MapPin },
     data() {
         return {
             product: null,
@@ -213,6 +213,15 @@ export default {
                             {{ v.title }}
                         </button>
                     </div>
+                </div>
+
+                <!-- Where the piece is now, and what that means for delivery. -->
+                <div v-if="product.sourcing" class="flex items-start gap-2 border border-black/10 px-4 py-3 mb-6">
+                    <component :is="product.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-4 h-4 mt-0.5 flex-shrink-0" :class="product.sourcing.kind === 'local' ? 'text-emerald-600' : 'text-black/55'" />
+                    <p class="text-sm">
+                        <span class="font-medium">{{ product.sourcing.label }} · {{ product.sourcing.eta }}</span>
+                        <span class="block text-xs text-black/55 mt-0.5">{{ product.sourcing.note }}</span>
+                    </p>
                 </div>
 
                 <div class="flex items-center gap-3 mb-8">

@@ -294,6 +294,22 @@ class ProductEngagementTest extends TestCase
         $this->assertSame(0, (int) DB::table('products')->where('id', 'prod_1')->value('purchases_count'));
     }
 
+    #[Test]
+    public function a_card_says_how_soon_a_piece_can_be_here(): void
+    {
+        $this->product();                                   // sourcing defaults to local
+        $this->product('prod_2', 'imported-gown');
+        DB::table('products')->where('id', 'prod_2')->update(['sourcing' => 'import']);
+
+        $cards = collect($this->getJson('/api/store/products')->json('products'))->keyBy('handle');
+
+        $this->assertSame(['local', 'Ready in a day'], [$cards['dress']['sourcing']['kind'], $cards['dress']['sourcing']['eta']]);
+        $this->assertSame(['import', '3–5 days'], [$cards['imported-gown']['sourcing']['kind'], $cards['imported-gown']['sourcing']['eta']]);
+
+        // The product page says the same thing, from the same place.
+        $this->assertSame('Imported', $this->getJson('/api/store/products/imported-gown')->json('product.sourcing.label'));
+    }
+
     // ─── Trending ──────────────────────────────────────────────────────────
 
     #[Test]

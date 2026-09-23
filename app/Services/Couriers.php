@@ -20,6 +20,24 @@ class Couriers
     public const LOCAL  = 'local';
     public const IMPORT = 'import';
 
+    /**
+     * What each kind of stock means to a shopper deciding between two pieces:
+     * local is here now, an import still has to be carried in. The wording lives
+     * here, once, because the card, the product page and the bag all say it.
+     */
+    public const PROMISE = [
+        self::LOCAL  => ['label' => 'In Zimbabwe', 'eta' => 'Ready in a day', 'note' => "Already in the country — delivered same day or the next."],
+        self::IMPORT => ['label' => 'Imported',    'eta' => '3–5 days',       'note' => 'Brought in for you by your chosen courier — about 3 to 5 days.'],
+    ];
+
+    /** @return array{kind:string,label:string,eta:string,note:string} */
+    public static function promise(?string $sourcing): array
+    {
+        $kind = $sourcing === self::IMPORT ? self::IMPORT : self::LOCAL;
+
+        return ['kind' => $kind] + self::PROMISE[$kind];
+    }
+
     /** @return \Illuminate\Support\Collection<int,object> */
     public static function active()
     {

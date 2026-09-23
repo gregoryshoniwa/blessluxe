@@ -1,10 +1,10 @@
 <script>
-import { Heart, Play, Star, ShoppingBag } from 'lucide-vue-next';
+import { Heart, Play, Star, ShoppingBag, Plane, MapPin } from 'lucide-vue-next';
 import { wishlist } from '../wishlist-store.js';
 
 export default {
     name: 'ProductCard',
-    components: { Heart, Play, Star, ShoppingBag },
+    components: { Heart, Play, Star, ShoppingBag, Plane, MapPin },
     props: {
         product: { type: Object, required: true },
     },
@@ -58,6 +58,17 @@ export default {
             <Heart :class="['w-4 h-4 transition-colors', liked ? 'fill-gold text-gold' : 'text-black/55 hover:text-gold']" />
         </button>
         <div class="relative aspect-[3/4] bg-cream-dark overflow-hidden group-hover:opacity-90 transition-opacity">
+            <!-- How soon it can be here: the other half of the price decision. -->
+            <span
+                v-if="product.sourcing"
+                :class="['absolute top-0 left-0 z-10 inline-flex items-center gap-1 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
+                         product.sourcing.kind === 'local' ? 'bg-emerald-600/95' : 'bg-black/70 backdrop-blur-sm']"
+                :title="product.sourcing.note"
+            >
+                <component :is="product.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-2.5 h-2.5" />
+                {{ product.sourcing.eta }}
+            </span>
+
             <img
                 v-if="product.thumbnail"
                 :src="product.thumbnail"

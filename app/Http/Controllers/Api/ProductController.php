@@ -238,6 +238,7 @@ class ProductController extends Controller
             'rating'    => $this->ratingShape($p),
             'likes'     => (int) ($p->likes_count ?? 0),
             'purchases' => (int) ($p->purchases_count ?? 0),
+            'sourcing'  => \App\Services\Couriers::promise($p->sourcing),
         ];
     }
 
@@ -285,6 +286,7 @@ class ProductController extends Controller
             'rating'      => $this->ratingShape($p),
             'likes_count' => (int) ($p->likes_count ?? 0),
             'purchases'   => (int) ($p->purchases_count ?? 0),
+            'sourcing'    => \App\Services\Couriers::promise($p->sourcing),
             'thumbnail'   => $p->thumbnail,
             'images'      => $p->images->map(fn ($i) => ['url' => $i->url, 'rank' => $i->rank]),
             'video'       => $this->videoShape($p),

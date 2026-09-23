@@ -8,7 +8,8 @@ import { Star, Heart, MessageCircle, Trash2, Sparkles, Loader2 } from 'lucide-vu
  * What shoppers say about a piece: stars, hearts, a few words — and the Bees
  * each of those earns, once per piece, for ever.
  *
- * Reading needs no account. Acting sends the signed-out to /login and back.
+ * Reading needs no account. Acting is attempted and a 401 sends them to sign in
+ * and straight back — the server is the only thing that knows for certain.
  * Every number on screen comes from the server's summary after each action, so
  * the count and the balance can't drift from what was actually recorded.
  */
@@ -28,7 +29,7 @@ export default {
             hoverStars: 0,
             loading: true,
             busy: '',              // 'rate' | 'like' | 'comment' | a comment id
-            auth: authStore,
+            auth: authStore.state,
         };
     },
     computed: {
@@ -41,7 +42,8 @@ export default {
         canEarn() {
             return this.rewards.enabled && this.signedIn && this.remainingToday !== 0;
         },
-        commentLeft() { return 15 - this.draft.trim().length; },
+        minLength() { return this.rewards.min_length || 15; },
+        commentLeft() { return this.minLength - this.draft.trim().length; },
     },
     watch: {
         handle: 'load',
@@ -66,40 +68,49 @@ export default {
                 window.dispatchEvent(new CustomEvent('blessluxe:bees-updated', { detail: { balance: d.balance } }));
             }
         },
-        /** Anything that writes needs an account; come back here afterwards. */
-        needAccount() {
-            if (this.signedIn) return false;
-            this.$router.push({ path: '/login', query: { redirect: this.$route.fullPath } });
+        /**
+         * The SERVER decides whether we're signed in, not this page. Checking a
+         * local flag first raced the auth store's own fetch and bounced people
+         * who were perfectly signed in — and it can't know a session has just
+         * expired. So we try, and only a 401 sends them to sign in and back.
+         */
+        toLogin() {
+            this.$router.push({ path: '/account/login', query: { next: this.$route.fullPath } });
+        },
+        /** True when the failure was "you're not signed in", which we handle rather than shout about. */
+        handledAuth(e) {
+            if (e?.status !== 401) return false;
+            this.toLogin();
 
             return true;
         },
         async rate(n) {
-            if (this.needAccount() || this.busy) return;
+            if (this.busy) return;
             this.busy = 'rate';
             try {
                 this.apply(await api.post(`/api/account/products/${encodeURIComponent(this.handle)}/rating`, { stars: n }));
-            } catch (e) { toast(e.payload?.error || 'Could not save that rating.', { tone: 'error' }); }
+            } catch (e) { if (!this.handledAuth(e)) toast(e.payload?.error || 'Could not save that rating.', { tone: 'error' }); }
             finally { this.busy = ''; }
         },
         async like() {
-            if (this.needAccount() || this.busy) return;
+            if (this.busy) return;
             this.busy = 'like';
             try {
                 this.apply(await api.post(`/api/account/products/${encodeURIComponent(this.handle)}/like`));
-            } catch (e) { toast(e.payload?.error || 'Could not save that.', { tone: 'error' }); }
+            } catch (e) { if (!this.handledAuth(e)) toast(e.payload?.error || 'Could not save that.', { tone: 'error' }); }
             finally { this.busy = ''; }
         },
         async send() {
-            if (this.needAccount() || this.busy) return;
+            if (this.busy) return;
             const body = this.draft.trim();
-            if (body.length < 15) return;
+            if (body.length < this.minLength) return;
             this.busy = 'comment';
             try {
                 const d = await api.post(`/api/account/products/${encodeURIComponent(this.handle)}/comments`, { body });
                 this.apply(d);
                 if (d.comment) this.comments.unshift(d.comment);
                 this.draft = '';
-            } catch (e) { toast(e.payload?.error || 'Could not post that.', { tone: 'error' }); }
+            } catch (e) { if (!this.handledAuth(e)) toast(e.payload?.error || 'Could not post that.', { tone: 'error' }); }
             finally { this.busy = ''; }
         },
         async remove(c) {
@@ -206,7 +217,7 @@ export default {
                 </p>
                 <button
                     @click="send"
-                    :disabled="draft.trim().length < 15 || busy === 'comment'"
+                    :disabled="draft.trim().length < minLength || busy === 'comment'"
                     class="inline-flex items-center gap-2 bg-gold text-white px-5 py-2.5 text-[10px] font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-40"
                 >
                     <Loader2 v-if="busy === 'comment'" class="w-3.5 h-3.5 animate-spin" />
@@ -217,7 +228,7 @@ export default {
             <p v-if="rewards.enabled && signedIn && remainingToday === 0" class="text-xs text-black/45 mt-3">
                 That's today's Bees earned — say what you like, it just won't add more until tomorrow.
             </p>
-            <p v-else-if="rewards.enabled && !signedIn" class="flex items-center gap-1.5 text-xs text-black/50 mt-3">
+            <p v-else-if="rewards.enabled && auth.loaded && !signedIn" class="flex items-center gap-1.5 text-xs text-black/50 mt-3">
                 <Sparkles class="w-3.5 h-3.5 text-gold" />
                 Sign in to earn Bees for rating and reviewing.
             </p>
