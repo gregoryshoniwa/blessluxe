@@ -134,6 +134,31 @@ class VelocityAfricaGatewayTest extends TestCase
         Http::assertNotSent(fn (ClientRequest $r) => str_contains($r->url(), 'update-workflow'));
     }
 
+    #[Test]
+    public function the_charge_velocity_adds_is_shown_but_never_added_to_what_we_send_it(): void
+    {
+        $this->fakeVelocity(['SUCCESS']);
+
+        // The cart is $90.00. Velocity bills the payer $90.00 + 2.5% = $92.25,
+        // so the shopper is told $92.25 — but if we ALSO sent $92.25 they would
+        // charge 2.5% of that and take $94.56. Everything we send stays $90.00.
+        $res = $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'velocityafrica:ecocash', 'phone' => '0771234567'])->assertOk();
+
+        Http::assertSent(fn (ClientRequest $r) => str_ends_with($r->url(), '/sales-orders')
+            && count($r['items']) === 1 && $r['items'][0]['amount'] == 90.0 && $r['items'][0]['unitPrice'] == 90.0
+            && $r['charges'] === []);                                      // their 'charges' collection adds to the order total — we send none
+        Http::assertSent(fn (ClientRequest $r) => str_ends_with($r->url(), '/transactions') && $r['amount'] == 90.0);
+
+        $s = PaymentSession::where('reference', $res->json('reference'))->first();
+        $this->assertSame(9000, (int) $s->amount);                          // what we ask for
+        $this->assertSame(225, $s->provider_meta['quoted_fees']);           // what we said they'd add, kept only as a note
+
+        // And the order records the goods, not the cost of paying for them.
+        $this->getJson('/api/store/payments/status/' . $s->reference)->assertJsonPath('session.status', 'paid');
+        $order = DB::table('orders')->where('id', $s->fresh()->order_id)->first();
+        $this->assertSame([9000, 9000], [(int) $order->total, (int) $order->subtotal]);
+    }
+
     /** Seen live: EcoCash rejects the push, and only the transaction's own `status` says so — pollStatus/paymentStatus stay PENDING for ever. */
     private const REJECTED_PUSH = ['status' => 'FAILED', 'paymentStatus' => 'PENDING', 'pollStatus' => 'PENDING', 'responseCode' => '01', 'errorMessage' => 'Transaction failed', 'pollAttempts' => 36];
 
