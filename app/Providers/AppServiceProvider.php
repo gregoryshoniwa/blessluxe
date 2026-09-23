@@ -34,7 +34,11 @@ class AppServiceProvider extends ServiceProvider
          * on the default guard). Ten hearts would then use up the allowance for
          * posting a look. Named limiters with the action in the key fix that.
          */
-        foreach (['hive-post' => 12, 'hive-talk' => 40, 'hive-tap' => 180, 'hive-read' => 180] as $name => $perMinute) {
+        foreach ([
+            'hive-post' => 12, 'hive-talk' => 40, 'hive-tap' => 180, 'hive-read' => 180,
+            // Product ratings, hearts and comments — same reasoning, and these pay Bees.
+            'product-engage' => 20, 'product-tap' => 120, 'product-read' => 180,
+        ] as $name => $perMinute) {
             \Illuminate\Support\Facades\RateLimiter::for($name, fn (\Illuminate\Http\Request $request) => \Illuminate\Cache\RateLimiting\Limit::perMinute($perMinute)
                 ->by($name . '|' . (Auth::guard('customer')->id() ?: $request->ip())));
         }

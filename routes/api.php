@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\CatalogueController;
 use App\Http\Controllers\Api\HeadingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ProductEngagementController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -76,7 +77,10 @@ Route::prefix('store')->group(function () {
     Route::middleware('web')->group(function () {
         Route::get ('/products',                  [ProductController::class, 'index']);
         Route::post('/products/batch',            [ProductController::class, 'batch']);
+        Route::get ('/products/trending',         [ProductEngagementController::class, 'trending']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
+        // Reading what shoppers said needs no account — a rating nobody can see is worth nothing.
+        Route::get ('/products/{handle}/engagement', [ProductEngagementController::class, 'show'])->middleware('throttle:product-read');
         Route::get ('/products/{handle}',         [ProductController::class, 'show']);
     });
 
@@ -342,6 +346,13 @@ Route::middleware('web')->prefix('account')->group(function () {
     Route::delete('/logos/{id}', [LogoController::class, 'destroy']);
 
     // Show Room "My Products" (digitise the customer's own merch; same cap).
+    // Saying something about a piece. Named limiters per action: a plain
+    // throttle shares ONE counter per visitor, so hearts would use up comments.
+    Route::post  ('/products/{handle}/rating',   [ProductEngagementController::class, 'rate'])->middleware('throttle:product-engage');
+    Route::post  ('/products/{handle}/like',     [ProductEngagementController::class, 'like'])->middleware('throttle:product-tap');
+    Route::post  ('/products/{handle}/comments', [ProductEngagementController::class, 'comment'])->middleware('throttle:product-engage');
+    Route::delete('/product-comments/{id}',      [ProductEngagementController::class, 'destroy'])->middleware('throttle:product-engage');
+
     Route::get   ('/my-products',      [CustomerProductController::class, 'index']);
     Route::post  ('/my-products',      [CustomerProductController::class, 'store'])->middleware('throttle:30,1440');
     Route::put   ('/my-products/{id}', [CustomerProductController::class, 'update'])->middleware('throttle:30,1440');
@@ -396,6 +407,8 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/products',                                 [AdminProductController::class, 'store']);
         Route::get   ('/products/{id}',                            [AdminProductController::class, 'show']);
         Route::put   ('/products/{id}',                            [AdminProductController::class, 'update']);
+    Route::get ('/products/{id}/comments',   [AdminProductController::class, 'comments']);
+    Route::put ('/product-comments/{id}',    [AdminProductController::class, 'setCommentHidden']);
         Route::delete('/products/{id}',                            [AdminProductController::class, 'destroy']);
         Route::post  ('/products/{id}/variants',                   [AdminProductController::class, 'storeVariant']);
         Route::put   ('/products/{id}/variants/{vid}',             [AdminProductController::class, 'updateVariant']);

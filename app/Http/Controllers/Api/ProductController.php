@@ -92,13 +92,25 @@ class ProductController extends Controller
             'ids'   => ['required', 'array', 'min:1', 'max:60'],
             'ids.*' => ['string'],
         ]);
+        return $this->byIds($data['ids'], $request);
+    }
+
+    /**
+     * Published products in the order the ids were given, priced and scoped for
+     * whoever's shop this request is browsing. Shared by /products/batch and the
+     * trending strip so neither can drift from the shop's rules.
+     */
+    public function byIds(array $ids, ?Request $request = null): array
+    {
+        $request ??= request();
+
         // A curated affiliate only sells their own line, here as everywhere else.
         $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
 
         $byId = Product::query()
             ->where('status', 'published')
             ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
-            ->whereIn('id', $data['ids'])
+            ->whereIn('id', $ids)
             ->with([
                 'variants' => fn ($q) => $q->orderBy('created_at')->limit(1),
                 'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
@@ -108,7 +120,7 @@ class ProductController extends Controller
             ->get()
             ->keyBy('id');
 
-        $products = collect($data['ids'])
+        $products = collect($ids)
             ->map(function ($id) use ($byId) {
                 $p = $byId->get($id);
                 if (! $p) return null;
@@ -223,7 +235,19 @@ class ProductController extends Controller
             'price'     => $price,
             'price_label' => $price !== null ? '$' . number_format($price / 100, 2) : null,
             'video'     => $this->videoShape($p),
+            'rating'    => $this->ratingShape($p),
         ];
+    }
+
+    /** The verdict in one line, from the denormalised counters — never an aggregate. */
+    private function ratingShape(Product $p): ?array
+    {
+        $count = (int) ($p->rating_count ?? 0);
+        if ($count < 1) return null;
+
+        $avg = round(((int) $p->rating_sum) / $count, 1);
+
+        return ['average' => $avg, 'average_label' => number_format($avg, 1), 'count' => $count];
     }
 
     /**
@@ -256,6 +280,8 @@ class ProductController extends Controller
             'title'       => $p->title,
             'subtitle'    => $p->subtitle,
             'description' => $p->description,
+            'rating'      => $this->ratingShape($p),
+            'likes_count' => (int) ($p->likes_count ?? 0),
             'thumbnail'   => $p->thumbnail,
             'images'      => $p->images->map(fn ($i) => ['url' => $i->url, 'rank' => $i->rank]),
             'video'       => $this->videoShape($p),

@@ -121,6 +121,18 @@ public/
 - **The socket is optional and the provider is an env choice** (`BROADCAST_CONNECTION` + `VITE_REALTIME_DRIVER` = `reverb` | `pusher` | `none`; see the block in `.env.example`). Polling alone carries everything except typing/online/calls, at ~4 indexed queries per quiet poll. The zero-fee production setup is a free Pusher-protocol tier (100–200 concurrent connections) with overflow falling back to polling: [realtime.js](resources/js/lib/realtime.js) exposes `onRealtimeStatus()`, and a dropped or refused socket flips the conversation back to fast polling and hides the call buttons.
 - **Scaling path:** Laravel Cloud managed WebSockets (size the cluster to peak *open conversations*, not users). Self-hosted: one node tops out near 1,000 connections on `stream_select` — install `ext-uv`, raise `ulimit -n`/`minfds`; beyond one node set `REVERB_SCALING_ENABLED=true` with a shared Redis. Group calls/live video need an SFU (LiveKit) — mesh WebRTC stops at ~4 people.
 
+### Ratings, hearts and reviews on a product
+
+[ProductEngagement](app/Services/ProductEngagement.php) + [ProductEngagementController](app/Http/Controllers/Api/ProductEngagementController.php). Reading is public (`GET /api/store/products/{handle}/engagement`); rating, hearting and reviewing need a customer session, which `/api/account` routes check **themselves** (that group only has `web`).
+
+- **These pay Bees, so they are built to be un-farmable.** `product_engagement_rewards` is the PROMISE that a payment happened — one row per (customer, product, action), unique, never deleted. Unheart-and-reheart, re-rate, delete-and-repost all earn nothing, exactly like `hive_tryon_rewards`. On top of that: `DAILY_PAID_ACTIONS` paid actions per customer per day, a review must clear `MIN_LENGTH`, and nothing pays while Bees are off. **Past a cap the action still happens and simply pays 0** — never a refusal, which would read as a bug to someone who only wanted to say something.
+- Rates are `RATE_BEES` 10 · `LIKE_BEES` 10 · `COMMENT_BEES` 20. Bees are money (100 = $1), so treat a change here as a pricing change.
+- **"Bought it" is computed from paid order lines**, never claimed by the writer. A review's `customer_id` is stripped before it leaves the server; only the author is told `mine: true` (it's what draws Delete).
+- Counters (`products.rating_count/rating_sum/likes_count/comments_count`) are recomputed from the rows inside the same transaction, so a grid never aggregates and they can't drift. `ProductController::ratingShape()` puts them on every card and detail payload.
+- **Trending is computed, not stored** (`trendingIds()`): reaction in the last 30 days, a review counting double a heart. `/api/store/products/trending` hands the ids to `ProductController::byIds()` so affiliate scoping and pricing apply exactly as everywhere else; the Home strip renders nothing until something trends.
+- Staff hide a review from the product editor (`PUT /api/admin/product-comments/{id}`); hiding keeps the row and drops it out of the count, so a wrong call is undoable.
+- Named limiters `product-engage` / `product-tap` / `product-read` — never plain `throttle:N,1`, for the same reason the Hive doesn't.
+
 ### Notifications
 
 - Polymorphic [notifications](database/migrations/2026_01_01_000080_create_notifications.php) table (`recipient_type` = customer|admin). Fires on order paid, refund, affiliate sale, affiliate payout, low stock, return status, admin application. Bells poll every 45–60s.

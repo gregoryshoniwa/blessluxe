@@ -403,4 +403,34 @@ class AdminProductController extends Controller
             'embed_url'  => $ytId ? "https://www.youtube-nocookie.com/embed/{$ytId}" : null,
         ];
     }
+
+    /** GET /api/admin/products/{id}/comments — what shoppers said, hidden ones included. */
+    public function comments(string $id)
+    {
+        $rows = \Illuminate\Support\Facades\DB::table('product_comments as c')
+            ->join('customers as cu', 'cu.id', '=', 'c.customer_id')
+            ->where('c.product_id', $id)
+            ->orderByDesc('c.created_at')
+            ->limit(100)
+            ->get(['c.id', 'c.body', 'c.hidden_at', 'c.created_at', 'cu.first_name', 'cu.last_name', 'cu.email']);
+
+        return ['comments' => $rows->map(fn ($c) => [
+            'id'         => $c->id,
+            'body'       => $c->body,
+            'hidden'     => $c->hidden_at !== null,
+            'author'     => trim("{$c->first_name} {$c->last_name}") ?: $c->email,
+            'email'      => $c->email,
+            'created_at' => \Carbon\Carbon::parse($c->created_at)->toIso8601String(),
+        ])->all()];
+    }
+
+    /** PUT /api/admin/product-comments/{id}  { hidden } — the row is kept either way. */
+    public function setCommentHidden(\Illuminate\Http\Request $request, string $id)
+    {
+        $request->validate(['hidden' => ['required', 'boolean']]);
+
+        return \App\Services\ProductEngagement::setHidden($id, $request->boolean('hidden'))
+            ? ['ok' => true]
+            : response()->json(['error' => 'Not found'], 404);
+    }
 }

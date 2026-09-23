@@ -1,10 +1,10 @@
 <script>
-import { Heart, Play } from 'lucide-vue-next';
+import { Heart, Play, Star } from 'lucide-vue-next';
 import { wishlist } from '../wishlist-store.js';
 
 export default {
     name: 'ProductCard',
-    components: { Heart, Play },
+    components: { Heart, Play, Star },
     props: {
         product: { type: Object, required: true },
     },
@@ -98,5 +98,11 @@ export default {
         </p>
         <p v-if="product.subtitle" class="text-[10px] text-black/55 line-clamp-1">{{ product.subtitle }}</p>
         <p class="text-xs text-black mt-0.5">{{ product.price_label || '—' }}</p>
+        <!-- The verdict, only once there is one. -->
+        <p v-if="product.rating" class="flex items-center gap-1 text-[11px] text-black/55 mt-1">
+            <Star class="w-3 h-3 text-gold fill-gold" />
+            <span class="font-medium text-black/75">{{ product.rating.average_label }}</span>
+            <span>({{ product.rating.count }})</span>
+        </p>
     </router-link>
 </template>

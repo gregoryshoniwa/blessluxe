@@ -2,13 +2,14 @@
 import { api } from '../../lib/api.js';
 import ProductStrip from '../components/ProductStrip.vue';
 import ProductTryOns from '../components/hive/ProductTryOns.vue';
+import ProductEngagement from '../components/ProductEngagement.vue';
 import { recentlyViewed } from '../recently-viewed.js';
 import { cart } from '../cart-store.js';
 import { Check, ArrowRight } from 'lucide-vue-next';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip, ProductTryOns, Check, ArrowRight },
+    components: { ProductStrip, ProductTryOns, ProductEngagement, Check, ArrowRight },
     data() {
         return {
             product: null,
@@ -249,6 +250,9 @@ export default {
                         </router-link>
                     </div>
                 </div>
+
+                <!-- What shoppers made of it: stars, hearts, words. -->
+                <ProductEngagement v-if="product" :handle="product.handle" />
             </div>
         </div>
 

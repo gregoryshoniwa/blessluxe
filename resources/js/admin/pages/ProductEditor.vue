@@ -17,6 +17,8 @@ export default {
             catalogues: [],
             form: { title: '', handle: '', subtitle: '', description: '', status: 'draft', sourcing: 'local', default_courier_id: null, catalogue_ids: [] },
             couriers: [],
+            reviews: [],            // what shoppers said, hidden ones included
+            reviewBusy: '',
             // Variant inline state
             newVariant: this.emptyVariant(),
             editingVariantId: null,
@@ -63,6 +65,17 @@ export default {
                 this.aiBusy = false;
             }
         },
+        /** Take a review down, or put it back. The row is kept either way. */
+        async setReviewHidden(r, hidden) {
+            this.reviewBusy = r.id;
+            try {
+                await api.put(`/api/admin/product-comments/${r.id}`, { hidden });
+                r.hidden = hidden;
+                toast(hidden ? 'Review hidden from the shop' : 'Review is showing again');
+            } catch (e) { toast(e.payload?.error || 'Could not change that.', { tone: 'error' }); }
+            finally { this.reviewBusy = ''; }
+        },
+        reviewWhen(iso) { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); },
         async fetchAll() {
             this.loading = true;
             try {
@@ -88,6 +101,9 @@ export default {
                     const c = await api.get('/api/admin/couriers');
                     this.couriers = (c.couriers || []).filter((x) => x.is_active);
                 } catch { this.couriers = []; }
+                try {
+                    this.reviews = (await api.get(`/api/admin/products/${this.id}/comments`)).comments || [];
+                } catch { this.reviews = []; }
             } catch (e) {
                 this.error = e.payload?.error || 'Product not found.';
             } finally {
@@ -455,6 +471,30 @@ export default {
                         </tr>
                     </tbody>
                 </table>
+            </section>
+
+            <!-- What shoppers said. Hiding keeps the row, so a wrong call is undoable. -->
+            <section v-if="reviews.length" class="bg-white border border-zinc-200">
+                <h2 class="px-5 py-3 border-b border-zinc-200 text-xs tracking-widest uppercase text-zinc-500">
+                    Reviews · {{ reviews.length }}
+                </h2>
+                <ul>
+                    <li v-for="r in reviews" :key="r.id" :class="['px-5 py-4 border-b border-zinc-100 last:border-0', reviewBusy === r.id && 'opacity-50']">
+                        <div class="flex flex-wrap items-center gap-2 mb-1">
+                            <span class="text-sm font-medium">{{ r.author }}</span>
+                            <span class="text-xs text-zinc-500">{{ reviewWhen(r.created_at) }}</span>
+                            <span v-if="r.hidden" class="text-[10px] tracking-widest uppercase bg-amber-100 text-amber-700 px-2 py-0.5">Hidden</span>
+                            <button
+                                @click="setReviewHidden(r, !r.hidden)"
+                                :disabled="reviewBusy === r.id"
+                                class="ml-auto text-[10px] tracking-widest uppercase text-zinc-500 hover:text-zinc-900 underline underline-offset-4 min-h-11"
+                            >
+                                {{ r.hidden ? 'Show again' : 'Hide from shop' }}
+                            </button>
+                        </div>
+                        <p class="text-sm text-zinc-700 whitespace-pre-line">{{ r.body }}</p>
+                    </li>
+                </ul>
             </section>
         </div>
     </div>

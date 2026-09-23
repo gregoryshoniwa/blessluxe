@@ -197,6 +197,16 @@ export default {
             </div>
         </section>
 
+        <!-- What people are reacting to lately. Renders nothing until they are. -->
+        <section class="max-w-[1400px] mx-auto px-[5%]">
+            <ProductStrip
+                title="Trending now"
+                script="Loved this month"
+                endpoint="/api/store/products/trending"
+                :limit="8"
+            />
+        </section>
+
         <!-- Recently viewed strip — only renders if there's at least one. -->
         <section v-if="recentlyViewedIds.length" class="max-w-[1400px] mx-auto px-[5%]">
             <ProductStrip
