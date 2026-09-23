@@ -186,6 +186,11 @@ A **series** is a group buy: each buyer claims one size slot, and when every slo
 - **A series wears the piece's reputation, not its own** (`PackController::reputation()`): the product's rating, hearts, sales and sourcing promise. Never start a second scoreboard for a campaign.
 - [ShareButton](resources/js/storefront/components/ShareButton.vue) uses the phone's share sheet where there is one and copies the link otherwise — sharing is how a series fills.
 
+### Footers and endless scrolling
+
+- **The full black footer is the home page's alone**; every other page ends in [FooterSlim](resources/js/storefront/components/FooterSlim.vue), one line of FAQ · Track · Shipping · Returns · Size guide · Contact. Those links exist nowhere else — the header carries none of them — and "what if it doesn't fit?" is asked on a product page, not the home page. Don't delete that line without putting them somewhere.
+- **Auto-loading stops after `AUTO_PAGES`** on the shop grid; after that the button has to be pressed. Endless auto-loading makes the foot of the page unreachable (it moves every time you approach it), which strands exactly those links, and it leaves the back button returning to forty screens of products. A `rootMargin` starts the fetch before the shopper arrives, so the pause is the only thing they notice.
+
 ## Files and uploads
 
 **Never write a file next to the code** (`public_path()`, `->move()`, `->store(…, 'public')`, `Storage::disk('public')`). Laravel Cloud rebuilds the app's disk on every deploy, so those files vanish. Everything goes through [Media](app/Services/Media.php):

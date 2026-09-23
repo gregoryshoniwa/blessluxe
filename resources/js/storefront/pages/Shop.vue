@@ -3,6 +3,12 @@ import ProductCard from '../components/ProductCard.vue';
 import { affiliateStore } from '../affiliate-store.js';
 import { Search, X } from 'lucide-vue-next';
 
+// How many pages scrolling may bring in before the button takes over. A module
+// const, not a component option: Vue only exposes custom options on
+// `this.$options`, so `this.AUTO_PAGES` would be undefined and the comparison
+// would quietly disable auto-loading altogether.
+const AUTO_PAGES = 3;
+
 export default {
     name: 'ShopPage',
     components: { ProductCard, Search, X },
@@ -16,6 +22,8 @@ export default {
             sort: 'newest',
             search: this.$route.query.q || '',
             searchTimer: null,
+            autoLoads: 0,            // pages fetched by scrolling, not by clicking
+            observer: null,
         };
     },
     computed: {
@@ -59,6 +67,7 @@ export default {
     beforeUnmount() {
         window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
         clearTimeout(this.searchTimer);
+        this.observer?.disconnect();
     },
     mounted() {
         affiliateStore.refresh();
@@ -121,6 +130,8 @@ export default {
                 const fresh = data.products || [];
                 this.products = this.page === 1 ? fresh : [...this.products, ...fresh];
                 this.pagination = data.pagination || null;
+                if (this.page === 1) this.autoLoads = 0;   // a new search earns a fresh allowance
+                this.$nextTick(this.watchTail);
             } finally {
                 this.loading = false;
             }
@@ -135,10 +146,30 @@ export default {
         clearFilters() {
             this.$router.push({ path: '/shop' });
         },
-        loadMore() {
-            if (!this.pagination?.has_more) return;
+        loadMore(auto = false) {
+            if (!this.pagination?.has_more || this.loading) return;
+            if (auto) this.autoLoads += 1;
             this.page += 1;
             this.fetchProducts();
+        },
+        /**
+         * Scrolling to the end brings the next page in by itself — but only
+         * AUTO_PAGES times. After that the button has to be pressed.
+         *
+         * Endless auto-loading makes the foot of the page unreachable: every
+         * time you get near it, more arrives and it moves. The links down there
+         * are the returns policy and how to contact us, so they have to be
+         * reachable. Pausing also keeps the back button honest — returning to
+         * a page that loaded forty screens of products is its own problem.
+         */
+        watchTail() {
+            this.observer?.disconnect();
+            const el = this.$refs.tail;
+            if (!el || typeof IntersectionObserver === 'undefined') return;
+            this.observer = new IntersectionObserver((entries) => {
+                if (entries[0]?.isIntersecting && this.autoLoads < AUTO_PAGES) this.loadMore(true);
+            }, { rootMargin: '400px' });                   // start fetching before they arrive
+            this.observer.observe(el);
         },
     },
 };
@@ -242,13 +273,17 @@ export default {
                     <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                         <ProductCard v-for="p in products" :key="p.id" :product="p" />
                     </div>
-                    <div v-if="pagination?.has_more" class="text-center mt-12">
+                    <div v-if="pagination?.has_more" ref="tail" class="text-center mt-12">
                         <button
-                            @click="loadMore"
-                            class="inline-block border border-gold text-gold px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold hover:text-white transition-colors"
+                            @click="loadMore(false)"
+                            :disabled="loading"
+                            class="inline-block border border-gold text-gold px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold hover:text-white transition-colors disabled:opacity-50"
                         >
-                            Load More
+                            {{ loading ? 'Loading…' : 'Load more' }}
                         </button>
+                        <p v-if="pagination.total" class="text-[10px] tracking-widest uppercase text-black/40 mt-3">
+                            {{ products.length }} of {{ pagination.total }}
+                        </p>
                     </div>
                 </div>
             </div>
