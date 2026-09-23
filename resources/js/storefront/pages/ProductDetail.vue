@@ -2,14 +2,15 @@
 import { api } from '../../lib/api.js';
 import ProductStrip from '../components/ProductStrip.vue';
 import ProductTryOns from '../components/hive/ProductTryOns.vue';
-import ProductEngagement from '../components/ProductEngagement.vue';
+import ProductRatingSummary from '../components/ProductRatingSummary.vue';
+import ProductReviews from '../components/ProductReviews.vue';
 import { recentlyViewed } from '../recently-viewed.js';
 import { cart } from '../cart-store.js';
 import { Check, ArrowRight, Plane, MapPin } from 'lucide-vue-next';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip, ProductTryOns, ProductEngagement, Check, ArrowRight, Plane, MapPin },
+    components: { ProductStrip, ProductTryOns, ProductRatingSummary, ProductReviews, Check, ArrowRight, Plane, MapPin },
     data() {
         return {
             product: null,
@@ -215,6 +216,9 @@ export default {
                     </div>
                 </div>
 
+                <!-- The verdict in one line; the reviews themselves are below, full width. -->
+                <ProductRatingSummary v-if="product" :handle="product.handle" :product="product" />
+
                 <!-- Where the piece is now, and what that means for delivery. -->
                 <div v-if="product.sourcing" class="flex items-start gap-2 border border-black/10 px-4 py-3 mb-6">
                     <component :is="product.sourcing.kind === 'local' ? 'MapPin' : 'Plane'" class="w-4 h-4 mt-0.5 flex-shrink-0" :class="product.sourcing.kind === 'local' ? 'text-emerald-600' : 'text-black/55'" />
@@ -260,10 +264,11 @@ export default {
                     </div>
                 </div>
 
-                <!-- What shoppers made of it: stars, hearts, words. -->
-                <ProductEngagement v-if="product" :handle="product.handle" />
             </div>
         </div>
+
+        <!-- Reviews get the whole width: a distribution to filter by, then the words. -->
+        <ProductReviews v-if="product && !notFound" :handle="product.handle" />
 
         <!-- How it fits — try-ons from buyers on Bless Hive (hidden until there is one). -->
         <ProductTryOns v-if="product && !notFound" :product="product.id" />

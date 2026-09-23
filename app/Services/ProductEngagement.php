@@ -45,6 +45,9 @@ class ProductEngagement
 
     public const MAX_LENGTH = 1000;
 
+    /** Ratings needed before a distribution chart says anything useful. */
+    public const BREAKDOWN_FROM = 5;
+
     /**
      * The live rates, seeded on first read the same way Bees and Payments do it,
      * so the admin page always has something to show.
@@ -117,6 +120,9 @@ class ProductEngagement
             'likes_count'    => (int) ($p->likes_count ?? 0),
             'comments_count' => (int) ($p->comments_count ?? 0),
             'breakdown'      => self::breakdown($productId, $count),
+            // Below this, a bar chart misleads more than it tells (Baymard's
+            // fifth requirement); the page shows the plain average instead.
+            'show_breakdown' => $count > self::BREAKDOWN_FROM,
             'rewards'        => self::settings() + ['enabled' => Bees::settings()['enabled']],
             'mine' => ['stars' => null, 'liked' => false, 'commented' => false, 'earned' => []],
         ];
@@ -149,42 +155,70 @@ class ProductEngagement
         return $out;
     }
 
+    public const SORTS = ['recent', 'highest', 'lowest'];
+
     /**
-     * A page of comments, newest first. Hidden ones never leave the server.
-     * "Verified buyer" is worked out from paid orders, not claimed by anyone.
+     * A page of reviews, with each writer's own star rating alongside their
+     * words — the two are separate rows, and a review without its stars is
+     * half the story.
+     *
+     * Paged by offset rather than a keyset cursor: this is one product's
+     * reviews, a bounded set that people sort and filter rather than scroll
+     * forever, and offset is the only thing that survives re-sorting. A review
+     * posted mid-read can shift a page by one; on a product's own reviews that
+     * is not worth a cursor per sort order.
+     *
+     * Hidden reviews never leave the server. "Bought it" is worked out from
+     * paid orders, not claimed by anyone.
+     *
+     * @param array{stars?:int|null,sort?:string,page?:int,limit?:int} $opts
      */
-    public static function comments(string $productId, ?string $before = null, int $limit = 10): array
+    public static function comments(string $productId, array $opts = []): array
     {
+        $limit = max(1, min(50, (int) ($opts['limit'] ?? 10)));
+        $page  = max(1, (int) ($opts['page'] ?? 1));
+        $stars = isset($opts['stars']) && $opts['stars'] !== null ? max(1, min(5, (int) $opts['stars'])) : null;
+        $sort  = in_array($opts['sort'] ?? '', self::SORTS, true) ? $opts['sort'] : 'recent';
+
         $q = DB::table('product_comments as c')
             ->join('customers as cu', 'cu.id', '=', 'c.customer_id')
+            // The writer's own rating, if they left one. LEFT so a review from
+            // someone who didn't rate is still shown.
+            ->leftJoin('product_ratings as r', function ($j) {
+                $j->on('r.product_id', '=', 'c.product_id')->on('r.customer_id', '=', 'c.customer_id');
+            })
             ->where('c.product_id', $productId)
             ->whereNull('c.hidden_at')
-            ->orderByDesc('c.created_at')->orderByDesc('c.id')
-            ->limit($limit + 1)
-            ->select('c.id', 'c.body', 'c.customer_id', 'c.created_at', 'cu.first_name', 'cu.last_name');
+            ->select('c.id', 'c.body', 'c.customer_id', 'c.created_at', 'cu.first_name', 'cu.last_name', 'r.stars');
 
-        if ($before) {
-            $row = DB::table('product_comments')->where('id', $before)->first(['created_at']);
-            if ($row) $q->where('c.created_at', '<', $row->created_at);
-        }
+        // Filtering by a star level means reviews BY people who gave that rating.
+        if ($stars !== null) $q->where('r.stars', $stars);
 
-        $rows = $q->get();
-        $more = $rows->count() > $limit;
-        $rows = $rows->take($limit);
+        match ($sort) {
+            'highest' => $q->orderByDesc('r.stars')->orderByDesc('c.created_at'),
+            'lowest'  => $q->orderBy('r.stars')->orderByDesc('c.created_at'),
+            default   => $q->orderByDesc('c.created_at'),
+        };
+        $q->orderByDesc('c.id');                              // a stable tiebreak, always
 
+        $total = (clone $q)->getCountForPagination();
+        $rows  = $q->forPage($page, $limit)->get();
         $buyers = self::buyersOf($productId, $rows->pluck('customer_id')->all());
 
         return [
             'comments' => $rows->map(fn ($c) => [
                 'id'         => $c->id,
                 'body'       => $c->body,
+                'stars'      => $c->stars !== null ? (int) $c->stars : null,
                 'author'     => self::shortName($c->first_name, $c->last_name),
                 'verified'   => in_array($c->customer_id, $buyers, true),
                 'mine'       => false,                       // filled in by the controller
                 'customer_id' => $c->customer_id,
                 'created_at' => \Carbon\Carbon::parse($c->created_at)->toIso8601String(),
             ])->values()->all(),
-            'next' => $more ? $rows->last()->id : null,
+            'total'    => $total,
+            'page'     => $page,
+            'has_more' => $page * $limit < $total,
         ];
     }
 

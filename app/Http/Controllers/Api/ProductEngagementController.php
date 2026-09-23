@@ -22,12 +22,20 @@ class ProductEngagementController extends Controller
         if (! $product) return response()->json(['error' => 'Not found'], 404);
 
         $customer = Auth::guard('customer')->user();
-        $page = ProductEngagement::comments($product->id, $request->query('before'));
+        $page = ProductEngagement::comments($product->id, [
+            'stars' => $request->query('stars'),
+            'sort'  => (string) $request->query('sort', 'recent'),
+            'page'  => (int) $request->query('page', 1),
+            'limit' => (int) $request->query('limit', 10),
+        ]);
 
         return [
             'summary'  => ProductEngagement::summary($product->id, $customer?->id),
             'comments' => $this->mine($page['comments'], $customer?->id),
-            'next'     => $page['next'],
+            'total'    => $page['total'],
+            'page'     => $page['page'],
+            'has_more' => $page['has_more'],
+            'sorts'    => ProductEngagement::SORTS,
             'remaining_today' => $customer ? ProductEngagement::remainingToday($customer->id) : null,
         ];
     }

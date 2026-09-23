@@ -1,10 +1,11 @@
 <script>
 import ProductCard from '../components/ProductCard.vue';
 import { affiliateStore } from '../affiliate-store.js';
+import { Search, X } from 'lucide-vue-next';
 
 export default {
     name: 'ShopPage',
-    components: { ProductCard },
+    components: { ProductCard, Search, X },
     data() {
         return {
             products: [],
@@ -13,6 +14,8 @@ export default {
             loading: true,
             page: 1,
             sort: 'newest',
+            search: this.$route.query.q || '',
+            searchTimer: null,
         };
     },
     computed: {
@@ -45,6 +48,8 @@ export default {
     watch: {
         '$route.query': {
             handler() {
+                const q = this.$route.query.q || '';
+                if (q !== this.search.trim()) this.search = q;
                 this.page = 1;
                 this.fetchProducts();
             },
@@ -53,6 +58,7 @@ export default {
     },
     beforeUnmount() {
         window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
+        clearTimeout(this.searchTimer);
     },
     mounted() {
         affiliateStore.refresh();
@@ -62,6 +68,25 @@ export default {
     },
     methods: {
         titleCase(s) { return s.replace(/\b\w/g, (m) => m.toUpperCase()); },
+        /**
+         * Search as they type. `replace`, not `push`: typing "dress" would
+         * otherwise stack five history entries to reverse out of. The route is
+         * still the truth, so a search survives a refresh and can be shared.
+         */
+        onSearch() {
+            clearTimeout(this.searchTimer);
+            this.searchTimer = setTimeout(() => {
+                const q = this.search.trim();
+                if ((this.$route.query.q || '') === q) return;
+                const query = { ...this.$route.query };
+                if (q) query.q = q; else delete query.q;
+                this.$router.replace({ query });
+            }, 300);
+        },
+        clearSearch() {
+            this.search = '';
+            this.onSearch();
+        },
         // Leaving (or entering) an affiliate's shop changes the catalogue
         // without changing the route, so nothing else would trigger a reload.
         reloadForShop() {
@@ -168,8 +193,31 @@ export default {
             </aside>
 
             <div class="col-span-12 lg:col-span-9">
-                <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <div v-for="n in 9" :key="n" class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
+                <!-- Searches this collection as you type; the address keeps up so it's shareable. -->
+                <div class="relative mb-6">
+                    <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/35 pointer-events-none" />
+                    <input
+                        v-model="search"
+                        @input="onSearch"
+                        type="search"
+                        enterkeyhint="search"
+                        :placeholder="`Search ${title === 'All' ? 'the collection' : title}`"
+                        aria-label="Search this collection"
+                        class="w-full border border-black/15 bg-white pl-10 pr-10 py-3 text-sm focus:outline-none focus:border-gold"
+                    />
+                    <button
+                        v-if="search"
+                        @click="clearSearch"
+                        class="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 inline-flex items-center justify-center text-black/40 hover:text-gold transition-colors"
+                        title="Clear the search"
+                        aria-label="Clear the search"
+                    >
+                        <X class="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                    <div v-for="n in 12" :key="n" class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
                 </div>
                 <div v-else-if="!products.length" class="text-center py-16 max-w-md mx-auto">
                     <!-- Filters came up empty: the way out is to clear them. -->
@@ -191,7 +239,7 @@ export default {
                     </template>
                 </div>
                 <div v-else>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                         <ProductCard v-for="p in products" :key="p.id" :product="p" />
                     </div>
                     <div v-if="pagination?.has_more" class="text-center mt-12">

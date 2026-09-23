@@ -310,6 +310,40 @@ class ProductEngagementTest extends TestCase
         $this->assertSame('Imported', $this->getJson('/api/store/products/imported-gown')->json('product.sourcing.label'));
     }
 
+    #[Test]
+    public function reviews_carry_their_writers_stars_and_can_be_filtered_and_sorted(): void
+    {
+        $this->product();
+        foreach ([['a', 5, 'Five stars and a very happy customer.'], ['b', 2, 'Two stars — the sleeves are tight.'], ['c', 5, 'Another five, it hangs beautifully.']] as [$k, $stars, $body]) {
+            $c = $this->shopper("cust_{$k}", "{$k}@test.test");
+            $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => $stars])->assertOk();
+            $this->as($c)->postJson('/api/account/products/dress/comments', ['body' => $body])->assertOk();
+        }
+
+        Auth::forgetGuards();
+        $all = $this->getJson('/api/store/products/dress/engagement')->assertOk();
+        $this->assertSame(3, $all->json('total'));
+        $this->assertSame([5, 2, 5], array_column($all->json('comments'), 'stars'));    // newest first, each with its rating
+
+        // The bars are filters: one star level at a time.
+        $two = $this->getJson('/api/store/products/dress/engagement?stars=2')->assertOk();
+        $this->assertSame(1, $two->json('total'));
+        $this->assertStringContainsString('sleeves are tight', $two->json('comments.0.body'));
+
+        // Sorting is the server's job, so paging can't disagree with it.
+        $this->assertSame([2, 5, 5], array_column($this->getJson('/api/store/products/dress/engagement?sort=lowest')->json('comments'), 'stars'));
+        $this->assertSame([5, 5, 2], array_column($this->getJson('/api/store/products/dress/engagement?sort=highest')->json('comments'), 'stars'));
+
+        // And it pages rather than pouring a hundred reviews onto the screen.
+        $first = $this->getJson('/api/store/products/dress/engagement?limit=2')->assertOk();
+        $this->assertSame([2, true, 3], [count($first->json('comments')), $first->json('has_more'), $first->json('total')]);
+        $second = $this->getJson('/api/store/products/dress/engagement?limit=2&page=2')->assertOk();
+        $this->assertSame([1, false], [count($second->json('comments')), $second->json('has_more')]);
+
+        // A chart of three ratings misleads more than it tells, so it stays hidden.
+        $this->assertFalse($all->json('summary.show_breakdown'));
+    }
+
     // ─── Trending ──────────────────────────────────────────────────────────
 
     #[Test]
