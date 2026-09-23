@@ -2,7 +2,7 @@
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
-import { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
+import { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
 
 // Acceptance marks, by the method they stand for. A method with no entry falls
 // back to its line icon, so a missing file is never a broken image. Files and
@@ -14,7 +14,7 @@ const LOGOS = {
 
 export default {
     name: 'CheckoutPayment',
-    components: { Lock, ArrowRight, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield },
+    components: { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield },
     data() {
         return {
             cart: null,
@@ -29,6 +29,8 @@ export default {
             phone: '',
             phoneError: '',
             phoneRevealed: false, // the gateway rejected the number we sent quietly — let them fix it
+            slow: false,          // the gateway is taking its time; say so rather than look stuck
+            slowTimer: null,
             // Bees redemption state.
             bees: null,         // { balance, recent } when signed-in customer has bees; null otherwise
             beesSettings: null, // { enabled, per_usd, max_discount_percent, earn_per_usd }
@@ -124,6 +126,7 @@ export default {
             this.loading = false;
         }
     },
+    beforeUnmount() { clearTimeout(this.slowTimer); },
     methods: {
         async refreshPreview() {
             if (!this.canUseBees || this.beesToUse <= 0) {
@@ -155,6 +158,10 @@ export default {
             }
             this.submitting = true;
             this.error = '';
+            // Two calls go to the gateway before we hear anything, so after a
+            // few seconds say it's still working rather than leave a dead button.
+            this.slow = false;
+            this.slowTimer = setTimeout(() => { this.slow = true; }, 4000);
             try {
                 const payload = {
                     option: this.option,
@@ -177,6 +184,8 @@ export default {
                 if (!this.phoneError) toast(e.payload?.error || (e.payload?.errors && Object.values(e.payload.errors)[0]?.[0]) || 'Payment could not be started.', { tone: 'error' });
             } finally {
                 this.submitting = false;
+                this.slow = false;
+                clearTimeout(this.slowTimer);
             }
         },
         money(cents) { return `$${(cents / 100).toFixed(2)}`; },
@@ -359,12 +368,17 @@ export default {
                         <button
                             @click="pay"
                             :disabled="submitting || loading || !chosen"
-                            class="flex items-center justify-center gap-2 w-full bg-gold text-white py-4 mt-6 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-50"
+                            :class="['flex items-center justify-center gap-2 w-full bg-gold text-white py-4 mt-6 text-xs font-semibold tracking-[0.3em] uppercase transition-colors', submitting ? 'cursor-wait' : 'hover:bg-gold-dark disabled:opacity-50']"
                         >
+                            <!-- Working, not broken: the button keeps its colour and spins. -->
+                            <Loader2 v-if="submitting" class="w-4 h-4 animate-spin" />
                             {{ payLabel }}
-                            <ArrowRight class="w-4 h-4" />
+                            <ArrowRight v-if="!submitting" class="w-4 h-4" />
                         </button>
-                        <p class="flex items-center justify-center gap-2 text-xs text-black/55 mt-3">
+                        <p v-if="submitting && slow" class="text-xs text-black/55 mt-3 text-center">
+                            {{ chosen?.label ? `Still waiting on ${chosen.label}` : 'Still working' }} — please don't close this page.
+                        </p>
+                        <p v-else class="flex items-center justify-center gap-2 text-xs text-black/55 mt-3">
                             <Lock class="w-3 h-3" />
                             All transactions are encrypted end-to-end.
                         </p>

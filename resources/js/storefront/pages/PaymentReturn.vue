@@ -1,9 +1,11 @@
 <script>
 import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
+import { Loader2 } from 'lucide-vue-next';
 
 export default {
     name: 'PaymentReturn',
+    components: { Loader2 },
     data() {
         return {
             state: 'pending',          // pending | paid | failed | cancelled | unknown
@@ -104,6 +106,7 @@ export default {
             </template>
 
             <template v-else>
+                <Loader2 class="w-6 h-6 text-gold animate-spin mx-auto mb-3" />
                 <p class="font-script text-3xl text-gold mb-2">Just a moment</p>
                 <h1 class="font-display text-2xl tracking-widest uppercase mb-2">{{ instruction ? 'Approve on your phone' : 'Confirming payment' }}</h1>
                 <p class="text-sm text-black/65">{{ instruction || `${providerLabel || 'Your payment provider'} is finalising your transaction.` }}</p>
