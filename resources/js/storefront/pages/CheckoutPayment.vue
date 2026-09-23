@@ -265,15 +265,6 @@ export default {
                     </div>
 
                     <p v-if="error" class="text-sm text-red-600 mt-4">{{ error }}</p>
-
-                    <button
-                        @click="pay"
-                        :disabled="submitting || loading || !chosen"
-                        class="flex items-center justify-center gap-2 w-full bg-gold text-white py-4 mt-6 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-50"
-                    >
-                        {{ payLabel }}
-                        <ArrowRight class="w-4 h-4" />
-                    </button>
                 </section>
 
                 <aside class="lg:col-span-5 mt-10 lg:mt-0">
@@ -312,6 +303,16 @@ export default {
                                 <span>${{ total }}</span>
                             </div>
                         </div>
+
+                        <!-- Pay sits under the total it charges, and rides the sticky panel. -->
+                        <button
+                            @click="pay"
+                            :disabled="submitting || loading || !chosen"
+                            class="flex items-center justify-center gap-2 w-full bg-gold text-white py-4 mt-6 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-50"
+                        >
+                            {{ payLabel }}
+                            <ArrowRight class="w-4 h-4" />
+                        </button>
                     </div>
                 </aside>
             </div>
