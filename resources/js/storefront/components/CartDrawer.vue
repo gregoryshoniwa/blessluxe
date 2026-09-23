@@ -1,6 +1,6 @@
 <script>
 import { cart, state } from '../cart-store.js';
-import { X, ShoppingBag, ArrowRight, Loader2 } from 'lucide-vue-next';
+import { X, ShoppingBag, ArrowRight, Trash2, Loader2 } from 'lucide-vue-next';
 
 /**
  * The bag, slid in from the side. Opens when something is added, so the size
@@ -12,7 +12,7 @@ import { X, ShoppingBag, ArrowRight, Loader2 } from 'lucide-vue-next';
  */
 export default {
     name: 'CartDrawer',
-    components: { X, ShoppingBag, ArrowRight, Loader2 },
+    components: { X, ShoppingBag, ArrowRight, Trash2, Loader2 },
     data() {
         return { bag: state, busyLine: null };
     },
@@ -100,23 +100,34 @@ export default {
                                 <img v-if="line.thumbnail" :src="line.thumbnail" :alt="line.title" class="w-full h-full object-cover object-top" />
                             </router-link>
 
-                            <div class="flex-1 min-w-0 flex flex-col">
-                                <router-link :to="`/shop/${line.product_handle}`" @click="close" class="text-sm font-medium line-clamp-2 hover:text-gold transition-colors">
-                                    {{ line.title }}
-                                </router-link>
-                                <p v-if="line.variant_title" class="text-xs text-black/55 mt-0.5">{{ line.variant_title }}</p>
-                                <p class="text-sm mt-1">{{ money(line.unit_price) }}</p>
-
-                                <div class="flex items-center justify-between gap-2 mt-auto pt-2">
-                                    <div class="flex border border-black/15">
-                                        <button @click="setQty(line, line.quantity - 1)" :disabled="busyLine === line.id" class="w-9 h-9 inline-flex items-center justify-center hover:bg-cream-dark disabled:opacity-40" aria-label="One fewer">−</button>
-                                        <span class="w-9 h-9 inline-flex items-center justify-center text-sm">{{ line.quantity }}</span>
-                                        <button @click="setQty(line, line.quantity + 1)" :disabled="busyLine === line.id" class="w-9 h-9 inline-flex items-center justify-center hover:bg-cream-dark disabled:opacity-40" aria-label="One more">+</button>
-                                    </div>
-                                    <button @click="removeLine(line)" :disabled="busyLine === line.id" class="text-[10px] tracking-widest uppercase text-black/45 hover:text-red-600 transition-colors min-h-11 px-1">
-                                        Remove
+                            <div class="flex-1 min-w-0">
+                                <!-- Name and the way out of it, on one line. -->
+                                <div class="flex items-start gap-2">
+                                    <router-link :to="`/shop/${line.product_handle}`" @click="close" class="flex-1 min-w-0 text-sm font-medium leading-snug line-clamp-2 hover:text-gold transition-colors">
+                                        {{ line.title }}
+                                    </router-link>
+                                    <button
+                                        @click="removeLine(line)"
+                                        :disabled="busyLine === line.id"
+                                        class="w-9 h-9 -mt-1 -mr-1 inline-flex items-center justify-center text-black/35 hover:text-red-600 transition-colors disabled:opacity-40"
+                                        :title="`Remove ${line.title} from your bag`"
+                                        :aria-label="`Remove ${line.title} from your bag`"
+                                    >
+                                        <Trash2 class="w-4 h-4" />
                                     </button>
                                 </div>
+                                <p v-if="line.variant_title" class="text-xs text-black/55 mt-0.5">{{ line.variant_title }}</p>
+
+                                <!-- Quantity on the left, what that quantity costs on the right. -->
+                                <div class="flex items-center justify-between gap-3 mt-3">
+                                    <div class="flex border border-black/15">
+                                        <button @click="setQty(line, line.quantity - 1)" :disabled="busyLine === line.id" class="w-8 h-8 inline-flex items-center justify-center text-base leading-none hover:bg-cream-dark disabled:opacity-40" :title="line.quantity === 1 ? 'Remove from your bag' : 'One fewer'" aria-label="One fewer">−</button>
+                                        <span class="w-8 h-8 inline-flex items-center justify-center text-sm tabular-nums">{{ line.quantity }}</span>
+                                        <button @click="setQty(line, line.quantity + 1)" :disabled="busyLine === line.id" class="w-8 h-8 inline-flex items-center justify-center text-base leading-none hover:bg-cream-dark disabled:opacity-40" title="One more" aria-label="One more">+</button>
+                                    </div>
+                                    <p class="text-sm font-medium tabular-nums">{{ money(line.line_total) }}</p>
+                                </div>
+                                <p v-if="line.quantity > 1" class="text-[11px] text-black/45 mt-1 text-right">{{ money(line.unit_price) }} each</p>
                             </div>
                         </li>
                     </ul>
