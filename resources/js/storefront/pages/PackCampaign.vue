@@ -133,12 +133,7 @@ export default {
 
                 <!-- A series fills because someone passes it on; make that one tap. -->
                 <div class="mt-5">
-                    <ShareButton
-                        :path="`/shop/series/${campaign.public_code}`"
-                        :title="campaign.title || campaign.definition?.title || 'BLESSLUXE series'"
-                        :text="`Claim a size in this BLESSLUXE series — ${totals.available} of ${totals.total} still open.`"
-                        label="Share this series"
-                    />
+                    <ShareButton :path="`/shop/series/${campaign.public_code}`" label="Copy link to share" />
                 </div>
             </header>
 
