@@ -38,6 +38,8 @@ export default {
             expanded: [],            // review ids opened past the fold
             loading: true,
             listLoading: false,
+            overflowing: false,      // is the list actually taller than its box?
+            atBottom: false,
             busy: '',
             auth: authStore.state,
         };
@@ -96,7 +98,21 @@ export default {
                 this.page = d.page || page;
                 this.hasMore = !!d.has_more;
             } catch { /* leave what's on screen rather than blanking it */ }
-            finally { this.listLoading = false; }
+            finally {
+                this.listLoading = false;
+                this.$nextTick(this.measure);
+            }
+        },
+        /**
+         * The fade at the foot of the list is a promise that there's more, so
+         * it only appears when the list really does overflow and you aren't
+         * already at the end of it.
+         */
+        measure() {
+            const el = this.$refs.list;
+            if (!el) { this.overflowing = false; return; }
+            this.overflowing = el.scrollHeight > el.clientHeight + 4;
+            this.atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
         },
         /** Radio-like, per Baymard: picking a level replaces the last, and picking it again clears. */
         filterBy(n) {
@@ -299,31 +315,37 @@ export default {
                     <template v-else>No reviews yet — yours would be the first.</template>
                 </p>
 
-                <ul class="divide-y divide-black/10">
-                    <li v-for="c in comments" :key="c.id" :class="['py-5', busy === c.id && 'opacity-50']">
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
-                            <span v-if="c.stars" class="flex items-center">
-                                <Star v-for="n in 5" :key="n" class="w-3.5 h-3.5" :class="n <= c.stars ? 'text-gold fill-gold' : 'text-black/15'" />
-                            </span>
-                            <span class="text-sm font-medium">{{ c.author }}</span>
-                            <span v-if="c.verified" class="text-[9px] tracking-widest uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5">Bought it</span>
-                            <span class="text-xs text-black/40">{{ when(c.created_at) }}</span>
-                            <button
-                                v-if="c.mine"
-                                @click="remove(c)"
-                                class="ml-auto w-8 h-8 inline-flex items-center justify-center text-black/30 hover:text-red-600 transition-colors"
-                                title="Remove your review"
-                                aria-label="Remove your review"
-                            >
-                                <Trash2 class="w-3.5 h-3.5" />
+                <!-- The reviews scroll in place. A hundred of them shouldn't push
+                     the rest of the page into next week, and the count and sort
+                     above stay put while you read. The fade says there's more. -->
+                <div class="relative">
+                    <ul ref="list" @scroll.passive="measure" class="divide-y divide-black/10 max-h-[26rem] sm:max-h-[32rem] overflow-y-auto pr-3 -mr-3">
+                        <li v-for="c in comments" :key="c.id" :class="['py-5', busy === c.id && 'opacity-50']">
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
+                                <span v-if="c.stars" class="flex items-center">
+                                    <Star v-for="n in 5" :key="n" class="w-3.5 h-3.5" :class="n <= c.stars ? 'text-gold fill-gold' : 'text-black/15'" />
+                                </span>
+                                <span class="text-sm font-medium">{{ c.author }}</span>
+                                <span v-if="c.verified" class="text-[9px] tracking-widest uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5">Bought it</span>
+                                <span class="text-xs text-black/40">{{ when(c.created_at) }}</span>
+                                <button
+                                    v-if="c.mine"
+                                    @click="remove(c)"
+                                    class="ml-auto w-8 h-8 inline-flex items-center justify-center text-black/30 hover:text-red-600 transition-colors"
+                                    title="Remove your review"
+                                    aria-label="Remove your review"
+                                >
+                                    <Trash2 class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <p :class="['text-sm text-black/75 leading-relaxed whitespace-pre-line', long(c) && !expanded.includes(c.id) && 'line-clamp-4']">{{ c.body }}</p>
+                            <button v-if="long(c)" @click="toggle(c.id)" class="text-[10px] tracking-widest uppercase text-gold-dark hover:text-gold underline underline-offset-4 mt-1.5">
+                                {{ expanded.includes(c.id) ? 'Show less' : 'Read more' }}
                             </button>
-                        </div>
-                        <p :class="['text-sm text-black/75 leading-relaxed whitespace-pre-line', long(c) && !expanded.includes(c.id) && 'line-clamp-4']">{{ c.body }}</p>
-                        <button v-if="long(c)" @click="toggle(c.id)" class="text-[10px] tracking-widest uppercase text-gold-dark hover:text-gold underline underline-offset-4 mt-1.5">
-                            {{ expanded.includes(c.id) ? 'Show less' : 'Read more' }}
-                        </button>
                     </li>
-                </ul>
+                    </ul>
+                    <div v-if="overflowing && !atBottom" class="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-cream to-transparent transition-opacity"></div>
+                </div>
 
                 <div v-if="hasMore" class="pt-6 text-center">
                     <button
