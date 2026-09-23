@@ -1,11 +1,20 @@
 <script>
 import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
-import { Lock, ArrowRight, Mail, MapPin, User, Phone, Truck } from 'lucide-vue-next';
+import { Lock, ArrowRight, Mail, MapPin, Truck, Check, ChevronDown } from 'lucide-vue-next';
 
+/**
+ * Step 1 of checkout. A returning customer's details are already known, so
+ * Contact and Shipping open COLLAPSED — each a summary card in the same
+ * treatment as Delivery method, with "Change" to open it. A section only
+ * starts open when there is nothing to confirm (a guest, or details we don't
+ * have yet). Saved addresses are radio cards; the last one is "Ship to a
+ * different address", which reveals the fields. The contact block doubles as
+ * the recipient, so it's where a different contact person is typed.
+ */
 export default {
     name: 'CheckoutInfo',
-    components: { Lock, ArrowRight, Mail, MapPin, User, Phone, Truck },
+    components: { Lock, ArrowRight, Mail, MapPin, Truck, Check, ChevronDown },
     data() {
         const draft = checkoutStore.draft;
         return {
@@ -13,16 +22,21 @@ export default {
             first_name: draft.first_name,
             last_name: draft.last_name,
             phone: draft.phone,
-            address1: draft.shipping_address.address1,
-            address2: draft.shipping_address.address2,
-            city: draft.shipping_address.city,
-            province: draft.shipping_address.province,
-            postal_code: draft.shipping_address.postal_code,
-            country: draft.shipping_address.country || 'Zimbabwe',
+            // The typed address. A saved address is never edited in place —
+            // picking one just points `selectedAddressId` at it.
+            addr: {
+                address1: draft.shipping_address.address1,
+                address2: draft.shipping_address.address2,
+                city: draft.shipping_address.city,
+                province: draft.shipping_address.province,
+                postal_code: draft.shipping_address.postal_code,
+                country: draft.shipping_address.country || 'Zimbabwe',
+            },
             shipping_method: draft.shipping_method || 'standard',
             cart: null,
             savedAddresses: [],
-            selectedAddressId: '',
+            selectedAddressId: '',      // '' = the typed address below
+            open: { contact: false, shipping: false },
             loading: true,
             saving: false,
             error: '',
@@ -34,6 +48,40 @@ export default {
         },
         itemCount() {
             return this.cart?.item_count || 0;
+        },
+        chosenAddress() {
+            return this.savedAddresses.find((a) => a.id === this.selectedAddressId) || null;
+        },
+        /** What actually gets submitted — the order's key shape, not the address book's. */
+        shippingAddress() {
+            const a = this.chosenAddress;
+            if (!a) return { ...this.addr };
+
+            return {
+                address1: a.line1 || '',
+                address2: a.line2 || '',
+                city: a.city || '',
+                province: a.region || '',
+                postal_code: a.postal_code || '',
+                country: a.country || this.addr.country,
+            };
+        },
+        contactComplete() {
+            return !!(this.email && this.first_name && this.last_name);
+        },
+        addressComplete() {
+            const a = this.shippingAddress;
+            return !!(a.address1 && a.city);
+        },
+        contactSummary() {
+            const name = [this.first_name, this.last_name].filter(Boolean).join(' ');
+            return [name, this.email, this.phone].filter(Boolean).join(' · ');
+        },
+        addressSummary() {
+            const a = this.shippingAddress;
+            const line = [a.address1, a.address2, a.city, a.province, a.country].filter(Boolean).join(', ');
+
+            return this.chosenAddress?.label ? `${this.chosenAddress.label} · ${line}` : line;
         },
     },
     async mounted() {
@@ -47,66 +95,83 @@ export default {
             this.first_name = this.first_name || c.first_name || '';
             this.last_name = this.last_name || c.last_name || '';
             this.phone = this.phone || c.phone || '';
-            // Pull saved addresses so the customer can pick one instead of
-            // retyping. Default-shipping (if any) gets pre-selected.
             try {
                 const r = await api.get('/api/account/addresses');
                 this.savedAddresses = r.addresses || [];
-                const def = this.savedAddresses.find((a) => a.is_default_shipping) || this.savedAddresses[0];
-                if (def && !this.address1) this.applyAddress(def);
-            } catch { /* no addresses */ }
+                // Coming back from payment, the draft already holds the address
+                // they chose — match it to its card so the same one stays ticked.
+                const same = this.addr.address1
+                    ? this.savedAddresses.find((a) => (a.line1 || '') === this.addr.address1 && (a.city || '') === this.addr.city)
+                    : null;
+                const pick = same || (this.addr.address1 ? null : this.savedAddresses.find((a) => a.is_default_shipping) || this.savedAddresses[0]);
+                if (pick) this.useAddress(pick);
+            } catch { /* no address book */ }
         }
         this.cart = cartRes.cart;
         if (!this.cart?.items?.length) {
             this.$router.replace('/cart');
         }
+        // Nothing to confirm? Then there's nothing to collapse.
+        this.open.contact = !this.contactComplete;
+        this.open.shipping = !this.addressComplete;
         this.loading = false;
     },
     methods: {
+        money(cents) { return `$${(cents / 100).toFixed(2)}`; },
+        toggle(section) { this.open[section] = !this.open[section]; },
+        addressLine(a) {
+            return [a.line1, a.line2, a.city, a.region, a.country].filter(Boolean).join(', ');
+        },
+        recipient(a) {
+            return [[a.first_name, a.last_name].filter(Boolean).join(' '), a.phone].filter(Boolean).join(' · ');
+        },
+        /**
+         * Point at a saved address. Its recipient fills the contact block only
+         * where we have nothing — never overwriting what the customer typed.
+         */
+        useAddress(a) {
+            this.selectedAddressId = a.id;
+            this.first_name = this.first_name || a.first_name || '';
+            this.last_name  = this.last_name  || a.last_name  || '';
+            this.phone      = this.phone      || a.phone      || '';
+        },
+        onAddressPick(id) {
+            const a = this.savedAddresses.find((x) => x.id === id);
+            if (a) this.useAddress(a);
+            else this.selectedAddressId = '';
+        },
         async next() {
-            if (!this.email || !this.first_name || !this.last_name || !this.address1 || !this.city) {
-                this.error = 'Please fill in your email, name, address and city.';
+            this.error = '';
+            if (!this.contactComplete) {
+                this.open.contact = true;
+                this.error = 'Please add your email and name.';
+                return;
+            }
+            if (!this.addressComplete) {
+                this.open.shipping = true;
+                this.error = 'Please add a street address and city.';
                 return;
             }
             this.saving = true;
-            this.error = '';
+            const a = this.shippingAddress;
             checkoutStore.mutate({
                 email: this.email.trim(),
                 first_name: this.first_name.trim(),
                 last_name: this.last_name.trim(),
                 phone: this.phone.trim(),
                 shipping_address: {
-                    address1: this.address1.trim(),
-                    address2: this.address2.trim(),
-                    city: this.city.trim(),
-                    province: this.province.trim(),
-                    postal_code: this.postal_code.trim(),
-                    country: this.country.trim(),
+                    address1: (a.address1 || '').trim(),
+                    address2: (a.address2 || '').trim(),
+                    city: (a.city || '').trim(),
+                    province: (a.province || '').trim(),
+                    postal_code: (a.postal_code || '').trim(),
+                    country: (a.country || '').trim(),
                 },
                 shipping_method: this.shipping_method,
             });
             // Skip the standalone /checkout/shipping step entirely — it's now
             // part of this page. Go straight to payment for a 2-step flow.
             this.$router.push('/checkout/payment');
-        },
-        money(cents) { return `$${(cents / 100).toFixed(2)}`; },
-        applyAddress(a) {
-            this.selectedAddressId = a.id;
-            this.first_name  = a.first_name  || this.first_name;
-            this.last_name   = a.last_name   || this.last_name;
-            this.phone       = a.phone       || this.phone;
-            this.address1    = a.line1       || '';
-            this.address2    = a.line2       || '';
-            this.city        = a.city        || '';
-            this.province    = a.region      || '';
-            this.postal_code = a.postal_code || '';
-            this.country     = a.country     || this.country;
-        },
-        onAddressPick(e) {
-            const id = e.target.value;
-            if (!id) return;
-            const a = this.savedAddresses.find((x) => x.id === id);
-            if (a) this.applyAddress(a);
         },
     },
 };
@@ -145,64 +210,124 @@ export default {
 
             <div class="lg:grid lg:grid-cols-12 lg:gap-12">
                 <!-- Form column -->
-                <form @submit.prevent="next" class="lg:col-span-7 space-y-8">
-                    <section>
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-4 flex items-center gap-2">
-                            <Mail class="w-4 h-4 text-gold" /> Contact
-                        </h2>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input v-model="email" type="email" placeholder="Email address" required autocomplete="email"
-                                class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="first_name" type="text" placeholder="First name" required autocomplete="given-name"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="last_name" type="text" placeholder="Last name" required autocomplete="family-name"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="phone" type="tel" placeholder="Phone (delivery updates)" autocomplete="tel"
-                                class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                        </div>
-                    </section>
-
-                    <section>
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-4 flex items-center gap-2">
-                            <MapPin class="w-4 h-4 text-gold" /> Shipping address
-                        </h2>
-                        <div v-if="savedAddresses.length" class="mb-3">
-                            <label class="text-[10px] tracking-widest uppercase text-black/55 block mb-1">Use a saved address</label>
-                            <select :value="selectedAddressId" @change="onAddressPick" class="w-full border border-black/15 px-4 py-3 focus:outline-none focus:border-gold bg-white">
-                                <option value="">— Enter a new one —</option>
-                                <option v-for="a in savedAddresses" :key="a.id" :value="a.id">
-                                    {{ [a.label, a.line1, a.city].filter(Boolean).join(' · ') }}{{ a.is_default_shipping ? ' (default)' : '' }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <input v-model="address1" type="text" placeholder="Street address" required autocomplete="address-line1"
-                                class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="address2" type="text" placeholder="Apartment, suite (optional)" autocomplete="address-line2"
-                                class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="city" type="text" placeholder="City" required autocomplete="address-level2"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="province" type="text" placeholder="Province" autocomplete="address-level1"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="postal_code" type="text" placeholder="Postal code" autocomplete="postal-code"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                            <input v-model="country" type="text" placeholder="Country" required autocomplete="country-name"
-                                class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
-                        </div>
-                    </section>
-
-                    <section>
-                        <h2 class="font-display text-xl tracking-widest uppercase mb-4 flex items-center gap-2">
-                            <Truck class="w-4 h-4 text-gold" /> Delivery method
-                        </h2>
-                        <label class="flex items-center gap-3 border border-gold/30 bg-cream-dark/40 px-4 py-3 cursor-pointer">
-                            <input type="radio" v-model="shipping_method" value="standard" class="accent-gold" />
-                            <div class="flex-1">
-                                <p class="font-medium">Standard delivery</p>
-                                <p class="text-xs text-black/60">3–5 business days</p>
+                <form @submit.prevent="next" class="lg:col-span-7 space-y-4">
+                    <!-- ─── Contact ─────────────────────────────────────── -->
+                    <section :class="['border transition-colors', open.contact ? 'border-black/15' : 'border-gold/30 bg-cream-dark/40']">
+                        <button
+                            type="button"
+                            @click="toggle('contact')"
+                            :aria-expanded="open.contact"
+                            class="w-full flex items-center gap-3 px-4 py-4 min-h-11 text-left"
+                        >
+                            <Mail class="w-4 h-4 text-gold flex-shrink-0" />
+                            <div class="flex-1 min-w-0">
+                                <p class="font-display text-sm tracking-widest uppercase flex items-center gap-2">
+                                    Contact
+                                    <Check v-if="contactComplete && !open.contact" class="w-3.5 h-3.5 text-emerald-600" />
+                                </p>
+                                <p v-if="!open.contact" class="text-sm text-black/65 mt-0.5 truncate">{{ contactSummary || 'Add your email and name' }}</p>
+                                <p v-if="!open.contact && contactComplete && !phone" class="text-xs text-black/45 mt-0.5">No phone number — add one for delivery updates</p>
                             </div>
-                            <span class="text-gold font-semibold">Free</span>
-                        </label>
+                            <span class="text-[10px] tracking-widest uppercase text-gold-dark flex items-center gap-1 flex-shrink-0">
+                                {{ open.contact ? 'Close' : 'Change' }}
+                                <ChevronDown :class="['w-3.5 h-3.5 transition-transform', open.contact && 'rotate-180']" />
+                            </span>
+                        </button>
+                        <div v-if="open.contact" class="px-4 pb-4 space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <input v-model="email" type="email" placeholder="Email address" required autocomplete="email"
+                                    class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="first_name" type="text" placeholder="First name" required autocomplete="given-name"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="last_name" type="text" placeholder="Last name" required autocomplete="family-name"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="phone" type="tel" placeholder="Phone (delivery updates)" autocomplete="tel"
+                                    class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                            </div>
+                            <p class="text-xs text-black/50">Sending this to someone else? Put the person receiving it here — we'll use their name and number for the delivery.</p>
+                        </div>
+                    </section>
+
+                    <!-- ─── Shipping address ────────────────────────────── -->
+                    <section :class="['border transition-colors', open.shipping ? 'border-black/15' : 'border-gold/30 bg-cream-dark/40']">
+                        <button
+                            type="button"
+                            @click="toggle('shipping')"
+                            :aria-expanded="open.shipping"
+                            class="w-full flex items-center gap-3 px-4 py-4 min-h-11 text-left"
+                        >
+                            <MapPin class="w-4 h-4 text-gold flex-shrink-0" />
+                            <div class="flex-1 min-w-0">
+                                <p class="font-display text-sm tracking-widest uppercase flex items-center gap-2">
+                                    Shipping address
+                                    <Check v-if="addressComplete && !open.shipping" class="w-3.5 h-3.5 text-emerald-600" />
+                                </p>
+                                <p v-if="!open.shipping" class="text-sm text-black/65 mt-0.5 truncate">{{ addressSummary || 'Add a delivery address' }}</p>
+                            </div>
+                            <span class="text-[10px] tracking-widest uppercase text-gold-dark flex items-center gap-1 flex-shrink-0">
+                                {{ open.shipping ? 'Close' : 'Change' }}
+                                <ChevronDown :class="['w-3.5 h-3.5 transition-transform', open.shipping && 'rotate-180']" />
+                            </span>
+                        </button>
+                        <div v-if="open.shipping" class="px-4 pb-4 space-y-2">
+                            <template v-if="savedAddresses.length">
+                                <label
+                                    v-for="a in savedAddresses"
+                                    :key="a.id"
+                                    :class="['flex items-start gap-3 border px-4 py-3 cursor-pointer transition-colors', selectedAddressId === a.id ? 'border-gold bg-cream-dark/40' : 'border-black/15 hover:border-black/25']"
+                                >
+                                    <input type="radio" :checked="selectedAddressId === a.id" @change="onAddressPick(a.id)" class="mt-1 accent-gold" />
+                                    <div class="flex-1 min-w-0">
+                                        <p class="font-medium text-sm">
+                                            {{ a.label || 'Saved address' }}
+                                            <span v-if="a.is_default_shipping" class="text-[10px] tracking-widest uppercase text-gold-dark ml-1">Default</span>
+                                        </p>
+                                        <p class="text-xs text-black/60 mt-0.5">{{ addressLine(a) }}</p>
+                                        <p v-if="recipient(a)" class="text-xs text-black/45 mt-0.5">{{ recipient(a) }}</p>
+                                    </div>
+                                </label>
+                                <label :class="['flex items-start gap-3 border px-4 py-3 cursor-pointer transition-colors', !selectedAddressId ? 'border-gold bg-cream-dark/40' : 'border-black/15 hover:border-black/25']">
+                                    <input type="radio" :checked="!selectedAddressId" @change="onAddressPick('')" class="mt-1 accent-gold" />
+                                    <div class="flex-1 min-w-0">
+                                        <p class="font-medium text-sm">Ship to a different address</p>
+                                        <p class="text-xs text-black/60 mt-0.5">A one-off address for this order</p>
+                                    </div>
+                                </label>
+                            </template>
+
+                            <div v-if="!selectedAddressId" class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                <input v-model="addr.address1" type="text" placeholder="Street address" required autocomplete="address-line1"
+                                    class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="addr.address2" type="text" placeholder="Apartment, suite (optional)" autocomplete="address-line2"
+                                    class="sm:col-span-2 border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="addr.city" type="text" placeholder="City" required autocomplete="address-level2"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="addr.province" type="text" placeholder="Province" autocomplete="address-level1"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="addr.postal_code" type="text" placeholder="Postal code" autocomplete="postal-code"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                                <input v-model="addr.country" type="text" placeholder="Country" required autocomplete="country-name"
+                                    class="border border-black/15 px-4 py-3 focus:outline-none focus:border-gold" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ─── Delivery method ─────────────────────────────── -->
+                    <section class="border border-black/15">
+                        <div class="flex items-center gap-3 px-4 pt-4">
+                            <Truck class="w-4 h-4 text-gold flex-shrink-0" />
+                            <p class="font-display text-sm tracking-widest uppercase">Delivery method</p>
+                        </div>
+                        <div class="px-4 pb-4 pt-3">
+                            <label class="flex items-center gap-3 border border-gold/30 bg-cream-dark/40 px-4 py-3 cursor-pointer">
+                                <input type="radio" v-model="shipping_method" value="standard" class="accent-gold" />
+                                <div class="flex-1">
+                                    <p class="font-medium">Standard delivery</p>
+                                    <p class="text-xs text-black/60">3–5 business days</p>
+                                </div>
+                                <span class="text-gold font-semibold">Free</span>
+                            </label>
+                        </div>
                     </section>
 
                     <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
