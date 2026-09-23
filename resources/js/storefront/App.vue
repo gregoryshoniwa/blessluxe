@@ -5,11 +5,12 @@ import Footer from './components/Footer.vue';
 import AnnouncementBar from './components/AnnouncementBar.vue';
 import ChatWidget from './components/ChatWidget.vue';
 import DialogHost from '../components/DialogHost.vue';
+import CartDrawer from './components/CartDrawer.vue';
 
 export default {
     name: 'StorefrontApp',
     components: {
-        Header, Footer, AnnouncementBar, ChatWidget, DialogHost,
+        Header, Footer, AnnouncementBar, ChatWidget, DialogHost, CartDrawer,
         // Loaded only when someone enters the Hive — shoppers never download it.
         HiveShell: defineAsyncComponent(() => import('./components/hive/HiveShell.vue')),
     },
@@ -40,5 +41,7 @@ export default {
         <Footer />
         <ChatWidget />
     </div>
+    <!-- One bag for the whole shop; the Hive has no cart chrome of its own. -->
+    <CartDrawer v-if="!inHive" />
     <DialogHost />
 </template>

@@ -3,6 +3,7 @@ import { api } from '../../lib/api.js';
 import ProductStrip from '../components/ProductStrip.vue';
 import ProductTryOns from '../components/hive/ProductTryOns.vue';
 import { recentlyViewed } from '../recently-viewed.js';
+import { cart } from '../cart-store.js';
 import { Check, ArrowRight } from 'lucide-vue-next';
 
 export default {
@@ -98,14 +99,11 @@ export default {
             this.addError = '';
             this.flash = false;
             try {
-                const { cart } = await api.post('/api/store/cart/line-items', {
-                    variant_id: this.selectedVariant.id,
-                    quantity:   this.quantity,
-                });
-                this.inBag = cart?.item_count || this.inBag + this.quantity;
+                // The store adds it, tells the header, and slides the bag open
+                // so the size and price can be checked without leaving the page.
+                const c = await cart.add(this.selectedVariant.id, this.quantity);
+                this.inBag = c?.item_count || this.inBag + this.quantity;
                 this.flash = true;
-                // Let the header refresh its cart-count badge.
-                window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
                 clearTimeout(this.flashTimer);
                 this.flashTimer = setTimeout(() => { this.flash = false; }, 1800);
             } catch (e) {

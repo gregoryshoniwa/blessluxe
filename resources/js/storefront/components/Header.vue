@@ -2,6 +2,7 @@
 import SearchOverlay from './SearchOverlay.vue';
 import { affiliateStore } from '../affiliate-store.js';
 import { authStore } from '../auth-store.js';
+import { cart, state as bagState } from '../cart-store.js';
 import MobileNavDrawer from './MobileNavDrawer.vue';
 import NotificationsBell from './NotificationsBell.vue';
 
@@ -13,7 +14,7 @@ export default {
             scrolled: false,
             activeMenu: null,
             headings: [],
-            cartCount: 0,
+            bag: bagState,        // the one bag: badge here, lines in the drawer
             wishCount: 0,
             // Shared, so the menu, Home and the Packs page all agree on whose
             // shop this is (see affiliate-store.js).
@@ -91,14 +92,15 @@ export default {
                 /* nav silently falls back to empty; safe on first paint */
             }
         },
+        openBag() { cart.show(); },
+        // The badge and the drawer read one bag. Pages that change the cart
+        // without the store (the cart page itself) still announce it, and this
+        // re-reads — `refresh()` stays silent so that can't loop.
         async fetchCartCount() {
             try {
-                const res = await fetch('/api/store/cart', { cache: 'no-store', credentials: 'include' });
-                if (!res.ok) return;
-                const data = await res.json();
-                this.cartCount = data.cart?.item_count || 0;
+                await cart.refresh();
             } catch {
-                this.cartCount = 0;
+                /* keep the last known count rather than flashing zero */
             }
         },
         fetchAffiliate() { return affiliateStore.refresh(); },
@@ -285,17 +287,17 @@ export default {
                             {{ wishCount > 99 ? '99+' : wishCount }}
                         </span>
                     </router-link>
-                    <router-link to="/cart" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors relative" aria-label="Cart">
+                    <button @click="openBag" class="p-2 min-w-10 min-h-11 inline-flex items-center justify-center hover:text-gold transition-colors relative" aria-label="Cart">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                         </svg>
                         <span
-                            v-if="cartCount > 0"
+                            v-if="bag.itemCount > 0"
                             class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gold text-white text-[10px] font-semibold rounded-full flex items-center justify-center"
                         >
-                            {{ cartCount > 99 ? '99+' : cartCount }}
+                            {{ bag.itemCount > 99 ? '99+' : bag.itemCount }}
                         </span>
-                    </router-link>
+                    </button>
                 </div>
             </div>
         </div>
