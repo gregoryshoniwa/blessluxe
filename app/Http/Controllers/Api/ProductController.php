@@ -236,6 +236,8 @@ class ProductController extends Controller
             'price_label' => $price !== null ? '$' . number_format($price / 100, 2) : null,
             'video'     => $this->videoShape($p),
             'rating'    => $this->ratingShape($p),
+            'likes'     => (int) ($p->likes_count ?? 0),
+            'purchases' => (int) ($p->purchases_count ?? 0),
         ];
     }
 
@@ -282,6 +284,7 @@ class ProductController extends Controller
             'description' => $p->description,
             'rating'      => $this->ratingShape($p),
             'likes_count' => (int) ($p->likes_count ?? 0),
+            'purchases'   => (int) ($p->purchases_count ?? 0),
             'thumbnail'   => $p->thumbnail,
             'images'      => $p->images->map(fn ($i) => ['url' => $i->url, 'rank' => $i->rank]),
             'video'       => $this->videoShape($p),

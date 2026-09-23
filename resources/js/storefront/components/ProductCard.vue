@@ -1,10 +1,10 @@
 <script>
-import { Heart, Play, Star } from 'lucide-vue-next';
+import { Heart, Play, Star, ShoppingBag } from 'lucide-vue-next';
 import { wishlist } from '../wishlist-store.js';
 
 export default {
     name: 'ProductCard',
-    components: { Heart, Play, Star },
+    components: { Heart, Play, Star, ShoppingBag },
     props: {
         product: { type: Object, required: true },
     },
@@ -12,6 +12,10 @@ export default {
         return { liked: false, hovering: false };
     },
     computed: {
+        /** Which pieces of social proof this product actually has. */
+        signals() {
+            return [this.product.rating, this.product.likes, this.product.purchases].filter(Boolean);
+        },
         video() { return this.product.video || null; },
         // Autoplaying, muted, looping, chrome-less YouTube embed for hover.
         youtubeHoverSrc() {
@@ -41,7 +45,7 @@ export default {
 <template>
     <router-link
         :to="`/shop/${product.handle}`"
-        class="block group relative"
+        class="block group relative border border-black/10 hover:border-gold/40 transition-colors"
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
     >
@@ -53,7 +57,7 @@ export default {
         >
             <Heart :class="['w-4 h-4 transition-colors', liked ? 'fill-gold text-gold' : 'text-black/55 hover:text-gold']" />
         </button>
-        <div class="relative aspect-[3/4] bg-cream-dark mb-2 overflow-hidden group-hover:opacity-90 transition-opacity">
+        <div class="relative aspect-[3/4] bg-cream-dark overflow-hidden group-hover:opacity-90 transition-opacity">
             <img
                 v-if="product.thumbnail"
                 :src="product.thumbnail"
@@ -93,16 +97,30 @@ export default {
                 <Play class="w-3 h-3 text-white fill-white" />
             </span>
         </div>
-        <p class="font-display text-sm leading-tight line-clamp-1 group-hover:text-gold transition-colors">
-            {{ product.title }}
-        </p>
-        <p v-if="product.subtitle" class="text-[10px] text-black/55 line-clamp-1">{{ product.subtitle }}</p>
-        <p class="text-xs text-black mt-0.5">{{ product.price_label || '—' }}</p>
-        <!-- The verdict, only once there is one. -->
-        <p v-if="product.rating" class="flex items-center gap-1 text-[11px] text-black/55 mt-1">
-            <Star class="w-3 h-3 text-gold fill-gold" />
-            <span class="font-medium text-black/75">{{ product.rating.average_label }}</span>
-            <span>({{ product.rating.count }})</span>
-        </p>
+        <div class="p-3">
+            <p class="font-display text-sm leading-tight line-clamp-1 group-hover:text-gold transition-colors">
+                {{ product.title }}
+            </p>
+            <p v-if="product.subtitle" class="text-[10px] text-black/55 line-clamp-1">{{ product.subtitle }}</p>
+            <p class="text-xs text-black mt-0.5">{{ product.price_label || '—' }}</p>
+
+            <!-- What other people made of it. Each part appears only once it's
+                 true, so a new piece shows a clean card rather than three zeros. -->
+            <p v-if="signals.length" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-black/55 mt-1.5">
+                <span v-if="product.rating" class="inline-flex items-center gap-1" :title="`${product.rating.average_label} out of 5 from ${product.rating.count} rating${product.rating.count === 1 ? '' : 's'}`">
+                    <Star class="w-3 h-3 text-gold fill-gold" />
+                    <span class="font-medium text-black/75">{{ product.rating.average_label }}</span>
+                    <span>({{ product.rating.count }})</span>
+                </span>
+                <span v-if="product.likes" class="inline-flex items-center gap-1" :title="`Loved by ${product.likes}`">
+                    <Heart class="w-3 h-3 text-gold fill-gold" />
+                    {{ product.likes }}
+                </span>
+                <span v-if="product.purchases" class="inline-flex items-center gap-1" :title="`${product.purchases} bought`">
+                    <ShoppingBag class="w-3 h-3 text-gold" />
+                    {{ product.purchases }} bought
+                </span>
+            </p>
+        </div>
     </router-link>
 </template>

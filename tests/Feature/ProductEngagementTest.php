@@ -260,6 +260,40 @@ class ProductEngagementTest extends TestCase
         $this->assertSame(1, $this->getJson('/api/store/products/dress/engagement')->json('summary.comments_count'));
     }
 
+    #[Test]
+    public function a_card_carries_only_the_proof_a_piece_has_actually_earned(): void
+    {
+        $c = $this->shopper();
+        $this->product();
+        DB::table('product_variants')->insert(['id' => 'var_1', 'product_id' => 'prod_1', 'title' => 'M', 'manage_inventory' => false, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('variant_prices')->insert(['id' => 'vp_1', 'variant_id' => 'var_1', 'currency_code' => 'usd', 'amount' => 9000, 'created_at' => now()]);
+
+        // A piece nobody has touched says nothing at all.
+        $card = fn () => collect($this->getJson('/api/store/products')->json('products'))->firstWhere('handle', 'dress');
+        $this->assertSame([null, 0, 0], [$card()['rating'], $card()['likes'], $card()['purchases']]);
+
+        $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => 4])->assertOk();
+        $this->as($c)->postJson('/api/account/products/dress/like')->assertOk();
+
+        Auth::forgetGuards();
+        $this->assertSame(['4.0', 1, 1, 0], [$card()['rating']['average_label'], $card()['rating']['count'], $card()['likes'], $card()['purchases']]);
+    }
+
+    #[Test]
+    public function bought_is_moved_by_real_money_and_taken_back_by_a_refund(): void
+    {
+        $this->product();
+        DB::table('orders')->insert(['id' => 'order_1', 'order_number' => 'BL-1', 'email' => 'a@b.test',
+            'payment_status' => 'paid', 'status' => 'pending', 'subtotal' => 18000, 'total' => 18000, 'currency_code' => 'usd', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('order_line_items')->insert(['id' => 'oli_1', 'order_id' => 'order_1', 'product_id' => 'prod_1',
+            'variant_id' => 'var_1', 'title' => 'Silk Gown', 'quantity' => 2, 'unit_price' => 9000]);
+        DB::table('products')->where('id', 'prod_1')->update(['purchases_count' => 2]);
+
+        \App\Services\OrderRefunds::refund(\App\Models\Order::find('order_1'), 'Changed her mind');
+
+        $this->assertSame(0, (int) DB::table('products')->where('id', 'prod_1')->value('purchases_count'));
+    }
+
     // ─── Trending ──────────────────────────────────────────────────────────
 
     #[Test]

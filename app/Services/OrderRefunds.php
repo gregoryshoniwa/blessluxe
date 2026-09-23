@@ -54,6 +54,14 @@ class OrderRefunds
 
             // 1. Restock inventory-managed variants line-by-line.
             foreach ($order->lineItems as $line) {
+                // A refunded sale is not a sale: take it back off the card's count.
+                if ($line->product_id) {
+                    DB::table('products')->where('id', $line->product_id)->update([
+                        // Never below zero — an order refunded after a manual reset would underflow.
+                        'purchases_count' => DB::raw('CASE WHEN purchases_count > ' . (int) $line->quantity . ' THEN purchases_count - ' . (int) $line->quantity . ' ELSE 0 END'),
+                    ]);
+                }
+
                 $variant = ProductVariant::find($line->variant_id);
                 if (! $variant || ! $variant->manage_inventory) continue;
                 ProductVariant::where('id', $variant->id)->update([

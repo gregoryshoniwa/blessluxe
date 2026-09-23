@@ -205,6 +205,11 @@ class PaymentOutcomes
                 if ($slotId = ($it['metadata']['pack_slot_id'] ?? null)) {
                     $slotLineIds[$slotId] = $lineId;
                 }
+                // Social proof on the card, and it has to be earned: only a paid
+                // order moves it, and a refund moves it back.
+                DB::table('products')->where('id', $variant->product_id)
+                    ->update(['purchases_count' => DB::raw('purchases_count + ' . (int) $it['quantity'])]);
+
                 // Decrement inventory if it's tracked, and flag the
                 // variant for a post-commit low-stock notification.
                 if ($variant->manage_inventory) {
