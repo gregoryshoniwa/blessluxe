@@ -79,6 +79,7 @@ Route::prefix('store')->group(function () {
         Route::get ('/products',                  [ProductController::class, 'index']);
         Route::post('/products/batch',            [ProductController::class, 'batch']);
         Route::get ('/site-links',                [SiteLinksController::class, 'index']);
+        Route::get ('/shop-info',                 [SiteLinksController::class, 'shopInfo']);
         Route::get ('/products/trending',         [ProductEngagementController::class, 'trending']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
         // Reading what shoppers said needs no account — a rating nobody can see is worth nothing.
@@ -471,6 +472,8 @@ Route::middleware('web')->prefix('admin')->group(function () {
 
         Route::get('/site-links', [SiteLinksController::class, 'admin']);
         Route::put('/site-links', [SiteLinksController::class, 'update']);
+        Route::get('/shop-info', [SiteLinksController::class, 'adminShopInfo']);
+        Route::put('/shop-info', [SiteLinksController::class, 'updateShopInfo']);
 
         Route::get('/bees', [AdminBeesController::class, 'index']);
         Route::put('/bees', [AdminBeesController::class, 'update']);

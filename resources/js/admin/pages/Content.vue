@@ -12,6 +12,8 @@ export default {
             tab: 'hero',
             siteLinks: [],           // every fixed nav/footer link with its state
             savingLinks: false,
+            shopInfo: [],            // the details the Contact and policy pages quote
+            savingInfo: false,
             announcements: [],
             loading: true,
             showForm: false,
@@ -40,6 +42,17 @@ export default {
             finally { this.savingLinks = false; }
         },
         linksIn(group) { return this.siteLinks.filter((l) => l.group === group); },
+        /** Saved together — they're one set of facts, not eight settings. */
+        async saveInfo() {
+            this.savingInfo = true;
+            try {
+                const info = {};
+                for (const f of this.shopInfo) info[f.key] = f.value ?? '';
+                this.shopInfo = (await api.put('/api/admin/shop-info', { info })).fields || this.shopInfo;
+                toast('Contact details saved');
+            } catch { toast('Could not save those.', { tone: 'error' }); }
+            finally { this.savingInfo = false; }
+        },
         emptyForm() {
             return {
                 position: 'hero', media_type: 'image', media_url: '',
@@ -53,6 +66,7 @@ export default {
             try {
                 try {
                     this.siteLinks = (await api.get('/api/admin/site-links')).links || [];
+                    this.shopInfo = (await api.get('/api/admin/shop-info')).fields || [];
                 } catch { this.siteLinks = []; }
                 const d = await api.get('/api/admin/announcements');
                 this.announcements = d.announcements;
@@ -117,7 +131,7 @@ export default {
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Storefront content</p>
                 <h1 class="text-2xl font-semibold">Announcements & Hero Slides</h1>
             </div>
-            <button v-if="tab !== 'links'" @click="startNew" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark inline-flex items-center gap-2">
+            <button v-if="tab === 'hero' || tab === 'top_bar'" @click="startNew" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark inline-flex items-center gap-2">
                 <Plus class="w-4 h-4" /> New {{ tab === 'hero' ? 'Slide' : 'Bar' }}
             </button>
         </header>
@@ -126,7 +140,29 @@ export default {
             <button @click="tab = 'hero'" :class="['px-4 py-2', tab === 'hero' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Hero slides</button>
             <button @click="tab = 'top_bar'" :class="['px-4 py-2', tab === 'top_bar' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Top bar</button>
             <button @click="tab = 'links'" :class="['px-4 py-2', tab === 'links' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Menu & footer links</button>
+            <button @click="tab = 'info'" :class="['px-4 py-2', tab === 'info' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Contact details</button>
         </div>
+
+        <!-- What the Contact page offers and the policy pages quote. A blank
+             field is simply not shown to shoppers: a phone number that rings
+             out is worse than no phone number. -->
+        <section v-if="tab === 'info'" class="bg-white border border-zinc-200">
+            <p class="px-5 py-4 text-sm text-zinc-600 border-b border-zinc-200 max-w-3xl">
+                These appear on the Contact page and in the terms. Leave anything blank that you don't want offered — shoppers only see what's filled in.
+            </p>
+            <div class="p-5 grid sm:grid-cols-2 gap-4">
+                <label v-for="f in shopInfo" :key="f.key" class="flex flex-col gap-1">
+                    <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
+                    <input v-model="f.value" type="text" maxlength="300" class="border border-zinc-300 px-3 py-2 text-sm" />
+                    <span class="text-xs text-zinc-500">{{ f.hint }}</span>
+                </label>
+            </div>
+            <div class="px-5 pb-5 flex justify-end">
+                <button @click="saveInfo" :disabled="savingInfo" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-50">
+                    {{ savingInfo ? 'Saving…' : 'Save details' }}
+                </button>
+            </div>
+        </section>
 
         <!-- Which fixed links the shop shows. Everything optional ships hidden:
              most of these point at pages that don't exist yet, and Hive and the

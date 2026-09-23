@@ -35,9 +35,10 @@ class SiteLinks
         'faq'       => ['FAQ',                 '/faq',            'help',    true],
         'track'     => ['Track an order',      '/track',          'help',    true],
         'shipping'  => ['Shipping',            '/help/shipping',  'help',    false],
-        'returns'   => ['Returns',             '/help/returns',   'help',    false],
+        'returns'   => ['Returns',             '/help/returns',   'help',    true],
         'sizing'    => ['Size guide',          '/help/sizing',    'help',    false],
-        'contact'   => ['Contact',             '/contact',        'help',    false],
+        'contact'   => ['Contact',             '/contact',        'help',    true],
+        'terms'     => ['Terms & Conditions',  '/terms',          'help',    true],
 
         // Footer — company.
         'affiliate' => ['Affiliate programme', '/affiliate',      'company', true],

@@ -24,6 +24,9 @@ class SeoController extends Controller
     private const STATIC_META = [
         ''            => ['BLESSLUXE — Luxury Atelier', 'Curated drops, group buys and Bees loyalty for the BLESSLUXE woman.'],
         'shop'        => ['Shop — BLESSLUXE',           'Browse the latest BLESSLUXE arrivals across dresses, tops, bags and more.'],
+        'help/returns' => ['Returns — BLESSLUXE',       'Unworn, tags on, within 30 days — and you can start it yourself from your account.'],
+        'contact'      => ['Contact — BLESSLUXE',       'WhatsApp, email or phone. We reply within one working day.'],
+        'terms'        => ['Terms & Conditions — BLESSLUXE', 'The agreement between us: prices, delivery, returns, series, Bees and the Hive.'],
         'shop/series' => ['Series — BLESSLUXE',         'Curated group buys. Claim your size before the series fills.'],
         'cart'        => ['Cart — BLESSLUXE',           'Review your bag before checkout.'],
         'wishlist'    => ['Wishlist — BLESSLUXE',       'Pieces you\'ve saved for later.'],

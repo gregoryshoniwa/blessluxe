@@ -193,6 +193,8 @@ The fixed nav entries and the footer's help/company links are staff-switched at 
 - **Everything optional ships HIDDEN**, for two different reasons: Hive and Show Room are built but are the owner's to launch, and most footer links (`/contact`, `/about`, `/help/*`) point at pages **the SPA has no route for** — they land on "page not found", and a link to a 404 costs more trust than a missing link. Only `series`, `faq`, `track` and `affiliate` are on by default, because only those work.
 - **Hiding a link never blocks its route**: `/hive` still opens for anyone with the address. This is the menu, not a lock — pinned by a test.
 - **Sale is NOT in here.** It's a heading like any other; staff hide it by unflagging the heading.
+- **Returns, Contact and Terms are real pages** (`/help/returns`, `/contact`, `/terms`) and ship switched on. Their facts come from [ShopInfo](app/Services/ShopInfo.php) — contact channels staff fill in at `/admin/content` → Contact details (a blank one is never offered: a number that rings out is worse than none), and `ShopInfo::policy()` reads the return window, Bees rate and delivery promises **off the constants the code enforces**, so a policy page can't quote a rule the software doesn't keep.
+- **The terms are a serious draft, not legal advice.** They were written against what this app actually does; the clauses a lawyer should look at first are **Bees** (§7 — the closed loop is what keeps them outside stored-value rules), **Series** (§6 — money is held before the goods are ordered) and **the Hive** (§8 — what members publish, and the licence we take). If Bees ever become purchasable or withdrawable, §7 is wrong and gifting needs advice before it ships.
 
 ### Footers and endless scrolling
 
