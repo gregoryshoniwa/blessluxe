@@ -1,4 +1,5 @@
 <script>
+import { siteLinks } from '../site-links.js';
 /**
  * One line of the links people actually look for while shopping — the returns
  * policy, the size guide, how to reach us. The full black footer is the home
@@ -9,23 +10,20 @@
 export default {
     name: 'FooterSlim',
     data() {
-        return {
-            links: [
-                { label: 'FAQ', href: '/faq' },
-                { label: 'Track an order', href: '/track' },
-                { label: 'Shipping', href: '/help/shipping' },
-                { label: 'Returns', href: '/help/returns' },
-                { label: 'Size guide', href: '/help/sizing' },
-                { label: 'Contact', href: '/contact' },
-            ],
-            year: new Date().getFullYear(),
-        };
+        return { nav: siteLinks.state, year: new Date().getFullYear() };
     },
+    computed: {
+        // Help first, then company — only what staff have switched on. Most of
+        // these point at pages that don't exist yet, so they stay off until
+        // there's something on the other end.
+        links() { return [...this.nav.help, ...this.nav.company]; },
+    },
+    mounted() { siteLinks.load(); },
 };
 </script>
 
 <template>
-    <footer class="border-t border-gold/15 mt-auto">
+    <footer v-if="links.length" class="border-t border-gold/15 mt-auto">
         <div class="max-w-[1400px] mx-auto px-[5%] py-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-black/55">
             <a
                 v-for="l in links"

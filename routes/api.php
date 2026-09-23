@@ -52,6 +52,7 @@ use App\Http\Controllers\Api\HeadingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductEngagementController;
+use App\Http\Controllers\Api\SiteLinksController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -77,6 +78,7 @@ Route::prefix('store')->group(function () {
     Route::middleware('web')->group(function () {
         Route::get ('/products',                  [ProductController::class, 'index']);
         Route::post('/products/batch',            [ProductController::class, 'batch']);
+        Route::get ('/site-links',                [SiteLinksController::class, 'index']);
         Route::get ('/products/trending',         [ProductEngagementController::class, 'trending']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
         // Reading what shoppers said needs no account — a rating nobody can see is worth nothing.
@@ -466,6 +468,9 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/regions',       [AdminRegionController::class, 'store']);
         Route::put   ('/regions/{id}',  [AdminRegionController::class, 'update']);
         Route::delete('/regions/{id}',  [AdminRegionController::class, 'destroy']);
+
+        Route::get('/site-links', [SiteLinksController::class, 'admin']);
+        Route::put('/site-links', [SiteLinksController::class, 'update']);
 
         Route::get('/bees', [AdminBeesController::class, 'index']);
         Route::put('/bees', [AdminBeesController::class, 'update']);

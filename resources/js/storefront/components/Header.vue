@@ -2,6 +2,7 @@
 import SearchOverlay from './SearchOverlay.vue';
 import { affiliateStore } from '../affiliate-store.js';
 import { authStore } from '../auth-store.js';
+import { siteLinks } from '../site-links.js';
 import { cart, state as bagState } from '../cart-store.js';
 import MobileNavDrawer from './MobileNavDrawer.vue';
 import NotificationsBell from './NotificationsBell.vue';
@@ -15,6 +16,7 @@ export default {
             activeMenu: null,
             headings: [],
             bag: bagState,        // the one bag: badge here, lines in the drawer
+            nav: siteLinks.state, // which fixed entries staff have switched on
             wishCount: 0,
             // Shared, so the menu, Home and the Series page all agree on whose
             // shop this is (see affiliate-store.js).
@@ -34,6 +36,12 @@ export default {
     computed: {
         affiliate() { return this.shop.affiliate; },
         curated() { return affiliateStore.isCurated(); },
+        /** Staff switch these on at /admin/content; until then the menu hasn't got them. */
+        showsLink() {
+            const on = new Set([...this.nav.header].map((l) => l.key));
+
+            return (key) => on.has(key);
+        },
         // Members-only menu entries (Show Room) are only offered to members.
         signedIn() { return this.auth.signedIn; },
         navLinks() {
@@ -51,6 +59,7 @@ export default {
         },
     },
     mounted() {
+        siteLinks.load();
         window.addEventListener('scroll', this.handleScroll, { passive: true });
         authStore.refresh();
         window.addEventListener('blessluxe:cart-updated', this.fetchCartCount);
@@ -173,7 +182,7 @@ export default {
                     <!-- Not in a curated affiliate shop: packs are BLESSLUXE's
                          own drops, never part of someone's hand-picked line. -->
                     <router-link
-                        v-if="!curated"
+                        v-if="!curated && showsLink('series')"
                         to="/shop/series"
                         active-class="text-gold"
                         class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
@@ -219,6 +228,7 @@ export default {
                     </div>
 
                     <router-link
+                        v-if="showsLink('hive')"
                         to="/hive"
                         active-class="text-gold"
                         class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
@@ -229,7 +239,7 @@ export default {
                     <!-- Show Room — members only. Offering it to a visitor who
                          isn't signed in just walks them into a login wall. -->
                     <div
-                        v-if="signedIn"
+                        v-if="signedIn && showsLink('showroom')"
                         class="relative"
                         @mouseenter="activeMenu = 'showroom'"
                         @mouseleave="activeMenu = null"

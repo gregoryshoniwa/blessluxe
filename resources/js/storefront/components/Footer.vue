@@ -1,41 +1,19 @@
 <script>
+import { siteLinks } from '../site-links.js';
 export default {
     name: 'StoreFooter',
     data() {
         return {
             year: new Date().getFullYear(),
-            footerSections: [
-                {
-                    title: 'Shop',
-                    links: [
-                        { label: 'New Arrivals', href: '/shop?new=true' },
-                        { label: 'Women', href: '/shop?category=women' },
-                        { label: 'Men', href: '/shop?category=men' },
-                        { label: 'Children', href: '/shop?category=children' },
-                        { label: 'Sale', href: '/shop?sale=true' },
-                    ],
-                },
-                {
-                    title: 'Help',
-                    links: [
-                        { label: 'FAQ', href: '/faq' },
-                        { label: 'Track an order', href: '/track' },
-                        { label: 'Shipping', href: '/help/shipping' },
-                        { label: 'Returns', href: '/help/returns' },
-                        { label: 'Size Guide', href: '/help/sizing' },
-                        { label: 'Contact', href: '/contact' },
-                    ],
-                },
-                {
-                    title: 'Company',
-                    links: [
-                        { label: 'About', href: '/about' },
-                        { label: 'Sustainability', href: '/sustainability' },
-                        { label: 'Careers', href: '/careers' },
-                        { label: 'Press', href: '/press' },
-                        { label: 'Affiliate programme', href: '/affiliate' },
-                    ],
-                },
+            nav: siteLinks.state,
+            // Only the Shop column is fixed; Help and Company are whatever staff
+            // have switched on, since most of those pages don't exist yet.
+            shopSection: [
+                { label: 'New Arrivals', href: '/shop?new=true' },
+                { label: 'Women', href: '/shop?category=women' },
+                { label: 'Men', href: '/shop?category=men' },
+                { label: 'Children', href: '/shop?category=children' },
+                { label: 'Sale', href: '/shop?sale=true' },
             ],
             socials: [
                 { label: 'Instagram', href: 'https://instagram.com/blessluxe' },
@@ -45,6 +23,17 @@ export default {
             ],
         };
     },
+    computed: {
+        /** Shop, then whichever of Help and Company have anything in them. */
+        footerSections() {
+            return [
+                { title: 'Shop', links: this.shopSection },
+                { title: 'Help', links: this.nav.help },
+                { title: 'Company', links: this.nav.company },
+            ].filter((s) => s.links.length);
+        },
+    },
+    mounted() { siteLinks.load(); },
 };
 </script>
 

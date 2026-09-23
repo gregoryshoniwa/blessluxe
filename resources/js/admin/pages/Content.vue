@@ -1,6 +1,6 @@
 <script>
 import { api } from '../../lib/api.js';
-import { confirmDialog } from '../../lib/dialog.js';
+import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
 import { Pencil, Trash2, Plus, Image as ImageIcon, Upload } from 'lucide-vue-next';
 
@@ -10,6 +10,8 @@ export default {
     data() {
         return {
             tab: 'hero',
+            siteLinks: [],           // every fixed nav/footer link with its state
+            savingLinks: false,
             announcements: [],
             loading: true,
             showForm: false,
@@ -27,6 +29,17 @@ export default {
     },
     mounted() { this.fetchAll(); },
     methods: {
+        /** One switch at a time — there is no Save button to forget. */
+        async toggleLink(l) {
+            this.savingLinks = true;
+            try {
+                const d = await api.put('/api/admin/site-links', { links: { [l.key]: !l.shown } });
+                this.siteLinks = d.links || this.siteLinks;
+                toast(`${l.label} is now ${l.shown ? 'hidden' : 'showing'}`);
+            } catch { toast('Could not change that.', { tone: 'error' }); }
+            finally { this.savingLinks = false; }
+        },
+        linksIn(group) { return this.siteLinks.filter((l) => l.group === group); },
         emptyForm() {
             return {
                 position: 'hero', media_type: 'image', media_url: '',
@@ -38,6 +51,9 @@ export default {
         async fetchAll() {
             this.loading = true;
             try {
+                try {
+                    this.siteLinks = (await api.get('/api/admin/site-links')).links || [];
+                } catch { this.siteLinks = []; }
                 const d = await api.get('/api/admin/announcements');
                 this.announcements = d.announcements;
             } finally { this.loading = false; }
@@ -101,7 +117,7 @@ export default {
                 <p class="text-xs tracking-widest uppercase text-zinc-500">Storefront content</p>
                 <h1 class="text-2xl font-semibold">Announcements & Hero Slides</h1>
             </div>
-            <button @click="startNew" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark inline-flex items-center gap-2">
+            <button v-if="tab !== 'links'" @click="startNew" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark inline-flex items-center gap-2">
                 <Plus class="w-4 h-4" /> New {{ tab === 'hero' ? 'Slide' : 'Bar' }}
             </button>
         </header>
@@ -109,7 +125,34 @@ export default {
         <div class="flex gap-1 mb-6 text-xs tracking-widest uppercase border-b border-zinc-200">
             <button @click="tab = 'hero'" :class="['px-4 py-2', tab === 'hero' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Hero slides</button>
             <button @click="tab = 'top_bar'" :class="['px-4 py-2', tab === 'top_bar' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Top bar</button>
+            <button @click="tab = 'links'" :class="['px-4 py-2', tab === 'links' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Menu & footer links</button>
         </div>
+
+        <!-- Which fixed links the shop shows. Everything optional ships hidden:
+             most of these point at pages that don't exist yet, and Hive and the
+             Show Room are the owner's to launch. -->
+        <section v-if="tab === 'links'" class="bg-white border border-zinc-200">
+            <p class="px-5 py-4 text-sm text-zinc-600 border-b border-zinc-200 max-w-3xl">
+                Switch a link on when its page is ready. Hiding one only takes it out of the menu — anyone with the address can still open it.
+            </p>
+            <div v-for="group in ['header', 'help', 'company']" :key="group">
+                <h2 class="px-5 py-3 border-b border-zinc-200 text-xs tracking-widest uppercase text-zinc-500 bg-zinc-50">
+                    {{ group === 'header' ? 'Main menu' : group === 'help' ? 'Footer · Help' : 'Footer · Company' }}
+                </h2>
+                <label
+                    v-for="l in linksIn(group)"
+                    :key="l.key"
+                    class="flex items-center gap-4 px-5 py-3 border-b border-zinc-100 last:border-0 cursor-pointer hover:bg-zinc-50"
+                >
+                    <input type="checkbox" :checked="l.shown" :disabled="savingLinks" @change="toggleLink(l)" class="accent-gold w-4 h-4" />
+                    <span class="text-sm font-medium min-w-[12rem]">{{ l.label }}</span>
+                    <code class="text-xs text-zinc-500">{{ l.href }}</code>
+                    <span :class="['ml-auto text-[10px] tracking-widest uppercase px-2 py-1', l.shown ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500']">
+                        {{ l.shown ? 'Showing' : 'Hidden' }}
+                    </span>
+                </label>
+            </div>
+        </section>
 
         <section v-if="showForm" class="bg-white border border-gold/30 p-5 mb-6">
             <h2 class="font-semibold mb-3">{{ editingId ? 'Edit slide' : 'New slide' }}</h2>

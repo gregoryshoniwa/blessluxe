@@ -1,4 +1,5 @@
 <script>
+import { siteLinks } from '../site-links.js';
 import { X, User, Heart, ShoppingBag, Search, ChevronRight } from 'lucide-vue-next';
 import { api } from '../../lib/api.js';
 
@@ -16,6 +17,7 @@ export default {
     emits: ['close', 'open-search'],
     data() {
         return {
+            nav: siteLinks.state,   // which fixed entries staff have switched on
             expanded: null,
             customer: null,
             showroomMenu: [
@@ -43,6 +45,9 @@ export default {
     },
     beforeUnmount() {
         document.body.style.overflow = '';
+    },
+    computed: {
+        showsLink() { const on = new Set(this.nav.header.map((l) => l.key)); return (k) => on.has(k); },
     },
     methods: {
         close() { this.$emit('close'); },
@@ -74,7 +79,7 @@ export default {
 
                     <!-- Primary nav -->
                     <nav class="py-2">
-                        <router-link v-if="showPacks" to="/shop/series" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
+                        <router-link v-if="showPacks && showsLink('series')" to="/shop/series" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
                             Series
                         </router-link>
                         <div v-for="link in navLinks" :key="link.handle">
@@ -101,7 +106,7 @@ export default {
                             </div>
                         </div>
 
-                        <router-link to="/hive" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
+                        <router-link v-if="showsLink('hive')" to="/hive" @click="close" class="block px-5 py-3 text-sm font-body tracking-widest uppercase hover:text-gold transition-colors">
                             Hive
                         </router-link>
 

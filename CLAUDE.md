@@ -186,6 +186,14 @@ A **series** is a group buy: each buyer claims one size slot, and when every slo
 - **A series wears the piece's reputation, not its own** (`PackController::reputation()`): the product's rating, hearts, sales and sourcing promise. Never start a second scoreboard for a campaign.
 - [ShareButton](resources/js/storefront/components/ShareButton.vue) uses the phone's share sheet where there is one and copies the link otherwise — sharing is how a series fills.
 
+### What's in the menu — [SiteLinks](app/Services/SiteLinks.php)
+
+The fixed nav entries and the footer's help/company links are staff-switched at `/admin/content` → **Menu & footer links** (`site.links`, self-seeding like Bees and Payments; `GET /api/store/site-links` feeds [site-links.js](resources/js/storefront/site-links.js), which the header, both footers and the mobile drawer share).
+
+- **Everything optional ships HIDDEN**, for two different reasons: Hive and Show Room are built but are the owner's to launch, and most footer links (`/contact`, `/about`, `/help/*`) point at pages **the SPA has no route for** — they land on "page not found", and a link to a 404 costs more trust than a missing link. Only `series`, `faq`, `track` and `affiliate` are on by default, because only those work.
+- **Hiding a link never blocks its route**: `/hive` still opens for anyone with the address. This is the menu, not a lock — pinned by a test.
+- **Sale is NOT in here.** It's a heading like any other; staff hide it by unflagging the heading.
+
 ### Footers and endless scrolling
 
 - **The full black footer is the home page's alone**; every other page ends in [FooterSlim](resources/js/storefront/components/FooterSlim.vue), one line of FAQ · Track · Shipping · Returns · Size guide · Contact. Those links exist nowhere else — the header carries none of them — and "what if it doesn't fit?" is asked on a product page, not the home page. Don't delete that line without putting them somewhere.
