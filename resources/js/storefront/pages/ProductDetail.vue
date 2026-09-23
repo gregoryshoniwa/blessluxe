@@ -3,10 +3,11 @@ import { api } from '../../lib/api.js';
 import ProductStrip from '../components/ProductStrip.vue';
 import ProductTryOns from '../components/hive/ProductTryOns.vue';
 import { recentlyViewed } from '../recently-viewed.js';
+import { Check, ArrowRight } from 'lucide-vue-next';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip, ProductTryOns },
+    components: { ProductStrip, ProductTryOns, Check, ArrowRight },
     data() {
         return {
             product: null,
@@ -15,7 +16,11 @@ export default {
             selectedVariantId: null,
             quantity: 1,
             adding: false,
-            justAdded: false,
+            // Two different lifetimes: the button says "Added ✓" for a moment so
+            // it can go back to adding another, while the ways onward STAY —
+            // a confirmation that disappears is one nobody manages to click.
+            flash: false,
+            inBag: 0,
             addError: '',
             heroHovering: false,
             // Expose the module so the template can read `recentlyViewed.ids(...)`.
@@ -66,6 +71,7 @@ export default {
             handler() { this.fetchProduct(); },
         },
     },
+    beforeUnmount() { clearTimeout(this.flashTimer); },
     methods: {
         async fetchProduct() {
             this.loading = true;
@@ -90,16 +96,18 @@ export default {
             if (!this.selectedVariant) return;
             this.adding = true;
             this.addError = '';
-            this.justAdded = false;
+            this.flash = false;
             try {
-                await api.post('/api/store/cart/line-items', {
+                const { cart } = await api.post('/api/store/cart/line-items', {
                     variant_id: this.selectedVariant.id,
                     quantity:   this.quantity,
                 });
-                this.justAdded = true;
+                this.inBag = cart?.item_count || this.inBag + this.quantity;
+                this.flash = true;
                 // Let the header refresh its cart-count badge.
                 window.dispatchEvent(new CustomEvent('blessluxe:cart-updated'));
-                setTimeout(() => { this.justAdded = false; }, 1800);
+                clearTimeout(this.flashTimer);
+                this.flashTimer = setTimeout(() => { this.flash = false; }, 1800);
             } catch (e) {
                 this.addError = e.payload?.error || 'Could not add to bag.';
             } finally {
@@ -222,12 +230,27 @@ export default {
                     :disabled="!inStock || adding"
                     class="w-full bg-gold text-white py-4 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                    {{ adding ? 'Adding…' : justAdded ? 'Added to Bag ✓' : inStock ? 'Add to Bag' : 'Unavailable' }}
+                    {{ adding ? 'Adding…' : flash ? 'Added to Bag ✓' : inStock ? 'Add to Bag' : 'Unavailable' }}
                 </button>
                 <p v-if="addError" class="text-sm text-red-600 mt-3">{{ addError }}</p>
-                <router-link v-if="justAdded" to="/cart" class="block text-center text-xs tracking-widest uppercase text-gold-dark hover:text-gold mt-3 underline">
-                    View cart →
-                </router-link>
+
+                <!-- Stays put until they leave the page: carry on browsing, look
+                     at the bag, or go and pay. -->
+                <div v-if="inBag > 0" class="border border-gold/30 bg-cream-dark/40 p-4 mt-3">
+                    <p class="flex items-center justify-center gap-2 text-sm mb-3">
+                        <Check class="w-4 h-4 text-emerald-600" />
+                        In your bag · {{ inBag }} item{{ inBag === 1 ? '' : 's' }}
+                    </p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <router-link to="/cart" class="flex items-center justify-center min-h-11 border border-black/20 px-3 py-3 text-[10px] font-semibold tracking-[0.2em] uppercase hover:border-black/40 transition-colors">
+                            View bag
+                        </router-link>
+                        <router-link to="/checkout" class="flex items-center justify-center gap-1.5 min-h-11 bg-gold text-white px-3 py-3 text-[10px] font-semibold tracking-[0.2em] uppercase hover:bg-gold-dark transition-colors">
+                            Checkout
+                            <ArrowRight class="w-3.5 h-3.5" />
+                        </router-link>
+                    </div>
+                </div>
             </div>
         </div>
 
