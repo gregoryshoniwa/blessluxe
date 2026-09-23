@@ -11,6 +11,6 @@ never recoloured, and nothing here is hot-linked from a third party.
 | `ecocash.svg` | Wordmark set in the system's bold sans, in EcoCash's own blue `#075CA8` and red `#EB2528` (sampled from their mark). EcoCash publish no open asset — if they send you an official SVG, drop it in here and nothing else changes. |
 
 Adding another (OneMoney, InnBucks, ZIPIT): put `<method>.svg` here and add the
-method to `LOGOS` in `resources/js/storefront/pages/CheckoutPayment.vue`. A
-method with no file falls back to its line icon, so a missing logo is never a
-broken image.
+method to `MARKS` in `resources/js/lib/payment-marks.js` — the payment step and
+the waiting page both read it, so one line covers both. A method with no file
+falls back to its line icon, so a missing logo is never a broken image.

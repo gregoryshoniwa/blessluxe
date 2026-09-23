@@ -2,6 +2,7 @@
 import { api } from '../../lib/api.js';
 import { checkoutStore } from '../checkout-store.js';
 import { Loader2 } from 'lucide-vue-next';
+import { marksFor } from '../../lib/payment-marks.js';
 
 export default {
     name: 'PaymentReturn',
@@ -12,6 +13,7 @@ export default {
             providerStatus: null,
             providerLabel: '',
             instruction: null,
+            method: null,              // which way of paying, so we can show its mark
             reason: null,              // the gateway's own words when it failed
             attempts: 0,
             interval: null,
@@ -22,6 +24,7 @@ export default {
         reference() {
             return this.$route.query.reference || '';
         },
+        marks() { return marksFor(this.method); },
     },
     mounted() {
         if (!this.reference) {
@@ -54,6 +57,7 @@ export default {
                 this.providerStatus = s.provider_status;
                 this.providerLabel = s.provider_label || '';
                 this.instruction = s.instruction || null;
+                this.method = s.method || null;
                 this.reason = s.reason || null;
                 if (s.status === 'paid' && !this.cleared) {
                     this.cleared = true;
@@ -79,6 +83,9 @@ export default {
             </template>
 
             <template v-else-if="state === 'failed' || state === 'cancelled'">
+                <span v-if="marks.length" class="flex items-center justify-center gap-4 mb-4 opacity-60">
+                    <img v-for="m in marks" :key="m.src" :src="m.src" :alt="m.alt" class="h-6 w-auto max-w-[6.5rem] object-contain" />
+                </span>
                 <h1 class="font-display text-2xl tracking-widest uppercase mb-2">{{ state === 'cancelled' ? 'Payment cancelled' : "Payment didn't go through" }}</h1>
                 <p class="text-sm text-black/65 mb-1">
                     {{ reason ? `${providerLabel || 'Your payment provider'} said: ${reason}.` : (state === 'cancelled' ? 'The payment was cancelled before it completed.' : "Your payment provider couldn't complete this transaction.") }}
@@ -106,6 +113,9 @@ export default {
             </template>
 
             <template v-else>
+                <span v-if="marks.length" class="flex items-center justify-center gap-4 mb-4">
+                    <img v-for="m in marks" :key="m.src" :src="m.src" :alt="m.alt" class="h-6 w-auto max-w-[6.5rem] object-contain" />
+                </span>
                 <Loader2 class="w-6 h-6 text-gold animate-spin mx-auto mb-3" />
                 <p class="font-script text-3xl text-gold mb-2">Just a moment</p>
                 <h1 class="font-display text-2xl tracking-widest uppercase mb-2">{{ instruction ? 'Approve on your phone' : 'Confirming payment' }}</h1>

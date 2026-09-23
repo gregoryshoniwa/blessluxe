@@ -2,15 +2,8 @@
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
+import { marksFor } from '../../lib/payment-marks.js';
 import { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
-
-// Acceptance marks, by the method they stand for. A method with no entry falls
-// back to its line icon, so a missing file is never a broken image. Files and
-// provenance: public/payments/README.md
-const LOGOS = {
-    ecocash: [{ src: '/payments/ecocash.svg', alt: 'EcoCash' }],
-    card:    [{ src: '/payments/visa.svg', alt: 'Visa' }, { src: '/payments/mastercard.svg', alt: 'Mastercard' }],
-};
 
 export default {
     name: 'CheckoutPayment',
@@ -145,7 +138,7 @@ export default {
         },
         phoneLooksValid(v) { return /\d{9,}/.test(String(v || '').replace(/\D/g, '')); },
         icon(o) { return { smartphone: 'Smartphone', wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard' }[o.icon] || 'Shield'; },
-        logos(o) { return LOGOS[o.method] || []; },
+        logos(o) { return marksFor(o.method); },
         pct(n) { return String(Number(n)).replace(/\.0+$/, ''); },
         async pay() {
             if (!this.chosen) return;
