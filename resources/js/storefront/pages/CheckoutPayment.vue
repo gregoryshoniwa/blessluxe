@@ -303,10 +303,6 @@ export default {
                             <input v-model.trim="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="077 123 4567" class="w-full sm:w-72 border border-black/15 px-3 py-2.5 text-sm focus:outline-none focus:border-gold" />
                             <p v-if="phoneError" class="text-xs text-red-600 mt-1">{{ phoneError }}</p>
                         </div>
-                        <p class="flex items-center gap-2 text-xs text-black/55 mt-3">
-                            <Lock class="w-3 h-3" />
-                            All transactions are encrypted end-to-end.
-                        </p>
                     </div>
 
                     <p v-if="error" class="text-sm text-red-600 mt-4">{{ error }}</p>
@@ -368,6 +364,10 @@ export default {
                             {{ payLabel }}
                             <ArrowRight class="w-4 h-4" />
                         </button>
+                        <p class="flex items-center justify-center gap-2 text-xs text-black/55 mt-3">
+                            <Lock class="w-3 h-3" />
+                            All transactions are encrypted end-to-end.
+                        </p>
                     </div>
                 </aside>
             </div>
