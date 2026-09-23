@@ -26,7 +26,7 @@ class Couriers
      * here, once, because the card, the product page and the bag all say it.
      */
     public const PROMISE = [
-        self::LOCAL  => ['label' => 'In Zimbabwe', 'eta' => 'Ready in a day', 'note' => "Already in the country — delivered same day or the next."],
+        self::LOCAL  => ['label' => 'In Zimbabwe', 'eta' => 'Available now', 'note' => "Already in the country — delivered same day or the next."],
         self::IMPORT => ['label' => 'Imported',    'eta' => '3–5 days',       'note' => 'Brought in for you by your chosen courier — about 3 to 5 days.'],
     ];
 

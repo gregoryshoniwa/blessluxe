@@ -199,7 +199,7 @@ class ProductEngagement
             'lowest'  => $q->orderBy('r.stars')->orderByDesc('c.created_at'),
             default   => $q->orderByDesc('c.created_at'),
         };
-        $q->orderByDesc('c.id');                              // a stable tiebreak, always
+        $q->orderByDesc('c.id');                              // ULIDs, so this tiebreak is chronological
 
         $total = (clone $q)->getCountForPagination();
         $rows  = $q->forPage($page, $limit)->get();
@@ -291,7 +291,10 @@ class ProductEngagement
         if (mb_strlen($body) < $min) return "Tell us a little more — at least {$min} characters.";
         if (mb_strlen($body) > self::MAX_LENGTH) $body = mb_substr($body, 0, self::MAX_LENGTH);
 
-        $id = 'pcom_' . Str::random(16);
+        // A ULID, not a random string: reviews written in the same second must
+        // still come back in the order they were written, and the id is the
+        // tiebreak the list sorts on. Same reasoning as chat message ids.
+        $id = 'pcom_' . Str::ulid();
         DB::transaction(function () use ($id, $customerId, $productId, $body) {
             DB::table('product_comments')->insert([
                 'id' => $id, 'product_id' => $productId, 'customer_id' => $customerId,

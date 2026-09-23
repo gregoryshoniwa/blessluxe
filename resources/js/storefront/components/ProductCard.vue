@@ -61,7 +61,7 @@ export default {
             <!-- How soon it can be here: the other half of the price decision. -->
             <span
                 v-if="product.sourcing"
-                :class="['absolute top-0 left-0 z-10 inline-flex items-center gap-1 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
+                :class="['absolute top-0 left-0 z-10 inline-flex items-center justify-center gap-1 min-w-[7.25rem] px-2 py-1 text-[9px] font-semibold tracking-[0.12em] uppercase text-white',
                          product.sourcing.kind === 'local' ? 'bg-emerald-600/95' : 'bg-black/70 backdrop-blur-sm']"
                 :title="product.sourcing.note"
             >

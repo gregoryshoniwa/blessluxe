@@ -303,7 +303,7 @@ class ProductEngagementTest extends TestCase
 
         $cards = collect($this->getJson('/api/store/products')->json('products'))->keyBy('handle');
 
-        $this->assertSame(['local', 'Ready in a day'], [$cards['dress']['sourcing']['kind'], $cards['dress']['sourcing']['eta']]);
+        $this->assertSame(['local', 'Available now'], [$cards['dress']['sourcing']['kind'], $cards['dress']['sourcing']['eta']]);
         $this->assertSame(['import', '3–5 days'], [$cards['imported-gown']['sourcing']['kind'], $cards['imported-gown']['sourcing']['eta']]);
 
         // The product page says the same thing, from the same place.
