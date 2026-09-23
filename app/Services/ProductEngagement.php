@@ -14,27 +14,80 @@ use Illuminate\Support\Str;
  *   - paid ONCE per customer per product per action, for ever. The promise is a
  *     row in `product_engagement_rewards`, not the rating/like/comment, so
  *     unliking and liking again, or deleting and re-posting, earns nothing.
- *   - at most DAILY_PAID_ACTIONS paid actions a day per customer. Past that the
+ *   - at most `daily_cap` paid actions a day per customer. Past that the
  *     action still happens, it just pays 0 — never a refusal, which would read
  *     as a bug to someone who only wanted to say something.
- *   - a comment has to be worth its Bees: MIN_LENGTH characters, and only the
+ *   - a comment has to be worth its Bees: `min_length` characters, and only the
  *     first comment on a product pays.
  *   - nothing pays while Bees are switched off.
+ *
+ * The rates themselves are staff-editable at /admin/bees (`settings()`), so the
+ * guards above are what keep any figure they choose safe.
  *
  * Counters on `products` are recomputed from the rows inside the same
  * transaction that changed them, so they cannot drift out of step.
  */
 class ProductEngagement
 {
-    public const RATE_BEES    = 1;
-    public const LIKE_BEES    = 1;
-    public const COMMENT_BEES = 2;
+    public const KEY = 'product_engagement';
 
-    /** Per customer per day, across every product and action. */
-    public const DAILY_PAID_ACTIONS = 5;
+    /** What a fresh install pays. Staff change these at /admin/bees. */
+    public const DEFAULTS = [
+        'rate'       => 1,
+        'like'       => 1,
+        'comment'    => 2,
+        'daily_cap'  => 5,      // paid actions per customer per day, all products
+        'min_length' => 15,     // characters before a review is worth anything
+    ];
 
-    public const MIN_LENGTH = 15;
+    /** Ceilings on what staff can set. Bees are money — a typo shouldn't cost a fortune. */
+    public const LIMITS = ['bees' => 100, 'daily_cap' => 50, 'min_length' => 200];
+
     public const MAX_LENGTH = 1000;
+
+    /**
+     * The live rates, seeded on first read the same way Bees and Payments do it,
+     * so the admin page always has something to show.
+     */
+    public static function settings(): array
+    {
+        $raw = json_decode((string) DB::table('settings')->where('key', self::KEY)->value('value'), true);
+        if (! is_array($raw)) {
+            $raw = self::DEFAULTS;
+            DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode($raw), 'updated_at' => now()]);
+        }
+
+        $out = [];
+        foreach (self::DEFAULTS as $k => $default) $out[$k] = (int) ($raw[$k] ?? $default);
+
+        return $out;
+    }
+
+    /** @return array|string  A string is the reason it was refused. */
+    public static function setConfig(array $patch): array|string
+    {
+        $next = self::settings();
+        foreach (['rate', 'like', 'comment'] as $k) {
+            if (! array_key_exists($k, $patch)) continue;
+            $v = (int) $patch[$k];
+            if ($v < 0 || $v > self::LIMITS['bees']) return "A reward has to be between 0 and " . self::LIMITS['bees'] . ' Bees.';
+            $next[$k] = $v;
+        }
+        if (array_key_exists('daily_cap', $patch)) {
+            $v = (int) $patch['daily_cap'];
+            if ($v < 0 || $v > self::LIMITS['daily_cap']) return 'The daily limit has to be between 0 and ' . self::LIMITS['daily_cap'] . '.';
+            $next['daily_cap'] = $v;
+        }
+        if (array_key_exists('min_length', $patch)) {
+            $v = (int) $patch['min_length'];
+            if ($v < 1 || $v > self::LIMITS['min_length']) return 'The shortest review has to be between 1 and ' . self::LIMITS['min_length'] . ' characters.';
+            $next['min_length'] = $v;
+        }
+
+        DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode($next), 'updated_at' => now()]);
+
+        return $next;
+    }
 
     /** Ledger reasons, so the Bees history reads plainly. */
     public const REASONS = [
@@ -64,12 +117,7 @@ class ProductEngagement
             'likes_count'    => (int) ($p->likes_count ?? 0),
             'comments_count' => (int) ($p->comments_count ?? 0),
             'breakdown'      => self::breakdown($productId, $count),
-            'rewards'        => [
-                'rate'    => self::RATE_BEES,
-                'like'    => self::LIKE_BEES,
-                'comment' => self::COMMENT_BEES,
-                'enabled' => Bees::settings()['enabled'],
-            ],
+            'rewards'        => self::settings() + ['enabled' => Bees::settings()['enabled']],
             'mine' => ['stars' => null, 'liked' => false, 'commented' => false, 'earned' => []],
         ];
 
@@ -177,7 +225,7 @@ class ProductEngagement
             self::recount($productId);
         });
 
-        return ['bees' => self::pay($customerId, $productId, 'rate', self::RATE_BEES, 'product_rating')];
+        return ['bees' => self::pay($customerId, $productId, 'rate', self::settings()['rate'], 'product_rating')];
     }
 
     /** Heart on, heart off. Only the first heart ever pays. */
@@ -198,14 +246,15 @@ class ProductEngagement
             self::recount($productId);
         });
 
-        return ['liked' => $liked, 'bees' => $liked ? self::pay($customerId, $productId, 'like', self::LIKE_BEES, 'product_like') : 0];
+        return ['liked' => $liked, 'bees' => $liked ? self::pay($customerId, $productId, 'like', self::settings()['like'], 'product_like') : 0];
     }
 
     /** @return array{comment:array,bees:int}|string  A string is the reason it was refused. */
     public static function comment(string $customerId, string $productId, string $body): array|string
     {
         $body = trim(preg_replace('/\s+/u', ' ', strip_tags($body)));
-        if (mb_strlen($body) < self::MIN_LENGTH) return 'Tell us a little more — at least ' . self::MIN_LENGTH . ' characters.';
+        $min = self::settings()['min_length'];
+        if (mb_strlen($body) < $min) return "Tell us a little more — at least {$min} characters.";
         if (mb_strlen($body) > self::MAX_LENGTH) $body = mb_substr($body, 0, self::MAX_LENGTH);
 
         $id = 'pcom_' . Str::random(16);
@@ -228,7 +277,7 @@ class ProductEngagement
                 'customer_id' => $customerId,
                 'created_at' => now()->toIso8601String(),
             ],
-            'bees' => self::pay($customerId, $productId, 'comment', self::COMMENT_BEES, 'product_comment'),
+            'bees' => self::pay($customerId, $productId, 'comment', self::settings()['comment'], 'product_comment'),
         ];
     }
 
@@ -269,13 +318,13 @@ class ProductEngagement
      */
     private static function pay(string $customerId, string $productId, string $action, int $bees, string $reason): int
     {
-        if (! Bees::settings()['enabled']) return 0;
+        if ($bees < 1 || ! Bees::settings()['enabled']) return 0;
 
         $today = DB::table('product_engagement_rewards')
             ->where('customer_id', $customerId)
             ->where('created_at', '>=', now()->startOfDay())
             ->count();
-        if ($today >= self::DAILY_PAID_ACTIONS) return 0;
+        if ($today >= self::settings()['daily_cap']) return 0;
 
         // insertOrIgnore is the whole guard: the unique key means a second
         // attempt writes nothing and returns 0, so nobody is paid twice.
@@ -298,7 +347,7 @@ class ProductEngagement
             ->where('created_at', '>=', now()->startOfDay())
             ->count();
 
-        return max(0, self::DAILY_PAID_ACTIONS - $used);
+        return max(0, self::settings()['daily_cap'] - $used);
     }
 
     // ─── Trending ──────────────────────────────────────────────────────────

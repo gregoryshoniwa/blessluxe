@@ -12,6 +12,7 @@ export default {
             saved: false,
             error: '',
             settings: { enabled: true, per_usd: 100, max_discount_percent: 50, earn_per_usd: 10 },
+            engagement: { rate: 1, like: 1, comment: 2, daily_cap: 5, min_length: 15, limits: { bees: 100, daily_cap: 50, min_length: 200 } },
             stats: { circulating: 0, customers_with_balance: 0, ledger_rows: 0 },
             ledger: [],
         };
@@ -27,6 +28,13 @@ export default {
             // Bees earned on a $100 order at the current rate.
             return Math.floor(100 * this.settings.earn_per_usd);
         },
+        /** The most one customer can earn from speaking up in a day, in dollars. */
+        engagementWorstDay() {
+            const per = this.settings.per_usd || 100;
+            const dearest = Math.max(this.engagement.rate, this.engagement.like, this.engagement.comment);
+
+            return ((dearest * this.engagement.daily_cap) / per).toFixed(2);
+        },
     },
     async mounted() {
         await this.fetchAll();
@@ -37,6 +45,7 @@ export default {
             try {
                 const d = await api.get('/api/admin/bees');
                 this.settings = d.settings;
+                if (d.engagement) this.engagement = d.engagement;
                 this.stats = d.stats;
                 this.ledger = d.recent_ledger;
             } finally { this.loading = false; }
@@ -46,8 +55,9 @@ export default {
             this.error = '';
             this.saved = false;
             try {
-                const d = await api.put('/api/admin/bees', this.settings);
+                const d = await api.put('/api/admin/bees', { ...this.settings, engagement: this.engagement });
                 this.settings = d.settings;
+                if (d.engagement) this.engagement = d.engagement;
                 this.saved = true;
                 setTimeout(() => { this.saved = false; }, 1800);
             } catch (e) {
@@ -127,6 +137,37 @@ export default {
                         <span class="text-xs text-zinc-500">$100 order earns {{ sampleEarnOnHundred }} Bees</span>
                     </label>
                 </div>
+                <h2 class="font-semibold mt-8 mb-1">Speaking up about a piece</h2>
+                <p class="text-xs text-zinc-500 mb-3 max-w-3xl">
+                    What a customer earns for rating, hearting or reviewing a product. Paid once per customer per piece per action, for ever — re-rating,
+                    unhearting and hearting again, or deleting and re-posting a review all earn nothing. The daily limit is the real brake: at these
+                    settings the most one customer can earn in a day is <strong>${{ engagementWorstDay }}</strong>.
+                </p>
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Bees for a rating</span>
+                        <input v-model.number="engagement.rate" type="number" min="0" :max="engagement.limits.bees" class="border border-zinc-300 px-3 py-2 font-mono" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Bees for a heart</span>
+                        <input v-model.number="engagement.like" type="number" min="0" :max="engagement.limits.bees" class="border border-zinc-300 px-3 py-2 font-mono" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Bees for a review</span>
+                        <input v-model.number="engagement.comment" type="number" min="0" :max="engagement.limits.bees" class="border border-zinc-300 px-3 py-2 font-mono" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Paid actions per day</span>
+                        <input v-model.number="engagement.daily_cap" type="number" min="0" :max="engagement.limits.daily_cap" class="border border-zinc-300 px-3 py-2 font-mono" />
+                        <span class="text-xs text-zinc-500">0 stops paying; people can still rate and review</span>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">Shortest review</span>
+                        <input v-model.number="engagement.min_length" type="number" min="1" :max="engagement.limits.min_length" class="border border-zinc-300 px-3 py-2 font-mono" />
+                        <span class="text-xs text-zinc-500">characters, before it counts at all</span>
+                    </label>
+                </div>
+
                 <p v-if="error" class="text-sm text-red-600 mt-3">{{ error }}</p>
                 <div class="flex items-center justify-end gap-3 mt-4">
                     <span v-if="saved" class="text-sm text-emerald-600">Saved ✓</span>

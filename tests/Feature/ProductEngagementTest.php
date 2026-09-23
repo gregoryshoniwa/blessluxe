@@ -132,6 +132,63 @@ class ProductEngagementTest extends TestCase
         $this->assertSame(1, (int) DB::table('products')->where('id', 'prod_1')->value('rating_count'));
     }
 
+    #[Test]
+    public function staff_set_the_rates_and_the_shop_pays_what_they_chose(): void
+    {
+        $c = $this->shopper();
+        $this->product();
+        $this->product('prod_2', 'gown');
+
+        // A fresh install seeds the owner's figures.
+        $this->assertSame(['rate' => 1, 'like' => 1, 'comment' => 2, 'daily_cap' => 5, 'min_length' => 15], ProductEngagement::settings());
+
+        Auth::forgetGuards();
+        $admin = $this->actingAs(\App\Models\User::factory()->create(), 'web');
+        $admin->putJson('/api/admin/bees', ['engagement' => ['rate' => 25, 'daily_cap' => 1, 'min_length' => 5]])
+            ->assertOk()->assertJsonPath('engagement.rate', 25);
+
+        // Bees still work as before — they share one Save.
+        $this->assertSame(100, $admin->getJson('/api/admin/bees')->json('settings.per_usd'));
+
+        $this->as($c)->postJson('/api/account/products/dress/rating', ['stars' => 5])->assertOk()->assertJsonPath('bees', 25);
+        // The new cap of one bites immediately.
+        $this->as($c)->postJson('/api/account/products/gown/rating', ['stars' => 5])->assertOk()->assertJsonPath('bees', 0);
+        // And the shorter minimum is what a review is now measured against.
+        $this->as($c)->postJson('/api/account/products/dress/comments', ['body' => 'Lovely'])->assertOk();
+        $this->assertSame(25, $this->bees('cust_1'));
+
+        // The page tells the customer the same numbers staff typed.
+        $this->assertSame(25, $this->getJson('/api/store/products/dress/engagement')->json('summary.rewards.rate'));
+    }
+
+    #[Test]
+    public function a_typo_in_the_rates_is_refused_rather_than_costing_a_fortune(): void
+    {
+        Auth::forgetGuards();
+        $admin = $this->actingAs(\App\Models\User::factory()->create(), 'web');
+
+        $admin->putJson('/api/admin/bees', ['engagement' => ['comment' => 100000]])->assertStatus(422);
+        $admin->putJson('/api/admin/bees', ['engagement' => ['daily_cap' => 5000]])->assertStatus(422);
+        $admin->putJson('/api/admin/bees', ['engagement' => ['min_length' => 0]])->assertStatus(422);
+
+        $this->assertSame(ProductEngagement::DEFAULTS, ProductEngagement::settings());
+    }
+
+    #[Test]
+    public function a_rate_of_zero_stops_paying_without_stopping_anyone_speaking(): void
+    {
+        $c = $this->shopper();
+        $this->product();
+        ProductEngagement::setConfig(['like' => 0]);
+
+        $res = $this->as($c)->postJson('/api/account/products/dress/like')->assertOk();
+        $this->assertSame(0, $res->json('bees'));
+        $this->assertTrue($res->json('summary.mine.liked'));
+        $this->assertSame(0, $this->bees('cust_1'));
+        // Nothing was promised, so raising the rate later still pays the first time.
+        $this->assertSame(0, DB::table('product_engagement_rewards')->count());
+    }
+
     // ─── What everyone sees ────────────────────────────────────────────────
 
     #[Test]
