@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 const routes = [
     { path: '/admin',            name: 'admin-dashboard', component: () => import('./pages/Dashboard.vue') },
     { path: '/admin/login',      name: 'admin-login',     component: () => import('./pages/Login.vue'), meta: { layout: 'blank' } },
+    { path: '/admin/quick',      name: 'admin-quick',     component: () => import('./pages/QuickProcess.vue') },
     { path: '/admin/products',     name: 'admin-products',         component: () => import('./pages/Products.vue') },
     { path: '/admin/products/:id', name: 'admin-product-editor', component: () => import('./pages/ProductEditor.vue') },
     { path: '/admin/inventory',  name: 'admin-inventory', component: () => import('./pages/Inventory.vue') },

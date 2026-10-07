@@ -21,6 +21,13 @@ export default {
             badgeTimer: null,
             sections: [
                 {
+                    // First on purpose: the everyday jobs, before anything else.
+                    title: 'Quick',
+                    items: [
+                        { to: '/admin/quick', label: 'Quick process' },
+                    ],
+                },
+                {
                     title: 'Catalogue',
                     items: [
                         { to: '/admin',            label: 'Dashboard' },
