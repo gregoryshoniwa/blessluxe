@@ -49,7 +49,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1100px] mx-auto px-[5%] py-12 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <div v-if="loading" class="animate-pulse space-y-3">
             <div class="h-8 w-1/3 bg-cream-dark" />
             <div class="h-4 w-1/2 bg-cream-dark" />

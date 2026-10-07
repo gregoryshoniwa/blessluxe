@@ -193,7 +193,7 @@ export default {
 </script>
 
 <template>
-    <section v-if="!loading && summary" id="reviews" class="max-w-[1400px] mx-auto px-[5%] py-12 border-t border-gold/10 scroll-mt-24">
+    <section v-if="!loading && summary" id="reviews" class="max-w-[1600px] mx-auto px-[5%] py-12 border-t border-gold/10 scroll-mt-24">
         <header class="text-center mb-10">
             <p class="font-script text-2xl text-gold">What people say</p>
             <h2 class="font-display text-2xl tracking-widest uppercase">Reviews</h2>

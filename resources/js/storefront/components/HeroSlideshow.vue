@@ -142,7 +142,7 @@ export default {
             </template>
 
             <!-- Copy -->
-            <div :class="['relative h-full flex items-center', preview ? 'px-[6%]' : 'max-w-[1400px] mx-auto px-[5%]']">
+            <div :class="['relative h-full flex items-center', preview ? 'px-[6%]' : 'max-w-[1600px] mx-auto px-[5%]']">
                 <div :class="[preview ? 'max-w-[75%]' : 'max-w-3xl', s.hasMedia && 'text-white']">
                     <p :class="['font-script mb-2', preview ? 'text-lg' : 'text-4xl md:text-5xl mb-3', s.hasMedia ? 'text-white' : 'text-gold']">Welcome to BlessLuxe</p>
                     <component

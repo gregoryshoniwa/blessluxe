@@ -189,7 +189,7 @@ export default {
 <template>
     <div class="min-h-screen bg-white">
         <header class="border-b border-gold/15">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div class="max-w-[1600px] mx-auto px-[5%] py-4 flex items-center justify-between">
                 <router-link to="/" class="font-display text-lg tracking-widest">BLESSLUXE</router-link>
                 <div class="flex items-center gap-2 text-xs text-black/55">
                     <Lock class="w-4 h-4" /> Secure Checkout
@@ -197,7 +197,7 @@ export default {
             </div>
         </header>
 
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="max-w-[1600px] mx-auto px-[5%] py-10">
             <ol class="flex items-center justify-center gap-3 text-[10px] tracking-[0.3em] uppercase mb-10 text-black/40">
                 <li class="flex items-center gap-2 text-emerald-600">
                     <span class="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">✓</span>

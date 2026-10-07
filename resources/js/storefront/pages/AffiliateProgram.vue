@@ -24,7 +24,7 @@ export default {
         </section>
 
         <!-- Three pillars -->
-        <section class="max-w-[1200px] mx-auto px-[5%] py-16">
+        <section class="max-w-[1600px] mx-auto px-[5%] py-16">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
                 <div>
                     <div class="w-12 h-12 mx-auto bg-gold/15 text-gold-dark rounded-full flex items-center justify-center mb-4">

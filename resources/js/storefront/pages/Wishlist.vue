@@ -27,7 +27,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1400px] mx-auto px-[5%] py-12 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <header class="text-center mb-12">
             <p class="font-script text-3xl text-gold">Saved</p>
             <h1 class="font-display text-3xl md:text-4xl tracking-widest uppercase flex items-center justify-center gap-2">

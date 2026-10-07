@@ -254,7 +254,7 @@ export default {
 
         <!-- ─── The pulse: what's moving, right now ──────────────────────── -->
         <section v-if="pulse.length || ticker.length" class="border-b border-gold/15 bg-white/70">
-            <div v-if="pulse.length" class="max-w-[1400px] mx-auto px-[5%] py-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <div v-if="pulse.length" class="max-w-[1600px] mx-auto px-[5%] py-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
                 <component
                     :is="p.to ? 'router-link' : 'span'"
                     v-for="p in pulse"
@@ -295,7 +295,7 @@ export default {
         </section>
 
         <!-- ─── Filling now: buying together, the thing nobody else offers ── -->
-        <section v-if="!curated && filling.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
+        <section v-if="!curated && filling.length" class="max-w-[1600px] mx-auto px-[5%] pt-14">
             <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
                 <div>
                     <p class="font-script text-3xl text-gold leading-none">Buy it together</p>
@@ -331,7 +331,7 @@ export default {
         </section>
 
         <!-- ─── The departments, each saying what's inside ──────────────── -->
-        <section v-if="tiles.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
+        <section v-if="tiles.length" class="max-w-[1600px] mx-auto px-[5%] pt-14">
             <div class="flex items-end justify-between gap-4 mb-6">
                 <div>
                     <p class="font-script text-3xl text-gold leading-none">Discover</p>
@@ -377,7 +377,7 @@ export default {
         </section>
 
         <!-- ─── New in ────────────────────────────────────────────────────── -->
-        <section class="max-w-[1400px] mx-auto px-[5%] pt-14 pb-6">
+        <section class="max-w-[1600px] mx-auto px-[5%] pt-14 pb-6">
             <div class="flex items-end justify-between gap-4 mb-6">
                 <div>
                     <p class="font-script text-3xl text-gold leading-none">Featured</p>
@@ -414,12 +414,12 @@ export default {
         </section>
 
         <!-- What people are reacting to lately. Renders nothing until they are. -->
-        <section class="max-w-[1400px] mx-auto px-[5%]">
+        <section class="max-w-[1600px] mx-auto px-[5%]">
             <ProductStrip title="Trending now" script="Loved this month" endpoint="/api/store/products/trending" :limit="8" />
         </section>
 
         <!-- Recently viewed strip — only renders if there's at least one. -->
-        <section v-if="recentlyViewedIds.length" class="max-w-[1400px] mx-auto px-[5%]">
+        <section v-if="recentlyViewedIds.length" class="max-w-[1600px] mx-auto px-[5%]">
             <ProductStrip title="Pick up where you left off" script="Just for you" :ids="recentlyViewedIds" :limit="6" />
         </section>
     </div>

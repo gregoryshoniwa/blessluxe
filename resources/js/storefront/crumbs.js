@@ -8,7 +8,7 @@ import { reactive } from 'vue';
  * never outlive the page that set it. `meta.crumbs: false` = no trail (home,
  * checkout, the Hive).
  */
-export const crumbs = reactive({ items: null, width: '' });
+export const crumbs = reactive({ items: null });
 
 /** @param {Array<{label: string, to?: string}>} items — everything after Home; the last is this page. */
 export function setCrumbs(items) {
@@ -16,8 +16,6 @@ export function setCrumbs(items) {
 }
 
 export function resetCrumbs(route) {
-    // The trail lines up with the page's own column (`meta.crumbsWidth`), not a fixed one.
-    crumbs.width = route.meta?.crumbsWidth || '';
     const m = route.meta?.crumbs;
     crumbs.items = m === false ? null : (typeof m === 'function' ? m(route) : m) || null;
 }

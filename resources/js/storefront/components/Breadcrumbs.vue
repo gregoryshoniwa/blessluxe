@@ -30,7 +30,7 @@ export default {
 </script>
 
 <template>
-    <nav v-if="trail" aria-label="Breadcrumb" :class="[crumbs.width || 'max-w-[1400px] px-[5%]', 'mx-auto pt-4 -mb-1 flex']" class="items-center gap-3 text-[11px] tracking-[0.15em] uppercase text-black/50 min-w-0">
+    <nav v-if="trail" aria-label="Breadcrumb" :class="['max-w-[1600px] px-[5%]', 'mx-auto pt-4 -mb-1 flex']" class="items-center gap-3 text-[11px] tracking-[0.15em] uppercase text-black/50 min-w-0">
         <button @click="back" class="inline-flex items-center gap-1 min-h-11 -my-3 pr-1 text-black/70 hover:text-gold transition-colors flex-shrink-0" :title="backLabel">
             <ChevronLeft class="w-4 h-4" /> <span>{{ backLabel }}</span>
         </button>

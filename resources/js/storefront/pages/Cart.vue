@@ -78,7 +78,7 @@ export default {
 
 <template>
     <div class="min-h-screen bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="max-w-[1600px] mx-auto px-[5%] py-12">
             <!-- Branded header -->
             <div class="text-center mb-12">
                 <p class="font-script text-2xl text-gold mb-3">Your Cart</p>

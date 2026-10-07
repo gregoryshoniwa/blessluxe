@@ -49,7 +49,7 @@ export default {
 
 <template>
     <footer class="bg-black text-white mt-20">
-        <div class="max-w-[1400px] mx-auto px-[5%] py-16">
+        <div class="max-w-[1600px] mx-auto px-[5%] py-16">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
                 <div class="lg:col-span-1">
                     <img
@@ -91,7 +91,7 @@ export default {
             </div>
         </div>
         <div class="border-t border-white/10">
-            <div class="max-w-[1400px] mx-auto px-[5%] py-6 text-center">
+            <div class="max-w-[1600px] mx-auto px-[5%] py-6 text-center">
                 <p class="text-white/50 text-sm">
                     © {{ year }} BLESSLUXE. All rights reserved.
                 </p>

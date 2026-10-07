@@ -147,7 +147,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1400px] mx-auto px-[5%] py-12 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-pulse">
             <div class="aspect-[3/4] bg-cream-dark" />
             <div class="space-y-4">

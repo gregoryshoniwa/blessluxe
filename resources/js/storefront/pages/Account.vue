@@ -337,7 +337,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1200px] mx-auto px-[5%] py-12 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <div v-if="loading" class="grid grid-cols-12 gap-y-8 gap-x-0 md:gap-x-8 animate-pulse">
             <div class="col-span-12 md:col-span-3 space-y-2">
                 <div v-for="n in 5" :key="n" class="h-10 bg-cream-dark" />

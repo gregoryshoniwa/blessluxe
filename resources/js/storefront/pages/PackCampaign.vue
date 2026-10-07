@@ -234,7 +234,7 @@ export default {
             <router-link to="/shop/series" class="text-gold underline">Back to series</router-link>
         </div>
 
-        <div v-else-if="campaign" class="max-w-[1400px] mx-auto px-[5%] pt-6 pb-28 lg:pb-16">
+        <div v-else-if="campaign" class="max-w-[1600px] mx-auto px-[5%] pt-6 pb-28 lg:pb-16">
             <!-- ─── Top: the piece, and the way in ───────────────────────── -->
             <div class="lg:grid lg:grid-cols-12 lg:gap-12">
 

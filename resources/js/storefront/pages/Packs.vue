@@ -260,7 +260,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1400px] mx-auto px-[5%] pt-4 pb-10 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] pt-4 pb-10 min-h-[60vh]">
 
         <!-- Reached by a saved link while shopping a curated affiliate shop. -->
         <div v-if="!loading && hiddenByShop" class="text-center py-20 max-w-md mx-auto">

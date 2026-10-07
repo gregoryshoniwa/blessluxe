@@ -89,7 +89,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1200px] mx-auto px-[5%] py-12 min-h-[60vh]">
+    <div class="max-w-[1600px] mx-auto px-[5%] py-12 min-h-[60vh]">
         <div v-if="loading" class="text-center py-24">
             <p class="text-[10px] tracking-widest uppercase text-black/55 animate-pulse">Loading dashboard</p>
         </div>

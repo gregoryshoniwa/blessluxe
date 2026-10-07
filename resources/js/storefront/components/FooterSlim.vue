@@ -24,7 +24,7 @@ export default {
 
 <template>
     <footer v-if="links.length" class="border-t border-gold/15 mt-auto">
-        <div class="max-w-[1400px] mx-auto px-[5%] py-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-black/55">
+        <div class="max-w-[1600px] mx-auto px-[5%] py-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs text-black/55">
             <a
                 v-for="l in links"
                 :key="l.href"

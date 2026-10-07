@@ -227,7 +227,7 @@ The hero, then a **pulse** (sold this week · series filling · closing today ·
 
 ### Breadcrumbs and the way back
 
-One trail under the header on every storefront page except home, checkout and the Hive ([Breadcrumbs](resources/js/storefront/components/Breadcrumbs.vue) + [crumbs.js](resources/js/storefront/crumbs.js)). A route's `meta.crumbs` is the fixed part (array, or a function of the route; `false` = none) and the router resets it on every new PATH; a page whose names come from the server calls `setCrumbs()` — product (department › catalogue › piece), Shop (follows heading/catalogue/search), series. **Back** uses `history.back()` when the previous entry was inside the shop (Vue Router keeps it in `history.state.back`), so a filtered list returns with its filters and scroll; arriving from outside (a WhatsApp link) it goes up one level instead and says where ("Back to Dresses"). Phones show only the back link; the full trail is `sm` and up. The trail lines up with the PAGE's own column via `meta.crumbsWidth` (Shop is 1600px, FAQ 900, policy pages 3xl…; default 1400). New pages: add `meta.crumbs` — and `meta.crumbsWidth` when the page isn't 1400 wide.
+One trail under the header on every storefront page except home, checkout and the Hive ([Breadcrumbs](resources/js/storefront/components/Breadcrumbs.vue) + [crumbs.js](resources/js/storefront/crumbs.js)). A route's `meta.crumbs` is the fixed part (array, or a function of the route; `false` = none) and the router resets it on every new PATH; a page whose names come from the server calls `setCrumbs()` — product (department › catalogue › piece), Shop (follows heading/catalogue/search), series. **Back** uses `history.back()` when the previous entry was inside the shop (Vue Router keeps it in `history.state.back`), so a filtered list returns with its filters and scroll; arriving from outside (a WhatsApp link) it goes up one level instead and says where ("Back to Dresses"). Phones show only the back link; the full trail is `sm` and up. New pages: add `meta.crumbs` to the route.
 
 ### Footers and endless scrolling
 
@@ -243,6 +243,10 @@ One trail under the header on every storefront page except home, checkout and th
 - Local URLs are saved host-less (`/storage/products/x.jpg`), bucket URLs absolute. `Media::key($url)` understands every shape ever saved and returns **null for anything that isn't ours** (other hosts, `..`, odd characters) — endpoints that accept a URL from the browser rely on that.
 - Stored extensions come from an allow-list keyed on the file's **bytes** (`Media::EXTENSIONS`); unknown types become `.bin`. Don't use `guessExtension()` or the client filename — a `.php`-named image came back as `php`.
 - Old links keep working after the move: [MediaController](app/Http/Controllers/MediaController.php) 302-redirects `/storage/*`, `/ai/*`, `/uploads/*` to the bucket when no local file exists. `php artisan media:check` proves a bucket end to end; `php artisan media:push` copies pre-existing local files into it (idempotent, never deletes).
+
+## One column: everything lines up with the logo
+
+Every storefront page, section, footer and the trail use the header's own column — **`max-w-[1600px] mx-auto px-[5%]`** — so the logo, the breadcrumb, a page title, the first product image and the footer all start at the same x at every window width (measured: 1370 / 1728 / 1920). Pages used to mix 1100/1200/1400/`max-w-7xl`, which only met the logo at certain widths. Reading pages (FAQ, Contact, Terms, sign-in) keep a narrow CENTRED column inside it on purpose. Don't introduce another page width.
 
 ## Corners: the brand is SQUARE
 
