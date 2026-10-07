@@ -234,7 +234,7 @@ class ProductController extends Controller
             'thumbnail' => $p->thumbnail ?? optional($p->images->first())->url,
             'price'     => $price,
             'price_label' => $price !== null ? '$' . number_format($price / 100, 2) : null,
-            'video'     => $this->videoShape($p),
+            'video'     => self::videoShape($p),
             'rating'    => $this->ratingShape($p),
             'likes'     => (int) ($p->likes_count ?? 0),
             'purchases' => (int) ($p->purchases_count ?? 0),
@@ -257,7 +257,7 @@ class ProductController extends Controller
      * Admin-managed product video (uploaded file or YouTube link) for cards
      * and the detail gallery. Null when the product has none.
      */
-    private function videoShape(Product $p): ?array
+    public static function videoShape(Product $p): ?array
     {
         $m = $p->relationLoaded('media')
             ? $p->media->first(fn ($x) => $x->media_type === 'video' && $x->status === 'ready')
@@ -289,7 +289,7 @@ class ProductController extends Controller
             'sourcing'    => \App\Services\Couriers::promise($p->sourcing),
             'thumbnail'   => $p->thumbnail,
             'images'      => $p->images->map(fn ($i) => ['url' => $i->url, 'rank' => $i->rank]),
-            'video'       => $this->videoShape($p),
+            'video'       => self::videoShape($p),
             'media'       => $p->media->map(fn ($m) => [
                 'media_type'    => $m->media_type,
                 'media_url'     => $m->media_url,

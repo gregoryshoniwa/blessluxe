@@ -77,8 +77,9 @@ class SiteLinksTest extends TestCase
         $this->assertSame(30, $d->json('policy.return_window_days'));
         $this->assertSame(100, $d->json('policy.bees_per_usd'));
 
-        // A channel nobody has filled in is never offered to a shopper.
-        $this->assertSame([], array_diff(array_keys($d->json('info')), ['response', 'company_name']));
+        // A channel nobody has filled in is never offered to a shopper. The
+        // socials ship with the brand's real links, so they're present from the start.
+        $this->assertSame([], array_diff(array_keys($d->json('info')), ['response', 'company_name', 'instagram', 'facebook', 'tiktok', 'youtube']));
     }
 
     #[Test]

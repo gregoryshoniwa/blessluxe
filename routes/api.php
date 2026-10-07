@@ -53,6 +53,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductEngagementController;
 use App\Http\Controllers\Api\SiteLinksController;
+use App\Http\Controllers\Api\SeriesTalkController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -79,6 +80,9 @@ Route::prefix('store')->group(function () {
         Route::get ('/products',                  [ProductController::class, 'index']);
         Route::post('/products/batch',            [ProductController::class, 'batch']);
         Route::get ('/site-links',                [SiteLinksController::class, 'index']);
+        // What the people in a series are saying. Reading is public — a stranger
+        // sent the link should see a group that's alive.
+        Route::get ('/series/{code}/talk',        [SeriesTalkController::class, 'index'])->middleware('throttle:series-read');
         Route::get ('/shop-info',                 [SiteLinksController::class, 'shopInfo']);
         Route::get ('/products/trending',         [ProductEngagementController::class, 'trending']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
@@ -356,6 +360,9 @@ Route::middleware('web')->prefix('account')->group(function () {
     // Show Room "My Products" (digitise the customer's own merch; same cap).
     // Saying something about a piece. Named limiters per action: a plain
     // throttle shares ONE counter per visitor, so hearts would use up comments.
+    Route::post  ('/series/{code}/talk',         [SeriesTalkController::class, 'store'])->middleware('throttle:series-talk');
+    Route::delete('/series-posts/{id}',          [SeriesTalkController::class, 'destroy'])->middleware('throttle:series-talk');
+
     Route::post  ('/products/{handle}/rating',   [ProductEngagementController::class, 'rate'])->middleware('throttle:product-engage');
     Route::post  ('/products/{handle}/like',     [ProductEngagementController::class, 'like'])->middleware('throttle:product-tap');
     Route::post  ('/products/{handle}/comments', [ProductEngagementController::class, 'comment'])->middleware('throttle:product-engage');
@@ -470,6 +477,7 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put   ('/regions/{id}',  [AdminRegionController::class, 'update']);
         Route::delete('/regions/{id}',  [AdminRegionController::class, 'destroy']);
 
+        Route::put('/series-posts/{id}', [SeriesTalkController::class, 'setHidden']);
         Route::get('/site-links', [SiteLinksController::class, 'admin']);
         Route::put('/site-links', [SiteLinksController::class, 'update']);
         Route::get('/shop-info', [SiteLinksController::class, 'adminShopInfo']);

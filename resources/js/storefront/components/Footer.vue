@@ -1,7 +1,10 @@
 <script>
 import { siteLinks } from '../site-links.js';
+import { api } from '../../lib/api.js';
+import SocialIcon from './SocialIcon.vue';
 export default {
     name: 'StoreFooter',
+    components: { SocialIcon },
     data() {
         return {
             year: new Date().getFullYear(),
@@ -15,15 +18,19 @@ export default {
                 { label: 'Children', href: '/shop?category=children' },
                 { label: 'Sale', href: '/shop?sale=true' },
             ],
-            socials: [
-                { label: 'Instagram', href: 'https://instagram.com/blessluxe' },
-                { label: 'Facebook', href: 'https://facebook.com/blessluxe' },
-                { label: 'Twitter', href: 'https://twitter.com/blessluxe' },
-                { label: 'YouTube', href: 'https://youtube.com/blessluxe' },
-            ],
+            info: {},                 // staff-entered at /admin/content → Contact details
         };
     },
     computed: {
+        /** Only the networks with a link filled in; a dead icon is worse than none. */
+        socials() {
+            return [
+                { key: 'instagram', label: 'Instagram', href: this.info.instagram },
+                { key: 'facebook',  label: 'Facebook',  href: this.info.facebook },
+                { key: 'tiktok',    label: 'TikTok',    href: this.info.tiktok },
+                { key: 'youtube',   label: 'YouTube',   href: this.info.youtube },
+            ].filter((s) => s.href);
+        },
         /** Shop, then whichever of Help and Company have anything in them. */
         footerSections() {
             return [
@@ -33,7 +40,10 @@ export default {
             ].filter((s) => s.links.length);
         },
     },
-    mounted() { siteLinks.load(); },
+    async mounted() {
+        siteLinks.load();
+        try { this.info = (await api.get('/api/store/shop-info')).info || {}; } catch { /* icons simply stay off */ }
+    },
 };
 </script>
 
@@ -54,13 +64,15 @@ export default {
                     <div class="flex gap-3">
                         <a
                             v-for="s in socials"
-                            :key="s.label"
+                            :key="s.key"
                             :href="s.href"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="w-10 h-10 border border-white/30 rounded-full flex items-center justify-center hover:bg-gold hover:border-gold transition-all hover:-translate-y-1 text-[10px] tracking-widest uppercase"
+                            :title="s.label"
+                            :aria-label="s.label"
+                            class="w-10 h-10 border border-white/30 rounded-full flex items-center justify-center hover:bg-gold hover:border-gold transition-all hover:-translate-y-1"
                         >
-                            {{ s.label.charAt(0) }}
+                            <SocialIcon :network="s.key" class="w-4 h-4" />
                         </a>
                     </div>
                 </div>

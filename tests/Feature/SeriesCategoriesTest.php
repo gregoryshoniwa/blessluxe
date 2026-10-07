@@ -78,13 +78,46 @@ class SeriesCategoriesTest extends TestCase
 
         $this->assertEqualsCanonicalizing(['women', 'children'], $p['headings']);
         $this->assertEqualsCanonicalizing(['dresses', 'girls'], $p['catalogues']);
-        // Searchable by category name, so "dress" finds it even if the title doesn't say so.
-        $this->assertStringContainsString('Dresses', $p['category_names']);
+        // "dress" finds it by category name — on the server, see the paging test below.
+        $this->assertContains('MIX1', array_column($this->getJson('/api/store/series?q=dress')->json('packs'), 'public_code'));
 
         // One series counted once per heading, however many catalogues it's in.
         $cats = collect($this->getJson('/api/store/series')->json('categories'))->keyBy('handle');
         $this->assertSame(1, $cats['women']['count']);
         $this->assertSame(1, $cats['children']['count']);
+    }
+
+    #[Test]
+    public function the_server_filters_sorts_and_pages_so_the_feed_and_its_filters_cannot_disagree(): void
+    {
+        $this->series('DRESS1', ['dresses'], slots: 5);
+        $this->series('DRESS2', ['dresses'], slots: 2);
+        $this->series('SUIT1', ['suits'], slots: 3);
+        DB::table('pack_slots')->where('pack_campaign_id', 'camp_DRESS1')->limit(4)->update(['status' => 'paid', 'customer_id' => null]);   // needs 1
+        DB::table('pack_campaigns')->where('id', 'camp_SUIT1')->update(['expires_at' => now()->addHours(2)]);
+        DB::table('products')->where('id', 'prod_SUIT1')->update(['sourcing' => 'import']);
+
+        // Closest to filling leads, whatever order they were made in.
+        $codes = fn (string $qs) => array_column($this->getJson("/api/store/series?$qs")->assertOk()->json('packs'), 'public_code');
+        $this->assertSame('DRESS1', $codes('sort=closest')[0]);
+        $this->assertSame('SUIT1', $codes('sort=ending')[0]);                            // the only one with a deadline
+
+        // Heading, catalogue, where and search all narrow the list on the server.
+        $this->assertSame(['SUIT1'], $codes('heading=men'));
+        $this->assertEqualsCanonicalizing(['DRESS1', 'DRESS2'], $codes('catalogue=dresses'));
+        $this->assertSame(['SUIT1'], $codes('where=import'));
+        $this->assertEqualsCanonicalizing(['DRESS1', 'DRESS2'], $codes('where=local'));
+        $this->assertEqualsCanonicalizing(['DRESS1', 'DRESS2'], $codes('q=dress'));      // by category name, not just title
+
+        // Pages, with the filter tree built from EVERYTHING open rather than the page shown.
+        $page = $this->getJson('/api/store/series?limit=2&sort=newest')->assertOk();
+        $this->assertSame([2, true, 3], [count($page->json('packs')), $page->json('pagination.has_more'), $page->json('pagination.total')]);
+        $this->assertSame(['women', 'men'], array_column($page->json('categories'), 'handle'));
+        $this->assertSame(1, count($this->getJson('/api/store/series?limit=2&sort=newest&page=2')->json('packs')));
+
+        // And each card says what stands between it and shipping.
+        $one = collect($this->getJson('/api/store/series')->json('packs'))->firstWhere('public_code', 'DRESS1');
+        $this->assertSame(1, $one['needs']);
     }
 
     #[Test]

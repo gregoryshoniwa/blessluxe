@@ -1,6 +1,7 @@
 <script>
 import { api } from '../../lib/api.js';
-import { Mail, MessageCircle, Phone, MapPin, Clock, Instagram, Facebook, Youtube } from 'lucide-vue-next';
+import { Mail, MessageCircle, Phone, MapPin, Clock } from 'lucide-vue-next';
+import SocialIcon from '../components/SocialIcon.vue';
 
 /**
  * How to reach a person. Built on what the research agrees on: offer the
@@ -14,7 +15,7 @@ import { Mail, MessageCircle, Phone, MapPin, Clock, Instagram, Facebook, Youtube
  */
 export default {
     name: 'ContactPage',
-    components: { Mail, MessageCircle, Phone, MapPin, Clock, Instagram, Facebook, Youtube },
+    components: { Mail, MessageCircle, Phone, MapPin, Clock, SocialIcon },
     data() {
         return { info: {}, loading: true };
     },
@@ -23,6 +24,14 @@ export default {
             const n = (this.info.whatsapp || '').replace(/[^\d]/g, '');
 
             return n ? `https://wa.me/${n}` : null;
+        },
+        socials() {
+            return [
+                { key: 'instagram', label: 'Instagram', href: this.info.instagram },
+                { key: 'facebook',  label: 'Facebook',  href: this.info.facebook },
+                { key: 'tiktok',    label: 'TikTok',    href: this.info.tiktok },
+                { key: 'youtube',   label: 'YouTube',   href: this.info.youtube },
+            ].filter((s) => s.href);
         },
         hasAny() {
             return !!(this.info.email || this.info.whatsapp || this.info.phone || this.info.address);
@@ -133,17 +142,11 @@ export default {
                 </ul>
             </section>
 
-            <section class="border-t border-gold/15 mt-8 pt-8">
+            <section v-if="socials.length" class="border-t border-gold/15 mt-8 pt-8">
                 <h2 class="font-display text-lg tracking-widest uppercase mb-4">Find us</h2>
                 <div class="flex flex-wrap gap-5 text-sm">
-                    <a href="https://instagram.com/blessluxe" target="_blank" rel="noopener" class="inline-flex items-center gap-2 min-h-11 text-black/65 hover:text-gold transition-colors">
-                        <Instagram class="w-4 h-4" /> Instagram
-                    </a>
-                    <a href="https://facebook.com/blessluxe" target="_blank" rel="noopener" class="inline-flex items-center gap-2 min-h-11 text-black/65 hover:text-gold transition-colors">
-                        <Facebook class="w-4 h-4" /> Facebook
-                    </a>
-                    <a href="https://youtube.com/blessluxe" target="_blank" rel="noopener" class="inline-flex items-center gap-2 min-h-11 text-black/65 hover:text-gold transition-colors">
-                        <Youtube class="w-4 h-4" /> YouTube
+                    <a v-for="s in socials" :key="s.key" :href="s.href" target="_blank" rel="noopener" class="inline-flex items-center gap-2 min-h-11 text-black/65 hover:text-gold transition-colors">
+                        <SocialIcon :network="s.key" class="w-4 h-4" /> {{ s.label }}
                     </a>
                 </div>
             </section>

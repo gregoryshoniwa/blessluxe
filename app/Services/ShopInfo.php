@@ -23,6 +23,11 @@ class ShopInfo
         'address'      => ['Address',          '', 'Where orders are collected from'],
         'hours'        => ['Opening hours',    '', 'e.g. Mon–Fri 9am–5pm, Sat 9am–1pm'],
         'response'     => ['Response time',    'We reply within one working day.', 'Set expectations, then keep to them'],
+        // Where the brand lives off the site. Shown in the footer and on Contact.
+        'instagram'    => ['Instagram',        'https://www.instagram.com/bless_luxe/', 'Full link to the profile'],
+        'facebook'     => ['Facebook',         'https://www.facebook.com/profile.php?id=61594056316362', 'Full link to the page'],
+        'tiktok'       => ['TikTok',           'https://www.tiktok.com/@blessluxeconnect', 'Full link to the profile'],
+        'youtube'      => ['YouTube',          'https://www.youtube.com/@Bless-LuxeConnect', 'Full link to the channel'],
         'company_name' => ['Registered name',  'BLESSLUXE', 'The name on the terms'],
         'registration' => ['Company number',   '', 'If registered'],
     ];
@@ -55,11 +60,17 @@ class ShopInfo
     }
 
     /** @param array<string,string> $patch */
+    public const SOCIALS = ['instagram', 'facebook', 'tiktok', 'youtube'];
+
     public static function setConfig(array $patch): array
     {
         $next = self::all();
         foreach ($patch as $key => $value) {
-            if (array_key_exists($key, self::FIELDS)) $next[$key] = trim((string) $value);
+            if (! array_key_exists($key, self::FIELDS)) continue;
+            $value = trim((string) $value);
+            // A social link is either a real https address or nothing — never text that ends up in an href.
+            if (in_array($key, self::SOCIALS, true) && $value !== '' && ! preg_match('~^https://[a-z0-9.-]+\.[a-z]{2,}(/.*)?$~i', $value)) continue;
+            $next[$key] = $value;
         }
         DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode($next), 'updated_at' => now()]);
 

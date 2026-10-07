@@ -38,6 +38,8 @@ class AppServiceProvider extends ServiceProvider
             'hive-post' => 12, 'hive-talk' => 40, 'hive-tap' => 180, 'hive-read' => 180,
             // Product ratings, hearts and comments — same reasoning, and these pay Bees.
             'product-engage' => 20, 'product-tap' => 120, 'product-read' => 180,
+            // The series chat: a page polls every 8s, a person posts far less often.
+            'series-talk' => 30, 'series-read' => 240,
         ] as $name => $perMinute) {
             \Illuminate\Support\Facades\RateLimiter::for($name, fn (\Illuminate\Http\Request $request) => \Illuminate\Cache\RateLimiting\Limit::perMinute($perMinute)
                 ->by($name . '|' . (Auth::guard('customer')->id() ?: $request->ip())));

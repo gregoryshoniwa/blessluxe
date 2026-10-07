@@ -90,58 +90,104 @@ class PackController extends Controller
         // they were sent, not this shop advertising it.)
         $viewing = \App\Services\AffiliatePricing::viewing($request);
         if (\App\Services\AffiliatePricing::isCurated($viewing)) {
-            return ['packs' => [], 'hidden_by_storefront' => true];
+            return ['packs' => [], 'categories' => [], 'pagination' => null, 'hidden_by_storefront' => true];
         }
 
-        $campaigns = PackCampaign::query()
+        $open = fn () => PackCampaign::query()
             ->where('status', 'open')
             ->whereNull('deleted_at')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+
+        // The filter tree is built from EVERYTHING open, not from this page of
+        // results — a tab must never vanish because its series are on page two.
+        $placedAll = self::categoriesOf($open()->pluck('id')->all());
+
+        // ── Filters, all on the server, so paging and filtering can't disagree ──
+        $q         = trim((string) $request->query('q', ''));
+        $heading   = (string) $request->query('heading', '');
+        $catalogue = (string) $request->query('catalogue', '');
+        $where     = (string) $request->query('where', '');            // local | import
+        $sort      = (string) $request->query('sort', 'closest');
+        $limit     = max(1, min(48, (int) $request->query('limit', 12)));
+
+        $query = $open()
             ->with(['definition:id,title,handle,description,pack_kind'])
             ->withCount([
                 'slots',
-                'slots as slots_available' => fn ($q) => $q->where('status', 'available'),
-                'slots as slots_paid'      => fn ($q) => $q->where('status', 'paid'),
-            ])
-            ->latest()
-            ->get();
+                'slots as slots_available' => fn ($s) => $s->where('status', 'available'),
+                'slots as slots_paid'      => fn ($s) => $s->where('status', 'paid'),
+            ]);
 
-        $placed = self::categoriesOf($campaigns->pluck('id')->all());
+        $viaProduct = fn ($cb) => $query->whereHas('slots', fn ($s) => $s->whereNull('deleted_at')->whereHas('variant.product', $cb));
+        if ($heading !== '')   $viaProduct(fn ($p) => $p->whereHas('catalogues.heading', fn ($h) => $h->where('handle', $heading)));
+        if ($catalogue !== '') $viaProduct(fn ($p) => $p->whereHas('catalogues', fn ($c) => $c->where('handle', $catalogue)));
+        if ($where === 'import') $viaProduct(fn ($p) => $p->where('sourcing', \App\Services\Couriers::IMPORT));
+        if ($where === 'local')  $viaProduct(fn ($p) => $p->where(fn ($w) => $w->whereNull('sourcing')->orWhere('sourcing', '!=', \App\Services\Couriers::IMPORT)));
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $query->where(fn ($w) => $w
+                ->where('title', 'like', $like)
+                ->orWhere('public_code', 'like', $like)
+                ->orWhereHas('definition', fn ($d) => $d->where('title', 'like', $like)->orWhere('description', 'like', $like))
+                // "dress" finds a series in Dresses whatever its title says.
+                ->orWhereHas('slots.variant.product.catalogues', fn ($c) => $c->where('name', 'like', $like)->orWhereHas('heading', fn ($h) => $h->where('name', 'like', $like))));
+        }
+
+        match ($sort) {
+            // Nearly there first: the series two sizes short is the one worth joining.
+            'closest' => $query->orderByRaw('(slots_count - slots_paid) asc')->latest(),
+            // A deadline first, soonest at the top; the undated after them.
+            'ending'  => $query->orderByRaw('CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END')->orderBy('expires_at')->latest(),
+            default   => $query->latest(),
+        };
+
+        $paginator = $query->paginate($limit);
+        $campaigns = $paginator->getCollection();
+        $ids = $campaigns->pluck('id')->all();
+
+        // The piece behind each card, and who is already in — one query each
+        // for the whole page, never one per card.
+        $heroes = PackSlot::whereIn('pack_campaign_id', $ids)->whereNull('deleted_at')
+            ->with(['variant.product:id,thumbnail,sourcing,rating_count,rating_sum,likes_count,purchases_count', 'variant.product.media'])
+            ->orderBy('size_label')->get()->groupBy('pack_campaign_id');
+        $people = PackSlot::whereIn('pack_campaign_id', $ids)->where('status', 'paid')->whereNotNull('customer_id')
+            ->with('customer:id,first_name,last_name')->get()->groupBy('pack_campaign_id')
+            ->map(fn ($rows) => $rows->unique('customer_id')->map(fn ($r) => self::initials($r->customer))->filter()->values()->all());
 
         return [
-            // The filter tree is built from the series that are open right now,
-            // so a heading or catalogue with nothing in it never appears.
-            'categories' => self::facets($placed),
-            'packs' => $campaigns->map(function (PackCampaign $c) use ($placed) {
-                // Cherry-pick the first available slot's thumbnail as the
-                // hero image so the listing tile has something to render.
-                $firstSlot = $c->slots()
-                    ->with('variant.product:id,thumbnail,sourcing,rating_count,rating_sum,likes_count,purchases_count')
-                    ->where('status', 'available')
-                    ->first();
+            'categories' => self::facets($placedAll),
+            'pagination' => [
+                'page'      => $paginator->currentPage(),
+                'per_page'  => $paginator->perPage(),
+                'total'     => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+                'has_more'  => $paginator->hasMorePages(),
+            ],
+            'packs' => $campaigns->map(function (PackCampaign $c) use ($placedAll, $heroes, $people) {
+                $slots = $heroes->get($c->id, collect());
+                // The tile's picture: the first size still open, else any.
+                $hero = $slots->firstWhere('status', 'available') ?? $slots->first();
+                $product = $hero?->variant?->product;
+                $placed = $placedAll[$c->id] ?? [];
+
                 return [
                     'public_code'    => $c->public_code,
-                    // A series is a way to buy a piece, so it wears that piece's
-                    // reputation rather than growing a second one of its own.
-                    'reputation'     => self::reputation($firstSlot?->variant?->product),
+                    'reputation'     => self::reputation($product),
+                    'video'          => $product ? \App\Http\Controllers\Api\ProductController::videoShape($product) : null,
+                    'people'         => $people->get($c->id, []),
                     'title'          => $c->title ?? $c->definition?->title,
                     'description'    => $c->definition?->description,
-                    'thumbnail'      => optional($firstSlot?->variant?->product)->thumbnail,
+                    'thumbnail'      => $product?->thumbnail,
                     'host_kind'      => $c->host_kind,
                     'expires_at'     => $c->expires_at?->toIso8601String(),
                     'slots_total'     => $c->slots_count,
                     'slots_available' => $c->slots_available,
                     'slots_paid'      => $c->slots_paid,
-                    // Where it sits in the shop — Women › Dresses, and so on —
-                    // taken from the pieces in it, never set on the series.
-                    'headings'        => array_values(array_unique(array_column($placed[$c->id] ?? [], 'heading'))),
-                    'catalogues'      => array_values(array_unique(array_column($placed[$c->id] ?? [], 'catalogue'))),
-                    'category_names'  => implode(' ', array_unique(array_merge(
-                        array_column($placed[$c->id] ?? [], 'heading_name'),
-                        array_column($placed[$c->id] ?? [], 'catalogue_name'),
-                    ))),
+                    'needs'           => max(0, $c->slots_count - $c->slots_paid),
+                    'headings'        => array_values(array_unique(array_column($placed, 'heading'))),
+                    'catalogues'      => array_values(array_unique(array_column($placed, 'catalogue'))),
                 ];
-            }),
+            })->values(),
         ];
     }
 
@@ -273,7 +319,7 @@ class PackController extends Controller
 
         // The piece the series is for, in full: the gallery, the words, the price.
         // Every slot is normally the same product; the first says it for all.
-        $hero = PackSlot::where('pack_campaign_id', $campaign->id)->with(['variant.product.images' => fn ($q) => $q->orderBy('rank'), 'variant.prices' => fn ($q) => $q->where('currency_code', 'usd')])->first();
+        $hero = PackSlot::where('pack_campaign_id', $campaign->id)->with(['variant.product.images' => fn ($q) => $q->orderBy('rank'), 'variant.product.media', 'variant.prices' => fn ($q) => $q->where('currency_code', 'usd')])->first();
         $product = $hero?->variant?->product;
         $heroPrice = optional($hero?->variant?->prices->first())->amount;
 
@@ -291,6 +337,8 @@ class PackController extends Controller
                         $product->images->pluck('url')->all(),
                     )))),
                     'price_label' => $heroPrice !== null ? '$' . number_format($heroPrice / 100, 2) : null,
+                    // The same clip the product page shows, in the gallery here.
+                    'video'       => \App\Http\Controllers\Api\ProductController::videoShape($product),
                 ] : null,
                 // Who is already in: two initials each, paid sizes only, no names.
                 // It's the thing a stranger looks for before joining — "is anyone

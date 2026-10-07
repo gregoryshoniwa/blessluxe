@@ -1,9 +1,10 @@
 <script>
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
+import SeriesTalk from '../components/SeriesTalk.vue';
 import {
     Clock, Lock, Check, X, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane,
-    Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight,
+    Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, Play,
 } from 'lucide-vue-next';
 
 /**
@@ -22,8 +23,9 @@ import {
 export default {
     name: 'PackCampaign',
     components: {
+        SeriesTalk,
         Clock, Lock, Check, X, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane,
-        Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight,
+        Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, Play,
     },
     data() {
         return {
@@ -46,6 +48,24 @@ export default {
         slots() { return this.data?.slots || []; },
         totals() { return this.data?.totals || { total: 0, available: 0, reserved: 0, paid: 0, needs: 0, fill_percent: 0 }; },
         images() { return this.product?.images?.length ? this.product.images : []; },
+        /**
+         * The gallery: every picture, then the clip if there is one. The clip
+         * is a slide like the others — nothing plays until it's chosen.
+         */
+        media() {
+            const out = this.images.map((src) => ({ kind: 'image', src }));
+            const v = this.product?.video;
+            if (v) out.push({ kind: 'video', video: v, src: v.thumbnail || this.images[0] || null });
+
+            return out;
+        },
+        current() { return this.media[this.image] || null; },
+        youtubeSrc() {
+            const v = this.current?.video;
+            if (!v?.embed_url) return null;
+
+            return `${v.embed_url}?autoplay=1&playsinline=1&rel=0&modestbranding=1`;
+        },
         title() { return this.campaign?.title || this.campaign?.definition?.title || this.product?.title || 'Series'; },
         price() { return this.product?.price_label || this.slots[0]?.variant?.price_label || null; },
         reputation() { return this.campaign?.reputation || null; },
@@ -184,8 +204,8 @@ export default {
                 if (e?.name !== 'AbortError') toast('Could not share that.', { tone: 'error' });
             }
         },
-        prev() { this.image = (this.image - 1 + this.images.length) % this.images.length; },
-        next() { this.image = (this.image + 1) % this.images.length; },
+        prev() { this.image = (this.image - 1 + this.media.length) % this.media.length; },
+        next() { this.image = (this.image + 1) % this.media.length; },
     },
 };
 </script>
@@ -207,9 +227,13 @@ export default {
                 <!-- Gallery -->
                 <div class="lg:col-span-7">
                     <div class="relative bg-cream-dark overflow-hidden aspect-[3/4] sm:aspect-[4/5] lg:aspect-[3/4]">
+                        <template v-if="current?.kind === 'video'">
+                            <video v-if="current.video.kind === 'upload'" :src="current.video.url" :poster="current.src || undefined" controls autoplay muted playsinline class="absolute inset-0 w-full h-full object-cover object-top bg-black" />
+                            <iframe v-else-if="youtubeSrc" :src="youtubeSrc" class="absolute inset-0 w-full h-full" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen title="Video of the piece" />
+                        </template>
                         <img
-                            v-if="images.length"
-                            :src="images[image]"
+                            v-else-if="current"
+                            :src="current.src"
                             :alt="title"
                             class="absolute inset-0 w-full h-full object-cover object-top"
                         />
@@ -222,20 +246,21 @@ export default {
                                 <Clock class="w-3 h-3 text-gold" /> {{ closesIn }}
                             </span>
                         </div>
-                        <template v-if="images.length > 1">
+                        <template v-if="media.length > 1">
                             <button @click="prev" class="absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/85 backdrop-blur inline-flex items-center justify-center hover:bg-white transition-colors" aria-label="Previous picture"><ChevronLeft class="w-5 h-5" /></button>
                             <button @click="next" class="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/85 backdrop-blur inline-flex items-center justify-center hover:bg-white transition-colors" aria-label="Next picture"><ChevronRight class="w-5 h-5" /></button>
                         </template>
                     </div>
-                    <div v-if="images.length > 1" class="scroll-strip flex gap-2 mt-2 scroll-px-0">
+                    <div v-if="media.length > 1" class="scroll-strip flex gap-2 mt-2 scroll-px-0">
                         <button
-                            v-for="(src, i) in images"
-                            :key="src"
+                            v-for="(m, i) in media"
+                            :key="m.kind + (m.src || i)"
                             @click="image = i"
-                            :class="['w-16 h-20 flex-shrink-0 overflow-hidden border-2 transition-colors', image === i ? 'border-gold' : 'border-transparent hover:border-black/20']"
-                            :aria-label="`Picture ${i + 1}`"
+                            :class="['relative w-16 h-20 flex-shrink-0 overflow-hidden border-2 transition-colors bg-cream-dark', image === i ? 'border-gold' : 'border-transparent hover:border-black/20']"
+                            :aria-label="m.kind === 'video' ? 'Video' : `Picture ${i + 1}`"
                         >
-                            <img :src="src" :alt="''" class="w-full h-full object-cover object-top" />
+                            <img v-if="m.src" :src="m.src" :alt="''" class="w-full h-full object-cover object-top" />
+                            <span v-if="m.kind === 'video'" class="absolute inset-0 flex items-center justify-center"><span class="w-7 h-7 rounded-full bg-black/55 flex items-center justify-center"><Play class="w-3 h-3 text-white fill-white" /></span></span>
                         </button>
                     </div>
                 </div>
@@ -417,9 +442,12 @@ export default {
                 </div>
             </div>
 
-            <!-- ─── Below: the piece, and how this works ──────────────────── -->
+            <!-- ─── Below: the group, the piece, and how this works ───────── -->
             <div class="lg:grid lg:grid-cols-12 lg:gap-12 mt-14">
                 <div class="lg:col-span-7 space-y-12">
+                    <!-- The group chat a WhatsApp series would have — minus the screenshots. -->
+                    <SeriesTalk :code="code" :campaign="campaign" :customer="customer" :i-am-in="iAmIn" />
+
                     <section v-if="product?.description">
                         <h2 class="font-display text-lg tracking-widest uppercase mb-3">About the piece</h2>
                         <p class="text-sm text-black/75 leading-relaxed whitespace-pre-line">{{ product.description }}</p>
