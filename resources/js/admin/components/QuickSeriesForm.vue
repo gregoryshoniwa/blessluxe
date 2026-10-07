@@ -27,6 +27,7 @@ function blank(defaults = {}) {
         origin: 'TR',
         size_runs: [[]],
         open_days: defaults.open_days ?? 14,
+        ai_cost: 0,          // USD spent reading this post, summed over every read
     };
 }
 
@@ -42,6 +43,7 @@ export default {
             photos: [],           // the product photos: { file, url }
             sizeDraft: [''],      // what's being typed into each run
             reading: false,
+            lastReadCost: null,
             readNote: '',
             saving: false,
             pasteTarget: 'shots',
@@ -88,6 +90,8 @@ export default {
     },
     methods: {
         money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, ''); },
+        /** AI costs are fractions of a cent — shown to the tenth of a cent so they don't read as $0. */
+        aiMoney(n) { return n >= 0.01 ? '$' + n.toFixed(3) : (n * 100).toFixed(2) + '¢'; },
 
         // ── Pictures ────────────────────────────────────────────────────
         addFiles(list, files, max) {
@@ -119,6 +123,8 @@ export default {
                 for (const s of this.shots) fd.append('shots[]', await resizeImage(s.file, { max: 1600, quality: 0.85 }), 'shot.jpg');
                 const { draft } = await api.post('/api/admin/quick/series/read', fd);
                 const f = this.form;
+                f.ai_cost = Math.round(((f.ai_cost || 0) + (draft.ai_cost || 0)) * 1e5) / 1e5;
+                this.lastReadCost = draft.ai_cost || 0;
                 if (draft.title) f.title = draft.title;
                 if (draft.description) f.description = draft.description + (draft.colours?.length > 1 ? `\n\nColours: ${draft.colours.join(', ')}.` : '');
                 if (draft.reference) f.reference = draft.reference;
@@ -170,7 +176,7 @@ export default {
             try {
                 const fd = new FormData();
                 const f = this.form;
-                for (const k of ['title', 'description', 'reference', 'cost', 'margin', 'single_price', 'origin', 'open_days']) fd.append(k, f[k] ?? '');
+                for (const k of ['title', 'description', 'reference', 'cost', 'margin', 'single_price', 'origin', 'open_days', 'ai_cost']) fd.append(k, f[k] ?? '');
                 fd.append('supplier', JSON.stringify(f.supplier));
                 fd.append('size_runs', JSON.stringify(this.runs));
                 fd.append('catalogue_ids', JSON.stringify(f.catalogue_ids));
@@ -221,6 +227,10 @@ export default {
                     <button @click.stop="useShotsAsPhotos" class="self-end text-xs text-zinc-500 underline hover:text-black">Use these as the photos too</button>
                 </div>
                 <p v-if="!opts.reader" class="text-xs text-amber-700 mt-3">The AI reader isn't set up on this server (no GOOGLE_AI_API_KEY). Fill the steps by hand.</p>
+                <p v-if="lastReadCost != null" class="text-xs text-zinc-500 mt-3">
+                    This read cost <strong class="text-zinc-700">{{ aiMoney(lastReadCost) }}</strong><template v-if="form.ai_cost > lastReadCost"> · {{ aiMoney(form.ai_cost) }} for this series so far</template>
+                    — included in the totals on the right.
+                </p>
                 <p v-if="readNote" class="text-xs text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 mt-3">{{ readNote }}</p>
             </section>
 
@@ -364,8 +374,9 @@ export default {
                 <div class="flex justify-between"><dt class="text-zinc-500">Series</dt><dd>{{ runs.length || '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-zinc-500">Sizes to fill</dt><dd>{{ slots || '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-zinc-500">We pay when all fill</dt><dd>{{ cost && slots ? money(cost * slots) : '—' }}</dd></div>
+                <div v-if="form.ai_cost" class="flex justify-between"><dt class="text-zinc-500">AI reading</dt><dd>{{ aiMoney(form.ai_cost) }}<span v-if="slots" class="text-zinc-400"> · {{ aiMoney(form.ai_cost / slots) }}/piece</span></dd></div>
                 <div class="flex justify-between"><dt class="text-zinc-500">Shoppers pay</dt><dd>{{ price && slots ? money(price * slots) : '—' }}</dd></div>
-                <div class="flex justify-between font-semibold"><dt>Profit when full</dt><dd class="text-emerald-700">{{ cost && slots ? money(profit * slots) : '—' }}</dd></div>
+                <div class="flex justify-between font-semibold"><dt>Profit when full</dt><dd class="text-emerald-700">{{ cost && slots ? money(profit * slots - (form.ai_cost || 0)) : '—' }}</dd></div>
             </dl>
             <label class="flex flex-col gap-1 border-t border-zinc-100 pt-3">
                 <span class="text-xs text-zinc-600">Open for</span>

@@ -33,7 +33,7 @@ class QuickSeriesTest extends TestCase
             'title' => 'Three-Piece Check Suit', 'description' => 'Super 200 wool.',
             'cost' => '60', 'margin' => '40', 'single_price' => '85',
             'supplier' => json_encode(['name' => 'Mario casas mens wear', 'phone' => '+90 555 000 0000']),
-            'origin' => 'TR', 'open_days' => '14', 'publish' => '1',
+            'origin' => 'TR', 'open_days' => '14', 'publish' => '1', 'ai_cost' => '0.0019',
             'size_runs' => json_encode([['48', '46', '50'], ['50', '52', '54']]),
             'catalogue_ids' => json_encode(['cat_suits']),
             'images' => [UploadedFile::fake()->image('a.jpg', 600, 800), UploadedFile::fake()->image('b.jpg', 600, 800)],
@@ -50,6 +50,7 @@ class QuickSeriesTest extends TestCase
         $p = DB::table('products')->where('id', $r['product_id'])->first();
         $this->assertSame(['import', 'published', 'TR'], [$p->sourcing, $p->status, $p->origin_country]);
         $this->assertSame(85, json_decode($p->metadata, true)['supplier_single_price']);
+        $this->assertSame(0.0019, json_decode($p->metadata, true)['ai_cost']);         // kept with the product
         $this->assertSame(2, DB::table('product_images')->where('product_id', $p->id)->count());
         $this->assertTrue(DB::table('product_catalogue_map')->where(['product_id' => $p->id, 'catalogue_id' => 'cat_suits'])->exists());
 
@@ -103,7 +104,7 @@ class QuickSeriesTest extends TestCase
             'supplier_name' => 'Volonte Rose', 'supplier_phone' => '+90 536 239 00 91', 'origin' => 'TR',
             'size_runs' => [['44', '38', '40', '42'], ['44', '46', '48', '50'], ['XL']], 'catalogue_id' => 'not-a-real-id',
             'reference' => null, 'colours' => [], 'confidence_note' => null,
-        ])]]]]]])]);
+        ])]]]]], 'usageMetadata' => ['promptTokenCount' => 2000, 'candidatesTokenCount' => 300, 'thoughtsTokenCount' => 100]])]);
 
         $d = $this->post('/api/admin/quick/series/read', ['shots' => [UploadedFile::fake()->image('post.png')]], ['Accept' => 'application/json'])
             ->assertOk()->json('draft');
@@ -112,5 +113,9 @@ class QuickSeriesTest extends TestCase
         $this->assertSame([], $d['catalogue_ids']);                                                 // an id it made up is ignored
         $this->assertSame(['Volonte Rose', null], [$d['supplier']['name'], $d['supplier']['id']]);
         $this->assertSame(0, DB::table('products')->count());
+
+        // What the read really cost, from Google's token counts: 2000 in × $0.30/M + 400 out × $2.50/M.
+        $this->assertEqualsWithDelta(0.0016, $d['ai_cost'], 0.00001);
+        $this->assertEqualsWithDelta(0.0016, (float) DB::table('ai_usage_logs')->where('surface', 'quick_series')->value('cost'), 0.00001);
     }
 }

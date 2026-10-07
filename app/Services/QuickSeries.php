@@ -90,7 +90,15 @@ Reply with JSON only:
 TXT;
 
         GeminiService::$usageContext = ['surface' => 'quick_series'];
-        $ask = fn () => (new GeminiService())->generateText($system, 'Read this post.', ['images' => $images, 'json_mode' => true, 'temperature' => 0.2]);
+        $spent = 0.0;                      // a retried read costs twice — both are counted
+        $ask = function () use ($system, $images, &$spent) {
+            GeminiService::$lastUsage = null;
+            try {
+                return (new GeminiService())->generateText($system, 'Read this post.', ['images' => $images, 'json_mode' => true, 'temperature' => 0.2]);
+            } finally {
+                $spent += GeminiService::$lastUsage['cost'] ?? 0;
+            }
+        };
         try {
             $raw = $ask();
         } catch (\RuntimeException $e) {
@@ -122,6 +130,7 @@ TXT;
             'reference'      => trim((string) ($d['reference'] ?? '')) ?: null,
             'colours'        => array_values(array_filter(array_map('strval', (array) ($d['colours'] ?? [])))),
             'note'           => trim((string) ($d['confidence_note'] ?? '')) ?: null,
+            'ai_cost'        => round($spent, 5),           // USD, from Google's own token counts
         ];
     }
 
@@ -184,6 +193,7 @@ TXT;
                         'created_by'         => 'quick_series',
                         'supplier_reference' => $d['reference'] ?? null,
                         'supplier_single_price' => isset($d['single_price']) && $d['single_price'] !== '' ? (float) $d['single_price'] : null,
+                        'ai_cost'            => isset($d['ai_cost']) && (float) $d['ai_cost'] > 0 ? round((float) $d['ai_cost'], 5) : null,
                     ], fn ($v) => $v !== null),
                 ]);
                 if (! empty($d['catalogue_ids'])) $product->catalogues()->sync($d['catalogue_ids']);

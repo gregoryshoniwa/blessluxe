@@ -32,6 +32,19 @@ class GeminiService
      */
     public static array $usageContext = [];
 
+    /**
+     * What the last generateText() call really cost, from the token counts
+     * Google returns: ['in' => tokens, 'out' => tokens, 'cost' => USD].
+     * Gemini 2.5 Flash list prices (per million tokens): input $0.30 (text and
+     * images alike), output $2.50 (thinking included). Overridable in .env.
+     */
+    public static ?array $lastUsage = null;
+
+    public static function priceTokens(int $in, int $out): float
+    {
+        return $in / 1e6 * (float) env('AI_PRICE_IN_PER_M', 0.30) + $out / 1e6 * (float) env('AI_PRICE_OUT_PER_M', 2.50);
+    }
+
     public function __construct(private ?string $apiKey = null)
     {
         $this->apiKey = $this->apiKey ?: AiConfig::apiKey();
@@ -121,8 +134,17 @@ class GeminiService
             Log::warning('[gemini text] '.$res->status().' '.Str::limit($res->body(), 500));
             throw new RuntimeException('Gemini API error: '.$res->status());
         }
-        $this->logUsage('text', $model, 1, (float) env('AI_COST_TEXT_CALL', 0.002));
         $data = $res->json();
+        // The real price of this call when Google says how many tokens it used; the flat guess otherwise.
+        $u = $data['usageMetadata'] ?? null;
+        if ($u) {
+            $in = (int) ($u['promptTokenCount'] ?? 0);
+            $out = (int) ($u['candidatesTokenCount'] ?? 0) + (int) ($u['thoughtsTokenCount'] ?? 0);
+            self::$lastUsage = ['in' => $in, 'out' => $out, 'cost' => self::priceTokens($in, $out)];
+        } else {
+            self::$lastUsage = ['in' => 0, 'out' => 0, 'cost' => (float) env('AI_COST_TEXT_CALL', 0.002)];
+        }
+        $this->logUsage('text', $model, 1, self::$lastUsage['cost']);
         if (! empty($data['error']['message'])) throw new RuntimeException($data['error']['message']);
         $parts = $data['candidates'][0]['content']['parts'] ?? [];
         $text = '';

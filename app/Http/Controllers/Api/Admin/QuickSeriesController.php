@@ -109,6 +109,7 @@ class QuickSeriesController extends Controller
             'margin'         => ['required', 'integer', 'min:0', 'max:500'],
             'single_price'   => ['nullable', 'numeric', 'min:0', 'max:10000'],
             'reference'      => ['nullable', 'string', 'max:60'],
+            'ai_cost'        => ['nullable', 'numeric', 'min:0', 'max:5'],
             'supplier'       => ['nullable', 'array'],
             'supplier.id'    => ['nullable', 'string', 'exists:suppliers,id'],
             'supplier.name'  => ['nullable', 'string', 'max:120'],
