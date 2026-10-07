@@ -53,7 +53,7 @@ export default {
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
                 <div class="lg:col-span-1">
                     <img
-                        src="/logo.png"
+                        src="/logo-header.png"
                         alt="BLESSLUXE"
                         class="h-12 w-auto brightness-0 invert mb-6"
                     />

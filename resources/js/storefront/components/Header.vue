@@ -178,7 +178,7 @@ export default {
 
                 <router-link to="/" class="flex items-center flex-shrink-0">
                     <img
-                        src="/logo.png"
+                        src="/logo-header.png"
                         alt="BLESSLUXE"
                         :class="[
                             'w-auto transition-all duration-300 -my-4',

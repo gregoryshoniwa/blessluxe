@@ -246,7 +246,7 @@ One trail under the header on every storefront page except home, checkout and th
 
 ## One column: everything lines up with the logo
 
-Every storefront page, section, footer and the trail use the header's own column — **`max-w-[1600px] mx-auto px-[5%]`** — so the logo, the breadcrumb, a page title, the first product image and the footer all start at the same x at every window width (measured: 1370 / 1728 / 1920). Pages used to mix 1100/1200/1400/`max-w-7xl`, which only met the logo at certain widths. Reading pages (FAQ, Contact, Terms, sign-in) keep a narrow CENTRED column inside it on purpose. Don't introduce another page width.
+Every storefront page, section, footer and the trail use the header's own column — **`max-w-[1600px] mx-auto px-[5%]`** — so the logo, the breadcrumb, a page title, the first product image and the footer all start at the same x at every window width. The header, drawer and footer use `public/logo-header.png` — `logo.png` with its transparent side margins trimmed (the lettering started 15% in, which read as the logo sitting off the column); `logo.png` stays as-is for emails and share cards (measured: 1370 / 1728 / 1920). Pages used to mix 1100/1200/1400/`max-w-7xl`, which only met the logo at certain widths. Reading pages (FAQ, Contact, Terms, sign-in) keep a narrow CENTRED column inside it on purpose. Don't introduce another page width.
 
 ## Corners: the brand is SQUARE
 

@@ -65,7 +65,7 @@ export default {
             <transition name="drawer-slide" appear>
                 <aside v-if="open" class="absolute top-0 left-0 h-full w-[85%] max-w-sm bg-cream shadow-xl overflow-y-auto">
                     <header class="flex items-center justify-between border-b border-gold/15 px-5 py-4">
-                        <img src="/logo.png" alt="BLESSLUXE" class="h-10" />
+                        <img src="/logo-header.png" alt="BLESSLUXE" class="h-10" />
                         <button @click="close" class="p-2 hover:text-gold" aria-label="Close menu">
                             <X class="w-5 h-5" />
                         </button>
