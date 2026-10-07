@@ -4,6 +4,7 @@ import { affiliateStore } from '../affiliate-store.js';
 import HeroSlideshow from '../components/HeroSlideshow.vue';
 import ProductStrip from '../components/ProductStrip.vue';
 import { recentlyViewed } from '../recently-viewed.js';
+import { siteLinks } from '../site-links.js';
 import { Sparkles, ArrowRight, ShoppingBag, Clock } from 'lucide-vue-next';
 
 /**
@@ -26,10 +27,33 @@ export default {
     computed: {
         // Inside an affiliate's hand-picked shop: no series, only their pieces.
         curated() { return affiliateStore.isCurated(); },
-        headings() { return this.allHeadings.slice(0, 4); },
+        /**
+         * Four tiles: the departments, and a fourth that isn't a department.
+         * The Hive takes it once staff have launched the Hive (the same switch as
+         * the menu — one decision, everywhere); until then, Series does. A
+         * curated affiliate shop has neither, so it gets four departments.
+         */
+        headings() { return this.allHeadings.slice(0, this.curated ? 4 : 3); },
+        extraTile() {
+            if (this.curated) return null;
+            if (this.nav.header.some((l) => l.key === 'hive')) {
+                return { to: '/hive', name: 'The Hive', sub: 'Looks · Ask · Lives', image: this.hiveThumb || '/hive-mark.png', contain: !this.hiveThumb, badge: 'Community' };
+            }
+
+            return { to: '/shop/series', name: 'Series', sub: 'Buy it together', image: this.series.find((p) => p.thumbnail)?.thumbnail || null, badge: this.seriesStats?.open ? `${this.seriesStats.open} filling` : null };
+        },
         shopName() { return this.shop.affiliate?.name || this.shop.affiliate?.code || 'This shop'; },
         recentlyViewedIds() { return recentlyViewed.ids(); },
         filling() { return this.series.filter((p) => p.needs > 0).slice(0, 10); },
+        tiles() {
+            const out = this.headings.map((h) => ({
+                to: `/shop?heading=${h.handle}`, name: h.name, image: h.image_url || null,
+                sub: h.catalogues?.length ? h.catalogues.map((c) => c.name).join(' · ') : null,
+            }));
+            if (this.extraTile) out.push(this.extraTile);
+            // Light text only where there's a dark photo behind it.
+            return out.map((t) => ({ ...t, dark: !!t.image && !t.contain }));
+        },
         /** One ticker: pieces that sold and sizes taken in series, newest first. */
         ticker() {
             const sold = this.sold.map((a) => ({ kind: 'sold', key: `s-${a.handle}-${a.at}`, ...a }));
@@ -67,6 +91,8 @@ export default {
             heroSlides: [],
             allHeadings: [],
             series: [],
+            hiveThumb: null,          // the newest look's photo, for the Hive tile
+            nav: siteLinks.state,
             seriesStats: null,
             seriesActivity: [],
             shopStats: null,
@@ -102,6 +128,8 @@ export default {
     },
     methods: {
         reloadForShop() {
+            siteLinks.load();
+            this.fetchHiveThumb();
             this.fetchHeadings();
             this.fetchFeatured();
             this.fetchSeries();
@@ -123,6 +151,13 @@ export default {
                 this.allHeadings = ((await res.json()).headings || []).filter((h) => !h.is_sale);
                 this.watchReveals();
             } catch { /* tiles simply don't show */ }
+        },
+        async fetchHiveThumb() {
+            try {
+                const res = await fetch('/api/store/hive/feed?limit=6', { credentials: 'include' });
+                if (!res.ok) return;
+                this.hiveThumb = ((await res.json()).looks || []).find((l) => l.images?.length)?.images[0] || null;
+            } catch { /* the Hive mark stands in */ }
         },
         async fetchSeries() {
             try {
@@ -264,7 +299,7 @@ export default {
         </section>
 
         <!-- ─── The departments, each saying what's inside ──────────────── -->
-        <section v-if="headings.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
+        <section v-if="tiles.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
             <div class="flex items-end justify-between gap-4 mb-6">
                 <div>
                     <p class="font-script text-3xl text-gold leading-none">Discover</p>
@@ -273,25 +308,29 @@ export default {
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <router-link
-                    v-for="(h, i) in headings"
-                    :key="h.handle"
-                    :to="`/shop?heading=${h.handle}`"
-                    :data-reveal="'h-' + h.handle"
-                    :class="['reveal img-shine group relative aspect-[4/5] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['h-' + h.handle] && 'is-in']"
+                    v-for="(t, i) in tiles"
+                    :key="t.to"
+                    :to="t.to"
+                    :data-reveal="'t-' + t.to"
+                    :class="['reveal img-shine group relative aspect-[4/5] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['t-' + t.to] && 'is-in']"
                     :style="{ transitionDelay: i * 70 + 'ms' }"
                 >
-                    <template v-if="h.image_url">
-                        <img :src="h.image_url" :alt="h.name" loading="lazy" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent"></div>
+                    <template v-if="t.image">
+                        <img :src="t.image" :alt="t.name" loading="lazy" :class="['absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105', t.contain ? 'object-contain p-10 opacity-90' : 'object-cover object-top']" />
+                        <div v-if="!t.contain" class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
                     </template>
-                    <div class="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between gap-3">
-                        <div>
-                            <p :class="['font-display text-2xl tracking-widest uppercase leading-none', h.image_url ? 'text-white' : 'text-black']">{{ h.name }}</p>
-                            <p v-if="h.catalogues?.length" :class="['text-[11px] mt-2 line-clamp-1', h.image_url ? 'text-white/75' : 'text-black/55']">{{ h.catalogues.map((c) => c.name).join(' · ') }}</p>
-                        </div>
-                        <span :class="['w-10 h-10 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-gold group-hover:text-white group-hover:translate-x-0.5', h.image_url ? 'bg-white/90 text-black' : 'bg-black text-white']">
-                            <ArrowRight class="w-4 h-4" />
-                        </span>
+
+                    <!-- A small label up top for the tile that isn't a department. -->
+                    <span v-if="t.badge" class="absolute top-3 left-3 z-10 bg-gold text-white text-[9px] font-semibold tracking-[0.18em] uppercase px-2 py-1">{{ t.badge }}</span>
+
+                    <!-- The way in, pinned to the corner: a long name can never push it off the tile. -->
+                    <span :class="['absolute top-3 right-3 z-10 w-10 h-10 rounded-full inline-flex items-center justify-center transition-all duration-300 group-hover:bg-gold group-hover:text-white group-hover:rotate-[-45deg]', t.dark ? 'bg-white/90 text-black' : 'bg-black text-white']">
+                        <ArrowRight class="w-4 h-4" />
+                    </span>
+
+                    <div class="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+                        <p :class="['font-display text-lg sm:text-2xl tracking-widest uppercase leading-tight break-words', t.dark ? 'text-white' : 'text-black']">{{ t.name }}</p>
+                        <p v-if="t.sub" :class="['text-[11px] mt-1.5 line-clamp-1', t.dark ? 'text-white/75' : 'text-black/55']">{{ t.sub }}</p>
                     </div>
                 </router-link>
             </div>

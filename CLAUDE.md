@@ -218,7 +218,7 @@ The fixed nav entries and the footer's help/company links are staff-switched at 
 
 ### The home page
 
-The hero, then a **pulse** (sold this week · series filling · closing today · new in · here now — only the ones that are true, each a link) over one ticker merging pieces sold and sizes taken in series; **Filling now** — the series nearest to shipping as rings, "one more" glowing; departments as tiles that say what's inside; New in (5 across, rising as they scroll in); Trending; Recently viewed. Every number is real.
+The hero, then a **pulse** (sold this week · series filling · closing today · new in · here now — only the ones that are true, each a link) over one ticker merging pieces sold and sizes taken in series; **Filling now** — the series nearest to shipping as rings, "one more" glowing; departments as tiles that say what's inside, plus a **fourth tile that follows the Hive switch** — The Hive (with the newest look's photo) once staff launch it at `/admin/content`, Series until then (curated affiliate shops get four departments). Tile arrows sit in the top-right corner so a long name can't push them off a narrow phone tile; New in (5 across, rising as they scroll in); Trending; Recently viewed. Every number is real.
 
 ### Footers and endless scrolling
 
