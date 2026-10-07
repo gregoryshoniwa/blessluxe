@@ -3,6 +3,7 @@ import { api } from '../../lib/api.js';
 import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from './IconButton.vue';
 import QuickSeriesForm from './QuickSeriesForm.vue';
+import QuickPager from './QuickPager.vue';
 import { Plus, Copy, Check, ExternalLink, Pencil, Ban, ArrowLeft, Search, MessageCircle } from 'lucide-vue-next';
 
 const STATUS = {
@@ -19,26 +20,40 @@ const STATUS = {
  */
 export default {
     name: 'QuickSeriesList',
-    components: { IconButton, QuickSeriesForm, Plus, Copy, Check, ExternalLink, Pencil, Ban, ArrowLeft, Search, MessageCircle },
+    components: { IconButton, QuickSeriesForm, QuickPager, Plus, Copy, Check, ExternalLink, Pencil, Ban, ArrowLeft, Search, MessageCircle },
     data() {
-        return { rows: [], page: 1, lastPage: 1, total: 0, q: '', status: '', loading: true, fresh: [], copied: '', searchTimer: null, statuses: STATUS };
+        return {
+            rows: [], page: 1, lastPage: 1, total: 0, from: null, to: null, per: 10,
+            q: '', status: '', heading: '', origin: '',
+            headings: [], origins: [],
+            loading: true, fresh: [], copied: '', searchTimer: null, statuses: STATUS,
+        };
     },
     computed: {
         adding() { return this.$route.query.new === '1'; },
     },
-    mounted() { this.load(); },
+    async mounted() {
+        this.load();
+        try {
+            const o = await api.get('/api/admin/quick/series/options');
+            this.headings = o.headings || []; this.origins = o.origins || [];
+        } catch { /* the department and origin filters just stay empty */ }
+    },
     methods: {
         async load(page = 1) {
             this.loading = true;
             try {
-                const d = await api.get(`/api/admin/quick/series?page=${page}&q=${encodeURIComponent(this.q)}&status=${this.status}`);
-                Object.assign(this, { rows: d.rows, page: d.page, lastPage: d.last_page, total: d.total });
+                const qs = new URLSearchParams({ page, per: this.per, q: this.q, status: this.status, heading: this.heading, origin: this.origin });
+                const d = await api.get(`/api/admin/quick/series?${qs}`);
+                Object.assign(this, { rows: d.rows, page: d.page, lastPage: d.last_page, total: d.total, from: d.from, to: d.to });
             } catch { toast('Could not load the series.', { tone: 'error' }); }
             finally { this.loading = false; }
         },
         search() { clearTimeout(this.searchTimer); this.searchTimer = setTimeout(() => this.load(1), 300); },
         open(on) { this.$router.push({ query: { ...this.$route.query, new: on ? '1' : undefined } }); },
-        onSaved(r) { this.fresh = r.codes || []; this.open(false); this.q = ''; this.status = ''; this.load(1); },
+        onSaved(r) { this.fresh = r.codes || []; this.open(false); Object.assign(this, { q: '', status: '', heading: '', origin: '' }); this.load(1); },
+        setPer(n) { this.per = n; this.load(1); },
+        clearFilters() { Object.assign(this, { q: '', status: '', heading: '', origin: '' }); this.load(1); },
 
         money(c) { return c == null ? '—' : '$' + (c / 100).toFixed(2).replace(/\.00$/, ''); },
         margin(r) { return r.cost && r.price ? Math.round((r.price / r.cost - 1) * 100) + '%' : '—'; },
@@ -81,11 +96,19 @@ export default {
                 <Search class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input v-model="q" @input="search" placeholder="Search name, code or supplier" class="w-full border border-zinc-300 pl-8 pr-3 py-2 text-sm" />
             </label>
-            <select v-model="status" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white">
-                <option value="">All</option>
+            <select v-model="heading" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Department">
+                <option value="">All departments</option>
+                <option v-for="h in headings" :key="h.id" :value="h.id">{{ h.name }}</option>
+            </select>
+            <select v-model="origin" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Ships from">
+                <option value="">Ships from anywhere</option>
+                <option v-for="o in origins" :key="o.code" :value="o.code">{{ o.label }}</option>
+            </select>
+            <select v-model="status" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Status">
+                <option value="">Any status</option>
                 <option v-for="(s, k) in statuses" :key="k" :value="k">{{ s[0] }}</option>
             </select>
-            <span class="text-xs text-zinc-500">{{ total }} series</span>
+            <button v-if="q || status || heading || origin" @click="clearFilters" class="text-xs text-zinc-500 underline hover:text-black">Clear</button>
             <button @click="open(true)" class="ml-auto bg-gold text-white px-4 py-2 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5">
                 <Plus class="w-4 h-4" /> Add series
             </button>
@@ -111,8 +134,8 @@ export default {
                 </tbody>
                 <tbody v-else-if="!rows.length">
                     <tr><td colspan="9" class="px-3 py-10 text-center text-zinc-500">
-                        {{ q || status ? 'No series match.' : 'No series yet.' }}
-                        <button v-if="!q && !status" @click="open(true)" class="text-gold-dark underline ml-1">Add the first one</button>
+                        {{ q || status || heading || origin ? 'No series match.' : 'No series yet.' }}
+                        <button v-if="!q && !status && !heading && !origin" @click="open(true)" class="text-gold-dark underline ml-1">Add the first one</button>
                     </td></tr>
                 </tbody>
                 <tbody v-else :class="loading && 'opacity-60'">
@@ -154,12 +177,8 @@ export default {
                     </tr>
                 </tbody>
             </table>
+            <QuickPager :page="page" :last-page="lastPage" :total="total" :from="from" :to="to" :per="per" @page="load" @per="setPer" />
         </div>
 
-        <div v-if="lastPage > 1" class="flex items-center justify-end gap-2 mt-3 text-xs">
-            <button :disabled="page <= 1" @click="load(page - 1)" class="border border-zinc-300 px-3 py-1.5 disabled:opacity-40">Previous</button>
-            <span class="text-zinc-500">Page {{ page }} of {{ lastPage }}</span>
-            <button :disabled="page >= lastPage" @click="load(page + 1)" class="border border-zinc-300 px-3 py-1.5 disabled:opacity-40">Next</button>
-        </div>
     </div>
 </template>

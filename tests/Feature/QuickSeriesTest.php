@@ -118,4 +118,43 @@ class QuickSeriesTest extends TestCase
         $this->assertEqualsWithDelta(0.0016, $d['ai_cost'], 0.00001);
         $this->assertEqualsWithDelta(0.0016, (float) DB::table('ai_usage_logs')->where('surface', 'quick_series')->value('cost'), 0.00001);
     }
+
+    #[Test]
+    public function a_single_product_keeps_stock_per_size_when_local_and_none_when_imported(): void
+    {
+        $base = [
+            'title' => 'Sheer Cape Dress', 'cost' => '36', 'margin' => '50', 'publish' => '1',
+            'supplier' => json_encode(['name' => 'Volonte Rose']), 'origin' => 'TR',
+            'catalogue_ids' => json_encode(['cat_suits']),
+            'images' => [UploadedFile::fake()->image('a.jpg', 600, 800)],
+        ];
+        $local = $this->post('/api/admin/quick/products', $base + [
+            'sourcing' => 'local', 'sizes' => json_encode(['M', 'S', 'L']), 'stock' => json_encode(['S' => 2, 'M' => 3, 'L' => 0]),
+        ], ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame(5400, $local['price']);                                // $36 + 50%
+
+        $v = DB::table('product_variants')->where('product_id', $local['product_id'])->pluck('inventory_quantity', 'title')->all();
+        $this->assertEquals(['S' => 2, 'M' => 3, 'L' => 0], $v);
+        $this->assertSame('local', DB::table('products')->where('id', $local['product_id'])->value('sourcing'));
+
+        $import = $this->post('/api/admin/quick/products', array_merge($base, ['title' => 'Pleated Top']) + [
+            'sourcing' => 'import', 'sizes' => json_encode([]),
+        ], ['Accept' => 'application/json'])->assertOk()->json();
+        $iv = DB::table('product_variants')->where('product_id', $import['product_id'])->get();
+        $this->assertSame(['One Size'], $iv->pluck('title')->all());               // no sizes = one size
+        $this->assertSame(0, (int) $iv[0]->manage_inventory);
+
+        // A series' own product never shows in the Products table; filters work.
+        $this->publish()->assertOk();
+        $rows = $this->getJson('/api/admin/quick/products')->assertOk()->json('rows');
+        $this->assertEqualsCanonicalizing(['Sheer Cape Dress', 'Pleated Top'], array_column($rows, 'title'));
+        $byTitle = array_column($rows, null, 'title');
+        $this->assertSame([5, null], [$byTitle['Sheer Cape Dress']['stock'], $byTitle['Pleated Top']['stock']]);
+        $this->assertSame('Men › Suits', $byTitle['Pleated Top']['where']);
+        $this->assertSame(1, $this->getJson('/api/admin/quick/products?sourcing=import')->json('total'));
+        $this->assertSame(2, $this->getJson('/api/admin/quick/products?heading=head_m')->json('total'));
+        $this->assertSame(0, $this->getJson('/api/admin/quick/products?heading=head_nope')->json('total'));
+        $this->assertSame(2, $this->getJson('/api/admin/quick/series?heading=head_m&origin=TR&per=10')->json('total'));
+        $this->assertSame(0, $this->getJson('/api/admin/quick/series?origin=CN')->json('total'));
+    }
 }

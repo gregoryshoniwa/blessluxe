@@ -5,7 +5,8 @@ import { resizeImage } from '../../lib/image-resize.js';
 import { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus } from 'lucide-vue-next';
 
 /**
- * A supplier's post (Telegram / WhatsApp) → a live series, in seven steps.
+ * A supplier's post (Telegram / WhatsApp) → a live series, or (mode="product")
+ * a single piece sold one at a time, in seven steps.
  * Drop or paste a screenshot of the post and the AI reader fills everything
  * except the photos; every field stays editable, nothing is saved until
  * Publish.
@@ -27,6 +28,8 @@ function blank(defaults = {}) {
         origin: 'TR',
         size_runs: [[]],
         open_days: defaults.open_days ?? 14,
+        sourcing: 'local',   // products only: stock here, or imported to order
+        stock: {},           // products only: size => how many on the shelf
         ai_cost: 0,          // USD spent reading this post, summed over every read
     };
 }
@@ -34,6 +37,10 @@ function blank(defaults = {}) {
 export default {
     name: 'QuickSeriesForm',
     components: { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus },
+    props: {
+        // 'series' — a size run strangers fill together; 'product' — sold piece by piece.
+        mode: { type: String, default: 'series' },
+    },
     emits: ['saved'],
     data() {
         return {
@@ -51,6 +58,9 @@ export default {
         };
     },
     computed: {
+        isProduct() { return this.mode === 'product'; },
+        noun() { return this.isProduct ? 'product' : 'series'; },
+        units() { return Object.values(this.form.stock).reduce((n, q) => n + (Number(q) || 0), 0); },
         cost() { return parseFloat(this.form.cost) || 0; },
         price() { return this.cost ? Math.ceil(this.cost * (1 + (Number(this.form.margin) || 0) / 100)) : 0; },
         profit() { return this.price - this.cost; },
@@ -73,7 +83,7 @@ export default {
             if (!this.form.title.trim()) m.push('a name');
             if (!this.photos.length) m.push('a photo');
             if (!this.cost) m.push('the cost');
-            if (!this.runs.some((r) => r.length >= 2)) m.push('at least two sizes');
+            if (!this.isProduct && !this.runs.some((r) => r.length >= 2)) m.push('at least two sizes');
             return m;
         },
     },
@@ -129,11 +139,23 @@ export default {
                 if (draft.description) f.description = draft.description + (draft.colours?.length > 1 ? `\n\nColours: ${draft.colours.join(', ')}.` : '');
                 if (draft.reference) f.reference = draft.reference;
                 if (draft.catalogue_ids?.length) f.catalogue_ids = draft.catalogue_ids;
-                if (draft.cost != null) f.cost = draft.cost;
-                if (draft.single_price != null) f.single_price = draft.single_price;
+                if (this.isProduct) {
+                    // Bought one at a time, so the single-piece price is what we pay;
+                    // their whole-run price is kept as the reference instead.
+                    const one = draft.single_price ?? draft.cost;
+                    if (one != null) f.cost = one;
+                    f.single_price = draft.single_price != null && draft.cost != null ? draft.cost : '';
+                } else {
+                    if (draft.cost != null) f.cost = draft.cost;
+                    if (draft.single_price != null) f.single_price = draft.single_price;
+                }
                 if (draft.supplier?.name) f.supplier = { ...f.supplier, ...draft.supplier, link: draft.supplier.link || f.supplier.link };
                 if (draft.origin) f.origin = draft.origin;
-                if (draft.size_runs?.length) { f.size_runs = draft.size_runs; this.sizeDraft = draft.size_runs.map(() => ''); }
+                if (draft.size_runs?.length) {
+                    // A product has one list of sizes: every size any run offered.
+                    f.size_runs = this.isProduct ? [[...new Set(draft.size_runs.flat())]] : draft.size_runs;
+                    this.sizeDraft = f.size_runs.map(() => '');
+                }
                 const notes = [];
                 if (draft.currency && draft.currency !== 'USD') notes.push(`Prices were in ${draft.currency} — convert the cost to US dollars.`);
                 if (draft.note) notes.push(draft.note);
@@ -178,12 +200,21 @@ export default {
                 const f = this.form;
                 for (const k of ['title', 'description', 'reference', 'cost', 'margin', 'single_price', 'origin', 'open_days', 'ai_cost']) fd.append(k, f[k] ?? '');
                 fd.append('supplier', JSON.stringify(f.supplier));
-                fd.append('size_runs', JSON.stringify(this.runs));
+                if (this.isProduct) {
+                    const sizes = this.runs[0] || [];
+                    fd.append('sizes', JSON.stringify(sizes));
+                    fd.append('sourcing', f.sourcing);
+                    const stock = {};
+                    for (const sz of (sizes.length ? sizes : ['One Size'])) stock[sz] = Number(f.stock[sz]) || 0;
+                    fd.append('stock', JSON.stringify(stock));
+                } else {
+                    fd.append('size_runs', JSON.stringify(this.runs));
+                }
                 fd.append('catalogue_ids', JSON.stringify(f.catalogue_ids));
                 fd.append('publish', publish ? '1' : '0');
                 for (const p of this.photos) fd.append('images[]', await resizeImage(p.file, { max: 1600, quality: 0.86 }), 'photo.jpg');
-                const r = await api.post('/api/admin/quick/series', fd);
-                toast(publish ? `Published — selling at ${this.money(r.price / 100)} a piece` : 'Saved as a draft — launch it from Series when ready');
+                const r = await api.post(`/api/admin/quick/${this.isProduct ? 'products' : 'series'}`, fd);
+                toast(publish ? `Published — selling at ${this.money(r.price / 100)} a piece` : this.isProduct ? 'Saved as a draft — publish it from the table when ready' : 'Saved as a draft — launch it from Series when ready');
                 this.$emit('saved', { ...r, publish });
             } catch (e) {
                 const p = e?.payload || {};
@@ -293,11 +324,11 @@ export default {
                 <div>
                     <h3 class="text-xs tracking-widest uppercase text-zinc-500 mb-3"><span class="text-gold font-semibold">3</span> · Cost price</h3>
                     <label class="flex flex-col gap-1 mb-3">
-                        <span class="text-xs text-zinc-600">Series price per piece (what we pay) · USD</span>
+                        <span class="text-xs text-zinc-600">{{ isProduct ? 'Price per piece (what we pay)' : 'Series price per piece (what we pay)' }} · USD</span>
                         <input v-model="form.cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="60" class="border border-zinc-300 px-3 py-2 text-sm" />
                     </label>
                     <label class="flex flex-col gap-1">
-                        <span class="text-xs text-zinc-600">Their single-piece price <span class="text-zinc-400">(for reference)</span></span>
+                        <span class="text-xs text-zinc-600">{{ isProduct ? 'Their whole-run (series) price' : 'Their single-piece price' }} <span class="text-zinc-400">(for reference)</span></span>
                         <input v-model="form.single_price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="85" class="border border-zinc-300 px-3 py-2 text-sm" />
                     </label>
                 </div>
@@ -311,7 +342,7 @@ export default {
                         <button v-for="m in [25, 30, 40, 50, 60, 80]" :key="m" @click="form.margin = m" :class="['px-2.5 py-1 text-xs border', form.margin === m ? 'border-gold bg-gold/10 text-gold-dark' : 'border-zinc-300 hover:border-zinc-500']">{{ m }}%</button>
                     </div>
                     <p v-if="cost" class="text-sm">Sells at <strong class="text-lg">{{ money(price) }}</strong> <span class="text-zinc-500">· {{ money(profit) }} profit a piece</span></p>
-                    <p v-if="cost && single_price_note" class="text-xs text-zinc-500 mt-1">{{ single_price_note }}</p>
+                    <p v-if="cost && single_price_note && !isProduct" class="text-xs text-zinc-500 mt-1">{{ single_price_note }}</p>
                 </div>
             </section>
 
@@ -338,7 +369,7 @@ export default {
             </section>
 
             <!-- 7. Sizes -->
-            <section class="bg-white border border-zinc-200 p-5">
+            <section v-if="!isProduct" class="bg-white border border-zinc-200 p-5">
                 <h3 class="text-xs tracking-widest uppercase text-zinc-500 mb-1"><span class="text-gold font-semibold">7</span> · Sizes</h3>
                 <p class="text-xs text-zinc-500 mb-3">One size run = one series: a buyer takes each size. Type sizes and press Enter ("46 48 50" adds three). A post with two runs ("38–44 and 44–50") becomes two series.</p>
                 <div class="flex flex-wrap gap-1.5 mb-4">
@@ -356,6 +387,35 @@ export default {
                 </div>
                 <button @click="addRun" class="inline-flex items-center gap-1 text-xs text-zinc-600 hover:text-black mt-1"><Plus class="w-3.5 h-3.5" /> Another size run</button>
             </section>
+
+            <!-- 7. Sizes and stock (products) -->
+            <section v-else class="bg-white border border-zinc-200 p-5">
+                <h3 class="text-xs tracking-widest uppercase text-zinc-500 mb-3"><span class="text-gold font-semibold">7</span> · Sizes and stock</h3>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button @click="form.sourcing = 'local'" :class="['px-3 py-2 text-sm border text-left', form.sourcing === 'local' ? 'border-gold bg-gold/10' : 'border-zinc-300 hover:border-zinc-500']">
+                        <span class="font-medium">In stock here</span><span class="block text-xs text-zinc-500">Counted per size · "Available now"</span>
+                    </button>
+                    <button @click="form.sourcing = 'import'" :class="['px-3 py-2 text-sm border text-left', form.sourcing === 'import' ? 'border-gold bg-gold/10' : 'border-zinc-300 hover:border-zinc-500']">
+                        <span class="font-medium">Import to order</span><span class="block text-xs text-zinc-500">No stock kept · "3–5 days"</span>
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                    <button v-for="p in presets.filter((p) => p.runs.length === 1)" :key="p.label" @click="usePreset(p)" class="px-2.5 py-1 text-xs border border-zinc-300 hover:border-zinc-500">{{ p.label }}</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 border border-zinc-300 px-2 py-1.5 focus-within:border-zinc-500 mb-3">
+                    <span v-for="(s, k) in form.size_runs[0]" :key="s" class="inline-flex items-center gap-1 bg-zinc-100 px-2 py-1 text-sm font-medium">
+                        {{ s }} <button @click="form.size_runs[0].splice(k, 1)" class="text-zinc-400 hover:text-red-600" :aria-label="`Remove ${s}`"><X class="w-3 h-3" /></button>
+                    </span>
+                    <input v-model="sizeDraft[0]" @keydown="sizeKey(0, $event)" @blur="addSizes(0)" placeholder="Add sizes… (none = One Size)" class="flex-1 min-w-[10rem] px-1 py-1 text-sm outline-none" />
+                </div>
+                <div v-if="form.sourcing === 'local'" class="flex flex-wrap gap-2">
+                    <label v-for="sz in (form.size_runs[0].length ? form.size_runs[0] : ['One Size'])" :key="sz" class="flex flex-col items-center gap-1 w-20">
+                        <span class="text-xs font-medium">{{ sz }}</span>
+                        <input v-model.number="form.stock[sz]" type="number" min="0" inputmode="numeric" placeholder="0" class="border border-zinc-300 px-2 py-1.5 text-sm w-full text-center" :aria-label="`How many in ${sz}`" />
+                    </label>
+                    <p class="w-full text-xs text-zinc-500 mt-1">How many of each size are here now. A size at 0 shows as sold out.</p>
+                </div>
+            </section>
         </div>
 
         <!-- Summary: what's about to go live, and the two buttons. -->
@@ -365,12 +425,22 @@ export default {
                     <img v-if="photos[0]" :src="photos[0].url" alt="" class="w-full h-full object-cover object-top" />
                 </div>
                 <div class="min-w-0">
-                    <p class="text-sm font-semibold line-clamp-2">{{ form.title || 'Untitled series' }}</p>
+                    <p class="text-sm font-semibold line-clamp-2">{{ form.title || `Untitled ${noun}` }}</p>
                     <p class="text-lg font-semibold text-gold-dark mt-1">{{ price ? money(price) : '—' }}</p>
-                    <p class="text-xs text-zinc-500">Imported · no stock kept</p>
+                    <p class="text-xs text-zinc-500">{{ isProduct && form.sourcing === 'local' ? `In stock · ${units} piece${units === 1 ? '' : 's'}` : 'Imported · no stock kept' }}</p>
                 </div>
             </div>
-            <dl class="text-xs space-y-1.5 border-t border-zinc-100 pt-3">
+            <dl v-if="isProduct" class="text-xs space-y-1.5 border-t border-zinc-100 pt-3">
+                <div class="flex justify-between"><dt class="text-zinc-500">Sizes</dt><dd>{{ runs[0]?.length || 'One Size' }}</dd></div>
+                <div class="flex justify-between"><dt class="text-zinc-500">Profit a piece</dt><dd>{{ cost ? money(profit) : '—' }}</dd></div>
+                <template v-if="form.sourcing === 'local' && units">
+                    <div class="flex justify-between"><dt class="text-zinc-500">Stock at cost</dt><dd>{{ cost ? money(cost * units) : '—' }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-zinc-500">If it all sells</dt><dd>{{ price ? money(price * units) : '—' }}</dd></div>
+                </template>
+                <div v-if="form.ai_cost" class="flex justify-between"><dt class="text-zinc-500">AI reading</dt><dd>{{ aiMoney(form.ai_cost) }}</dd></div>
+                <div v-if="form.sourcing === 'local' && units" class="flex justify-between font-semibold"><dt>Profit if it all sells</dt><dd class="text-emerald-700">{{ cost ? money(profit * units - (form.ai_cost || 0)) : '—' }}</dd></div>
+            </dl>
+            <dl v-else class="text-xs space-y-1.5 border-t border-zinc-100 pt-3">
                 <div class="flex justify-between"><dt class="text-zinc-500">Series</dt><dd>{{ runs.length || '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-zinc-500">Sizes to fill</dt><dd>{{ slots || '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-zinc-500">We pay when all fill</dt><dd>{{ cost && slots ? money(cost * slots) : '—' }}</dd></div>
@@ -378,7 +448,7 @@ export default {
                 <div class="flex justify-between"><dt class="text-zinc-500">Shoppers pay</dt><dd>{{ price && slots ? money(price * slots) : '—' }}</dd></div>
                 <div class="flex justify-between font-semibold"><dt>Profit when full</dt><dd class="text-emerald-700">{{ cost && slots ? money(profit * slots - (form.ai_cost || 0)) : '—' }}</dd></div>
             </dl>
-            <label class="flex flex-col gap-1 border-t border-zinc-100 pt-3">
+            <label v-if="!isProduct" class="flex flex-col gap-1 border-t border-zinc-100 pt-3">
                 <span class="text-xs text-zinc-600">Open for</span>
                 <select v-model.number="form.open_days" class="border border-zinc-300 px-3 py-2 text-sm bg-white">
                     <option v-for="d in opts.open_days" :key="d" :value="d">{{ d }} days</option>
@@ -388,7 +458,7 @@ export default {
             <p v-if="missing.length" class="text-xs text-zinc-500">Still needed: {{ missing.join(', ') }}.</p>
             <div class="flex flex-col gap-2">
                 <button @click="save(true)" :disabled="saving" class="bg-gold text-white px-5 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-50">
-                    {{ saving ? 'Saving…' : runs.length > 1 ? `Publish ${runs.length} series` : 'Publish series' }}
+                    {{ saving ? 'Saving…' : isProduct ? 'Publish product' : runs.length > 1 ? `Publish ${runs.length} series` : 'Publish series' }}
                 </button>
                 <button @click="save(false)" :disabled="saving || !form.title.trim()" class="border border-zinc-300 px-5 py-2.5 text-xs font-semibold tracking-[0.2em] uppercase hover:border-zinc-500 disabled:opacity-40">Save as draft</button>
             </div>

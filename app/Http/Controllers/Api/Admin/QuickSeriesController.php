@@ -18,6 +18,7 @@ class QuickSeriesController extends Controller
     {
         return [
             'catalogues' => QuickSeries::catalogues(),
+            'headings'   => \Illuminate\Support\Facades\DB::table('headings')->where('is_sale', false)->orderBy('rank')->get(['id', 'name']),
             'suppliers'  => Supplier::orderBy('name')->get(['id', 'name', 'phone', 'link', 'country']),
             'origins'    => collect(QuickSeries::ORIGINS)->map(fn ($label, $code) => ['code' => $code, 'label' => $label])->values(),
             'open_days'  => QuickSeries::OPEN_DAYS,
@@ -34,6 +35,7 @@ class QuickSeriesController extends Controller
     {
         $q = trim((string) $request->query('q', ''));
         $status = $request->query('status');
+        [$heading, $origin, $per] = self::filters($request);
 
         $rows = \Illuminate\Support\Facades\DB::table('pack_campaigns as c')
             ->join('pack_definitions as d', 'd.id', '=', 'c.pack_definition_id')
@@ -42,13 +44,15 @@ class QuickSeriesController extends Controller
             ->whereNull('c.deleted_at')
             ->when(in_array($status, ['open', 'filled', 'closed', 'cancelled'], true), fn ($w) => $w->where('c.status', $status))
             ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('c.title', 'like', "%{$q}%")->orWhere('c.public_code', 'like', "%{$q}%")->orWhere('s.name', 'like', "%{$q}%")))
+            ->when($heading, fn ($w) => self::inHeading($w, 'p.id', $heading))
+            ->when($origin, fn ($w) => $w->where('p.origin_country', $origin))
             ->orderByDesc('c.created_at')->orderByDesc('c.id')
             ->select('c.id', 'c.public_code', 'c.title', 'c.status', 'c.expires_at', 'c.created_at', 'p.id as product_id', 'p.thumbnail', 'p.origin_country', 's.name as supplier')
             ->selectSub(fn ($x) => $x->from('pack_slots')->whereColumn('pack_campaign_id', 'c.id')->whereNull('deleted_at')->selectRaw('count(*)'), 'slots')
             ->selectSub(fn ($x) => $x->from('pack_slots')->whereColumn('pack_campaign_id', 'c.id')->whereNull('deleted_at')->where('status', 'paid')->selectRaw('count(*)'), 'paid')
             ->selectSub(fn ($x) => $x->from('pack_slots as ps')->join('product_variants as v', 'v.id', '=', 'ps.variant_id')->whereColumn('ps.pack_campaign_id', 'c.id')->selectRaw('min(v.cost_price)'), 'cost')
             ->selectSub(fn ($x) => $x->from('pack_slots as ps')->join('variant_prices as vp', 'vp.variant_id', '=', 'ps.variant_id')->whereColumn('ps.pack_campaign_id', 'c.id')->where('vp.currency_code', 'usd')->selectRaw('min(vp.amount)'), 'price')
-            ->paginate(25);
+            ->paginate($per);
 
         return [
             'rows' => collect($rows->items())->map(fn ($r) => [
@@ -68,8 +72,28 @@ class QuickSeriesController extends Controller
                 'created_at' => \Illuminate\Support\Carbon::parse($r->created_at)->toIso8601String(),
                 'link'      => url("/shop/series/{$r->public_code}"),
             ]),
-            'page' => $rows->currentPage(), 'last_page' => $rows->lastPage(), 'total' => $rows->total(),
+            'page' => $rows->currentPage(), 'last_page' => $rows->lastPage(), 'total' => $rows->total(), 'per' => $per,
+            'from' => $rows->firstItem(), 'to' => $rows->lastItem(),
         ];
+    }
+
+    /** The filters both tables share: department, ships-from, rows per page. */
+    public static function filters(Request $request): array
+    {
+        $per = (int) $request->query('per', 10);
+
+        return [
+            $request->query('heading') ?: null,
+            array_key_exists((string) $request->query('origin'), QuickSeries::ORIGINS) ? $request->query('origin') : null,
+            in_array($per, [10, 25, 50, 100], true) ? $per : 10,
+        ];
+    }
+
+    /** "Women" = filed in any catalogue under the Women heading. */
+    public static function inHeading($query, string $productColumn, string $heading)
+    {
+        return $query->whereExists(fn ($x) => $x->from('product_catalogue_map as m')->join('catalogues as cat', 'cat.id', '=', 'm.catalogue_id')
+            ->whereColumn('m.product_id', $productColumn)->where('cat.heading_id', $heading));
     }
 
     /** POST /api/admin/quick/series/read  { shots[] } — fills the form; saves nothing. */

@@ -70,6 +70,7 @@ class SeriesPageTest extends TestCase
     #[Test]
     public function the_board_says_how_alive_it_is_and_what_just_happened(): void
     {
+        $this->travelTo(now()->setTime(12, 0));             // "closes in 3 hours" must still be today, whatever time the suite runs
         $this->customer('cust_rudo', 'Rudo', 'Moyo');
         $this->customer('cust_tendai', 'Tendai', 'Kaseke');
         $this->series(['S' => 'cust_rudo', 'M' => 'cust_tendai']);

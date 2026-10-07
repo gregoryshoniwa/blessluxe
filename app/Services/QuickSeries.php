@@ -166,103 +166,136 @@ TXT;
         $runs = self::cleanRuns($d['size_runs']);
         if (! $runs) throw new \InvalidArgumentException('Add at least two sizes.');
         $publish = (bool) $d['publish'];
-        $price = self::priceCents((float) $d['cost'], (int) $d['margin']);
-        $cost = (int) round((float) $d['cost'] * 100);
+        $sizes = array_values(array_unique(array_merge(...$runs)));
 
-        // Files first (they can't join a DB transaction); removed again if the save fails.
-        $urls = array_map(fn (UploadedFile $f) => Media::upload($f, 'products'), $files);
+        return self::withPhotos($files, function (array $urls) use ($d, $runs, $publish, $sizes) {
+            [$product, $variants, $price] = self::makeProduct($d, $urls, $sizes, $publish, 'import', []);
 
-        try {
-            $result = DB::transaction(function () use ($d, $runs, $publish, $price, $cost, $urls) {
-                $supplier = self::supplier($d);
-                $id = 'prod_' . Str::random(16);
-                $handle = Str::slug($d['title']) ?: 'series';
-                if (Product::withoutGlobalScopes()->where('handle', $handle)->exists()) $handle .= '-' . strtolower(Str::random(5));
+            $def = PackDefinition::create([
+                'id'          => $defId = 'pdef_' . Str::random(16),
+                'product_id'  => $product->id,
+                'pack_kind'   => 'single',
+                'title'       => $d['title'],
+                'handle'      => Str::slug($d['title']) . '-' . substr($defId, -6),
+                'description' => $d['description'] ?? null,
+                'status'      => $publish ? 'published' : 'draft',
+                'sourcing'    => 'import',
+            ]);
 
-                $product = Product::create([
-                    'id'             => $id,
-                    'title'          => $d['title'],
-                    'handle'         => $handle,
-                    'description'    => $d['description'] ?? null,
-                    'thumbnail'      => $urls[0] ?? null,
-                    'status'         => $publish ? 'published' : 'draft',
-                    'sourcing'       => 'import',
-                    'supplier_id'    => $supplier?->id,
-                    'origin_country' => $d['origin'] ?? null,
-                    'metadata'       => array_filter([
-                        'created_by'         => 'quick_series',
-                        'supplier_reference' => $d['reference'] ?? null,
-                        'supplier_single_price' => isset($d['single_price']) && $d['single_price'] !== '' ? (float) $d['single_price'] : null,
-                        'ai_cost'            => isset($d['ai_cost']) && (float) $d['ai_cost'] > 0 ? round((float) $d['ai_cost'], 5) : null,
-                    ], fn ($v) => $v !== null),
-                ]);
-                if (! empty($d['catalogue_ids'])) $product->catalogues()->sync($d['catalogue_ids']);
-
-                foreach ($urls as $i => $url) {
-                    ProductImage::create(['id' => 'img_' . Str::random(16), 'product_id' => $id, 'url' => $url, 'rank' => $i + 1]);
-                }
-
-                // One variant per distinct size, across every run.
-                $variants = [];
-                foreach (Sizes::sort(collect(array_unique(array_merge(...$runs)))->map(fn ($s) => ['title' => $s]))->pluck('title') as $size) {
-                    $v = ProductVariant::create([
-                        'id'               => 'var_' . Str::random(16),
-                        'product_id'       => $id,
-                        'title'            => $size,
-                        'sku'              => $handle . '-' . (Str::slug($size) ?: Str::random(4)),
-                        'manage_inventory' => false,          // imported to order — nothing on a shelf
-                        'inventory_quantity' => 0,
-                        'cost_price'       => $cost,
+            $codes = [];
+            if ($publish) {
+                $days = (int) ($d['open_days'] ?? 0);
+                foreach ($runs as $run) {
+                    $code = AdminPackController::makePublicCode();
+                    $camp = PackCampaign::create([
+                        'id'                 => 'pcam_' . Str::random(16),
+                        'pack_definition_id' => $def->id,
+                        'host_kind'          => 'admin',
+                        'public_code'        => $code,
+                        'status'             => 'open',
+                        'title'              => count($runs) > 1 ? "{$d['title']} · sizes {$run[0]}–" . end($run) : $d['title'],
+                        'expires_at'         => $days > 0 ? now()->addDays($days) : null,
                     ]);
-                    VariantPrice::create(['id' => 'vpr_' . Str::random(12), 'variant_id' => $v->id, 'currency_code' => 'usd', 'amount' => $price]);
-                    $variants[$size] = $v->id;
-                }
-
-                $def = PackDefinition::create([
-                    'id'          => $defId = 'pdef_' . Str::random(16),
-                    'product_id'  => $id,
-                    'pack_kind'   => 'single',
-                    'title'       => $d['title'],
-                    'handle'      => Str::slug($d['title']) . '-' . substr($defId, -6),
-                    'description' => $d['description'] ?? null,
-                    'status'      => $publish ? 'published' : 'draft',
-                    'sourcing'    => 'import',
-                ]);
-
-                $codes = [];
-                if ($publish) {
-                    $days = (int) ($d['open_days'] ?? 0);
-                    foreach ($runs as $run) {
-                        $code = AdminPackController::makePublicCode();
-                        $camp = PackCampaign::create([
-                            'id'                 => 'pcam_' . Str::random(16),
-                            'pack_definition_id' => $def->id,
-                            'host_kind'          => 'admin',
-                            'public_code'        => $code,
-                            'status'             => 'open',
-                            'title'              => count($runs) > 1 ? "{$d['title']} · sizes {$run[0]}–" . end($run) : $d['title'],
-                            'expires_at'         => $days > 0 ? now()->addDays($days) : null,
+                    foreach ($run as $size) {
+                        PackSlot::create([
+                            'id' => 'pslot_' . Str::random(16), 'pack_campaign_id' => $camp->id,
+                            'variant_id' => $variants[$size], 'size_label' => $size, 'status' => 'available',
                         ]);
-                        foreach ($run as $size) {
-                            PackSlot::create([
-                                'id' => 'pslot_' . Str::random(16), 'pack_campaign_id' => $camp->id,
-                                'variant_id' => $variants[$size], 'size_label' => $size, 'status' => 'available',
-                            ]);
-                        }
-                        $codes[] = $code;
                     }
+                    $codes[] = $code;
                 }
+            }
 
-                return ['product_id' => $id, 'handle' => $handle, 'definition_id' => $def->id, 'codes' => $codes, 'price' => $price];
-            });
+            self::remember((int) $d['margin'], isset($d['open_days']) ? (int) $d['open_days'] : null);
+
+            return ['product_id' => $product->id, 'handle' => $product->handle, 'definition_id' => $def->id, 'codes' => $codes, 'price' => $price];
+        });
+    }
+
+    /**
+     * A single product sold piece by piece: one variant per size. Local stock
+     * keeps a count per size; an import is bought to order and keeps none.
+     *
+     * @param  array<string,int>  $stock  size => quantity (local only)
+     * @param  UploadedFile[]     $files
+     */
+    public static function createProduct(array $d, array $files): array
+    {
+        $sizes = self::cleanRuns([$d['sizes'] ?? []], 1)[0] ?? [];
+        if (! $sizes) $sizes = ['One Size'];
+        $publish = (bool) $d['publish'];
+        $sourcing = ($d['sourcing'] ?? 'local') === 'import' ? 'import' : 'local';
+
+        return self::withPhotos($files, function (array $urls) use ($d, $sizes, $publish, $sourcing) {
+            [$product, , $price] = self::makeProduct($d, $urls, $sizes, $publish, $sourcing, (array) ($d['stock'] ?? []));
+            self::remember((int) $d['margin'], null);
+
+            return ['product_id' => $product->id, 'handle' => $product->handle, 'price' => $price, 'link' => url("/shop/{$product->handle}")];
+        });
+    }
+
+    /** Photos are stored first (files can't join a transaction) and removed again if the save fails. */
+    private static function withPhotos(array $files, \Closure $save): array
+    {
+        $urls = array_map(fn (UploadedFile $f) => Media::upload($f, 'products'), $files);
+        try {
+            return DB::transaction(fn () => $save($urls));
         } catch (\Throwable $e) {
             foreach ($urls as $u) Media::delete($u);
             throw $e;
         }
+    }
 
-        self::remember((int) $d['margin'], isset($d['open_days']) ? (int) $d['open_days'] : null);
+    /** @return array{0: Product, 1: array<string,string>, 2: int} the product, size => variant id, price in cents */
+    private static function makeProduct(array $d, array $urls, array $sizes, bool $publish, string $sourcing, array $stock): array
+    {
+        $price = self::priceCents((float) $d['cost'], (int) $d['margin']);
+        $cost = (int) round((float) $d['cost'] * 100);
+        $supplier = self::supplier($d);
+        $id = 'prod_' . Str::random(16);
+        $handle = Str::slug($d['title']) ?: 'piece';
+        if (Product::withoutGlobalScopes()->where('handle', $handle)->exists()) $handle .= '-' . strtolower(Str::random(5));
 
-        return $result;
+        $product = Product::create([
+            'id'             => $id,
+            'title'          => $d['title'],
+            'handle'         => $handle,
+            'description'    => $d['description'] ?? null,
+            'thumbnail'      => $urls[0] ?? null,
+            'status'         => $publish ? 'published' : 'draft',
+            'sourcing'       => $sourcing,
+            'supplier_id'    => $supplier?->id,
+            'origin_country' => $d['origin'] ?? null,
+            'metadata'       => array_filter([
+                'created_by'            => 'quick_' . ($d['kind'] ?? 'series'),
+                'supplier_reference'    => $d['reference'] ?? null,
+                'supplier_single_price' => isset($d['single_price']) && $d['single_price'] !== '' ? (float) $d['single_price'] : null,
+                'ai_cost'               => isset($d['ai_cost']) && (float) $d['ai_cost'] > 0 ? round((float) $d['ai_cost'], 5) : null,
+            ], fn ($v) => $v !== null),
+        ]);
+        if (! empty($d['catalogue_ids'])) $product->catalogues()->sync($d['catalogue_ids']);
+
+        foreach ($urls as $i => $url) {
+            ProductImage::create(['id' => 'img_' . Str::random(16), 'product_id' => $id, 'url' => $url, 'rank' => $i + 1]);
+        }
+
+        $variants = [];
+        foreach (Sizes::sort(collect($sizes)->map(fn ($s) => ['title' => $s]))->pluck('title') as $size) {
+            $local = $sourcing === 'local';
+            $v = ProductVariant::create([
+                'id'                 => 'var_' . Str::random(16),
+                'product_id'         => $id,
+                'title'              => $size,
+                'sku'                => $handle . '-' . (Str::slug($size) ?: Str::random(4)),
+                'manage_inventory'   => $local,           // a shelf count for stock here; imports are bought to order
+                'inventory_quantity' => $local ? max(0, (int) ($stock[$size] ?? 0)) : 0,
+                'cost_price'         => $cost,
+            ]);
+            VariantPrice::create(['id' => 'vpr_' . Str::random(12), 'variant_id' => $v->id, 'currency_code' => 'usd', 'amount' => $price]);
+            $variants[$size] = $v->id;
+        }
+
+        return [$product, $variants, $price];
     }
 
     /** An existing supplier by id, or found by name, or a new one — with any new contact details kept. */
