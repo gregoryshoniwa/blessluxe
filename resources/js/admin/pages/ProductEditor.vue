@@ -182,7 +182,7 @@ export default {
             }
         },
         // ── AI photo restore ──────────────────────────────────────────────
-        money4(n) { return n >= 0.01 ? '$' + Number(n).toFixed(3).replace(/0$/, '') : (n * 100).toFixed(2) + '¢'; },
+        money4(n) { return '$' + Number(n || 0).toFixed(4).replace(/(\.\d\d\d*?)0+$/, '$1'); },   // always US dollars, to the hundredth of a cent: $0.0019, $0.039, $0.067
         async loadEnhanceQuote() {
             try { this.enhanceQuote = await api.get(`/api/admin/products/${this.id}/enhance`); } catch { /* keep the default */ }
         },

@@ -100,8 +100,8 @@ export default {
     },
     methods: {
         money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, ''); },
-        /** AI costs are fractions of a cent — shown to the tenth of a cent so they don't read as $0. */
-        aiMoney(n) { return n >= 0.01 ? '$' + n.toFixed(3) : (n * 100).toFixed(2) + '¢'; },
+        /** AI costs are fractions of a cent — shown in dollars to four places so they don't read as $0.00. */
+        aiMoney(n) { return '$' + Number(n || 0).toFixed(4).replace(/(\.\d\d\d*?)0+$/, '$1'); },   // always US dollars, to the hundredth of a cent: $0.0019, $0.039, $0.067
 
         // ── Pictures ────────────────────────────────────────────────────
         addFiles(list, files, max) {
