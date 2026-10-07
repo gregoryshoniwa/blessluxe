@@ -15,8 +15,9 @@ const AUTO_PAGES = 3;
  *
  *   - one row that sticks under the header, with the pulse of where you are
  *     (pieces · new this fortnight · here now · sold this week) and the search;
- *   - the headings as tabs and the chosen heading's catalogues as chips, ACROSS
- *     the page — a sidebar of four links was costing a quarter of the width;
+ *   - the department's catalogues as chips ACROSS the page — a sidebar of four
+ *     links was costing a quarter of the width. The departments themselves are
+ *     the header's menu and are not repeated here;
  *   - quick filters as one tap each (Baymard: a horizontal toolbar works when
  *     the filter types are few, and ours are), shown as applied, cleared in one;
  *   - a strip of what just sold here: the piece, never the person;
@@ -182,13 +183,6 @@ export default {
                 if ((this.q.q || '') !== q) this.setQuery({ q });
             }, 300);
         },
-        /** A heading is a place, so it's a real navigation (push); filters within it aren't. */
-        goHeading(h) {
-            const keep = {};
-            for (const k of ['sort', 'where', 'new', 'top', 'video', 'max_price']) if (this.q[k]) keep[k] = this.q[k];
-            if (!h) return this.$router.push({ path: '/shop', query: keep });
-            this.$router.push({ path: '/shop', query: h.is_sale ? { ...keep, sale: 'true' } : { ...keep, heading: h.handle } });
-        },
         goCatalogue(c) {
             if (this.catalogue === c.handle) return this.setQuery({ catalogue: '', heading: this.heading });
             this.setQuery({ catalogue: c.handle, heading: '', sale: '' });
@@ -231,6 +225,7 @@ export default {
             }, { rootMargin: '400px' });
             this.observer.observe(end);
         },
+        fresh(iso) { return this.now - new Date(iso).getTime() < 86400000; },
         ago(iso) {
             const mins = Math.floor((this.now - new Date(iso).getTime()) / 60000);
             if (mins < 60) return mins < 1 ? 'just now' : `${mins}m ago`;
@@ -270,21 +265,17 @@ export default {
             </select>
         </div>
 
-        <!-- ─── Headings as tabs, the chosen one's catalogues as chips ───────── -->
-        <nav v-if="headings.length && !curated" class="pt-5" aria-label="Departments">
-            <div class="scroll-strip flex items-center gap-1 border-b border-black/10">
-                <button @click="goHeading(null)" :class="['min-h-11 px-4 text-[11px] font-semibold tracking-[0.2em] uppercase border-b-2 -mb-px transition-colors whitespace-nowrap', !heading ? 'border-gold text-gold' : 'border-transparent text-black/55 hover:text-black']">All</button>
-                <button v-for="h in headings" :key="h.handle" @click="goHeading(h)" :aria-current="heading === h.handle ? 'page' : null"
-                    :class="['min-h-11 px-4 text-[11px] font-semibold tracking-[0.2em] uppercase border-b-2 -mb-px transition-colors whitespace-nowrap', heading === h.handle ? (h.is_sale ? 'border-red-600 text-red-600' : 'border-gold text-gold') : (h.is_sale ? 'border-transparent text-red-600/80 hover:text-red-600' : 'border-transparent text-black/55 hover:text-black')]">
-                    {{ h.name }}
-                </button>
-            </div>
-            <div v-if="activeHeading?.catalogues?.length" class="scroll-strip flex gap-2 mt-4 scroll-px-0">
-                <button v-for="c in activeHeading.catalogues" :key="c.handle" @click="goCatalogue(c)" :aria-pressed="catalogue === c.handle"
-                    :class="['flex-shrink-0 min-h-11 px-4 border text-xs transition-all press', catalogue === c.handle ? 'border-gold bg-gold text-white' : 'border-black/15 bg-white text-black/70 hover:border-gold hover:text-gold']">
-                    {{ c.name }}
-                </button>
-            </div>
+        <!-- ─── The department's catalogues. The departments themselves are the
+             header's menu — repeating them here was the same row twice. ───── -->
+        <nav v-if="activeHeading?.catalogues?.length && !curated" class="scroll-strip flex gap-2 pt-5 scroll-px-0" :aria-label="`${activeHeading.name} by category`">
+            <button @click="setQuery({ catalogue: '', heading: activeHeading.is_sale ? '' : activeHeading.handle, sale: activeHeading.is_sale ? 'true' : '' })" :aria-pressed="!catalogue"
+                :class="['flex-shrink-0 min-h-11 px-4 border text-xs transition-all press', !catalogue ? 'border-gold bg-gold text-white' : 'border-black/15 bg-white text-black/70 hover:border-gold hover:text-gold']">
+                All {{ activeHeading.name }}
+            </button>
+            <button v-for="c in activeHeading.catalogues" :key="c.handle" @click="goCatalogue(c)" :aria-pressed="catalogue === c.handle"
+                :class="['flex-shrink-0 min-h-11 px-4 border text-xs transition-all press', catalogue === c.handle ? 'border-gold bg-gold text-white' : 'border-black/15 bg-white text-black/70 hover:border-gold hover:text-gold']">
+                {{ c.name }}
+            </button>
         </nav>
 
         <!-- ─── Quick filters: one tap each, applied ones gold, cleared in one ── -->
@@ -305,7 +296,7 @@ export default {
                 <router-link v-for="(a, i) in activity.concat(activity)" :key="i" :to="`/shop/${a.handle}`" class="inline-flex items-center gap-2.5 text-xs text-black/70 hover:text-gold transition-colors">
                     <img v-if="a.thumbnail" :src="a.thumbnail" :alt="''" loading="lazy" class="w-7 h-7 rounded-full object-cover object-top ring-1 ring-gold/30" />
                     <ShoppingBag v-else class="w-3.5 h-3.5 text-gold" />
-                    <span><strong class="font-medium text-black/85">{{ a.title }}</strong><template v-if="a.size"> · size {{ a.size }}</template> just sold</span>
+                    <span><strong class="font-medium text-black/85">{{ a.title }}</strong><template v-if="a.size"> · size {{ a.size }}</template> {{ fresh(a.at) ? 'just sold' : 'sold' }}</span>
                     <span class="text-black/40">{{ ago(a.at) }}</span>
                 </router-link>
             </div>
