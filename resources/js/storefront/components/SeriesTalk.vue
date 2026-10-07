@@ -189,6 +189,27 @@ export default {
                 el.setSelectionRange(pos, pos);
             });
         },
+        /**
+         * Up to three emoji and nothing else. Counted as what a person sees
+         * (graphemes), so 👩🏽‍💻 — five code points — is one.
+         */
+        emojiCount(text) {
+            const t = (text || '').replace(/\s+/g, '');
+            if (!t) return 0;
+            const parts = typeof Intl !== 'undefined' && Intl.Segmenter
+                ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(t)].map((x) => x.segment)
+                : [...t];
+
+            return parts.length;
+        },
+        emojiOnly(text) {
+            const t = (text || '').replace(/\s+/g, '');
+            if (!t || !/^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f)+$/u.test(t)) return false;
+            // A bare digit or # is an "emoji component" too; it isn't an emoji message.
+            if (/^[0-9#*]+$/.test(t)) return false;
+
+            return this.emojiCount(t) <= 3;
+        },
         onOutside(e) {
             if (this.emojiOpen && !this.$refs.emojiWrap?.contains(e.target)) this.emojiOpen = false;
         },
@@ -311,8 +332,17 @@ export default {
                                         <span v-if="b.inSeries" class="inline-flex items-center gap-0.5 text-[9px] tracking-widest uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5"><Check class="w-2.5 h-2.5" /> In</span>
                                     </p>
                                     <div v-for="(m, i) in b.items" :key="m.id" :class="['group/msg relative flex items-center gap-1', b.mine && 'flex-row-reverse']">
+                                        <!-- Emoji on their own are the message: shown large, no bubble,
+                                             the way every chat app does it. A gold box behind 🎉 only
+                                             fights it. -->
                                         <p
-                                            :class="['text-sm leading-relaxed px-3.5 py-2 whitespace-pre-line break-words text-left', b.mine ? 'bg-gold text-white' : 'bg-cream-dark/60 text-black/85']"
+                                            v-if="emojiOnly(m.body)"
+                                            :class="['emoji-jumbo leading-none select-text py-0.5', emojiCount(m.body) === 1 ? 'text-5xl' : emojiCount(m.body) === 2 ? 'text-4xl' : 'text-3xl']"
+                                            :title="full(m.created_at)"
+                                        >{{ m.body }}</p>
+                                        <p
+                                            v-else
+                                            :class="['text-sm leading-relaxed px-3.5 py-2 whitespace-pre-line break-words text-left', b.mine ? 'bg-gold/15 text-black/85 border border-gold/25' : 'bg-cream-dark/60 text-black/85']"
                                             :title="full(m.created_at)"
                                         >{{ m.body }}</p>
                                         <button v-if="b.mine" @click="remove(m)" :disabled="busyId === m.id" class="w-7 h-7 inline-flex items-center justify-center text-black/25 hover:text-red-600 opacity-0 group-hover/msg:opacity-100 focus:opacity-100 transition-opacity" title="Remove" aria-label="Remove your message"><Trash2 class="w-3 h-3" /></button>
@@ -404,11 +434,15 @@ export default {
 .msg-enter-active { transition: opacity .25s ease, transform .25s ease; }
 .msg-enter-from { opacity: 0; transform: translateY(6px); }
 .live-dot { animation: live 2s ease-in-out infinite; }
+/* A jumbo emoji lands with a little bounce, once. */
+.emoji-jumbo { animation: land .35s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes land { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
 .pop-enter-active, .pop-leave-active { transition: opacity .15s ease, transform .15s ease; }
 .pop-enter-from, .pop-leave-to { opacity: 0; transform: translateY(6px) scale(.98); }
 @keyframes live { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
     .msg-enter-active, .pop-enter-active, .pop-leave-active { transition: none; }
+    .emoji-jumbo { animation: none; }
     .live-dot { animation: none; }
 }
 </style>
