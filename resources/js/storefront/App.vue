@@ -7,11 +7,12 @@ import AnnouncementBar from './components/AnnouncementBar.vue';
 import ChatWidget from './components/ChatWidget.vue';
 import DialogHost from '../components/DialogHost.vue';
 import CartDrawer from './components/CartDrawer.vue';
+import RouteProgress from './components/RouteProgress.vue';
 
 export default {
     name: 'StorefrontApp',
     components: {
-        Header, Footer, FooterSlim, AnnouncementBar, ChatWidget, DialogHost, CartDrawer,
+        Header, Footer, FooterSlim, AnnouncementBar, ChatWidget, DialogHost, CartDrawer, RouteProgress,
         // Loaded only when someone enters the Hive — shoppers never download it.
         HiveShell: defineAsyncComponent(() => import('./components/hive/HiveShell.vue')),
     },
@@ -38,7 +39,13 @@ export default {
         <AnnouncementBar />
         <Header />
         <main class="flex-1">
-            <router-view />
+            <!-- Keyed by PATH, not the full URL: a new page rises in, but a filter
+                 or a search on the same page doesn't remount anything. -->
+            <router-view v-slot="{ Component, route }">
+                <div :key="route.path" class="route-in">
+                    <component :is="Component" />
+                </div>
+            </router-view>
         </main>
         <!-- The full footer belongs to the home page. Every other page ends in
              a single line of the links a shopper actually reaches for, because
@@ -49,5 +56,6 @@ export default {
     </div>
     <!-- One bag for the whole shop; the Hive has no cart chrome of its own. -->
     <CartDrawer v-if="!inHive" />
+    <RouteProgress />
     <DialogHost />
 </template>

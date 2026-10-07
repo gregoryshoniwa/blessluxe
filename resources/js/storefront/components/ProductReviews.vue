@@ -319,7 +319,7 @@ export default {
                      the rest of the page into next week, and the count and sort
                      above stay put while you read. The fade says there's more. -->
                 <div class="relative">
-                    <ul ref="list" @scroll.passive="measure" class="divide-y divide-black/10 max-h-[26rem] sm:max-h-[32rem] overflow-y-auto pr-3 -mr-3">
+                    <ul ref="list" @scroll.passive="measure" :class="['divide-y divide-black/10 max-h-[26rem] sm:max-h-[32rem] overflow-y-auto pr-3 -mr-3', listLoading && comments.length ? 'is-refreshing' : 'is-settled']" :aria-busy="listLoading">
                         <li v-for="c in comments" :key="c.id" :class="['py-5', busy === c.id && 'opacity-50']">
                             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
                                 <span v-if="c.stars" class="flex items-center">

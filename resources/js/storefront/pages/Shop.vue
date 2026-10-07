@@ -1,6 +1,7 @@
 <script>
 import ProductCard from '../components/ProductCard.vue';
 import { affiliateStore } from '../affiliate-store.js';
+import { smoothSwap, busy } from '../../lib/smooth.js';
 import { Search, X, Sparkles, MapPin, Plane, Star, Play, Tag, ShoppingBag, Loader2, SlidersHorizontal } from 'lucide-vue-next';
 
 // How many pages scrolling may bring in before the button takes over. A module
@@ -36,7 +37,10 @@ export default {
             stats: null,              // { pieces, new, available, sold_week } for where the shopper is
             activity: [],             // what just sold here
             headings: [],
-            loading: true,
+            loading: true,            // the FIRST load: nothing to show yet, so skeletons
+            refreshing: false,        // a new question with old answers on screen: dim them
+            slow: false,              // a refresh that's taking long enough to want skeletons
+            slowTimer: null,
             loadingMore: false,
             page: 1,
             search: this.$route.query.q || '',
@@ -127,6 +131,7 @@ export default {
         window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
         clearTimeout(this.searchTimer);
         clearInterval(this.tick);
+        clearTimeout(this.slowTimer);
         this.observer?.disconnect();
         this.revealer?.disconnect();
         this.headerObs?.disconnect();
@@ -146,9 +151,23 @@ export default {
                 if (res.ok) this.headings = (await res.json()).headings || [];
             } catch { /* the tabs simply don't show */ }
         },
+        /**
+         * The research is consistent: keep what's on screen, dim it as one area,
+         * cross-fade to the new set. Skeletons only on the very first load — or
+         * if a refresh drags past 700ms, when dimmed results start to look like
+         * the answer. Filtering then never blanks the page.
+         */
         async fetchProducts() {
             const append = this.page > 1;
-            if (append) this.loadingMore = true; else this.loading = true;
+            const first = !append && !this.products.length;
+            if (append) this.loadingMore = true;
+            else if (first) this.loading = true;
+            else {
+                this.refreshing = true;
+                clearTimeout(this.slowTimer);
+                this.slowTimer = setTimeout(() => { this.slow = true; }, 700);
+            }
+            const done = append ? () => {} : busy();
             try {
                 const params = new URLSearchParams({ limit: '24', page: String(this.page), sort: this.sort });
                 for (const k of ['catalogue', 'heading', 'q', 'where', 'new', 'top', 'video', 'max_price']) {
@@ -159,15 +178,26 @@ export default {
                 if (!res.ok) { if (!append) this.products = []; return; }
                 const data = await res.json();
                 const fresh = data.products || [];
-                this.products = append ? [...this.products, ...fresh] : fresh;
-                this.pagination = data.pagination || null;
-                if (data.stats) this.stats = data.stats;
-                if (data.activity) this.activity = data.activity;
+                const apply = () => {
+                    this.products = append ? [...this.products, ...fresh] : fresh;
+                    this.pagination = data.pagination || null;
+                    if (data.stats) this.stats = data.stats;
+                    if (data.activity) this.activity = data.activity;
+                    // Cards already seen don't fade in again after a re-filter.
+                    if (!append) for (const p of fresh) this.revealed[p.id] = true;
+                    this.refreshing = false;
+                    this.slow = false;
+                };
+                if (append || first) apply(); else await smoothSwap(apply);
                 if (!append) this.autoLoads = 0;          // a new search earns a fresh allowance
                 this.$nextTick(this.watchCards);
             } finally {
+                clearTimeout(this.slowTimer);
+                done();
                 this.loading = false;
                 this.loadingMore = false;
+                this.refreshing = false;
+                this.slow = false;
             }
         },
         /** `replace`, not `push`: browsing filters shouldn't fill the back button. */
@@ -291,7 +321,7 @@ export default {
         </div>
 
         <!-- ─── Just sold here: the piece, never the person ─────────────────── -->
-        <div v-if="!loading && activity.length >= 2" class="ticker relative overflow-hidden border-y border-gold/15 mt-5 bg-white/60" aria-label="Recently sold">
+        <div v-if="!loading && activity.length >= 2" :class="refreshing && 'is-refreshing'" class="ticker relative overflow-hidden border-y border-gold/15 mt-5 bg-white/60" aria-label="Recently sold">
             <div class="ticker-track flex items-center gap-8 py-2.5 whitespace-nowrap">
                 <router-link v-for="(a, i) in activity.concat(activity)" :key="i" :to="`/shop/${a.handle}`" class="inline-flex items-center gap-2.5 text-xs text-black/70 hover:text-gold transition-colors">
                     <img v-if="a.thumbnail" :src="a.thumbnail" :alt="''" loading="lazy" class="w-7 h-7 rounded-full object-cover object-top ring-1 ring-gold/30" />
@@ -304,7 +334,7 @@ export default {
 
         <!-- ─── The grid: the whole width ──────────────────────────────────── -->
         <div class="mt-6">
-            <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
+            <div v-if="loading || slow" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3" aria-busy="true">
                 <div v-for="n in 10" :key="n" class="border border-black/10">
                     <div class="aspect-[3/4] bg-cream-dark animate-pulse" />
                     <div class="p-3 space-y-2"><div class="h-3 bg-cream-dark animate-pulse w-2/3" /><div class="h-3 bg-cream-dark animate-pulse w-1/3" /></div>
@@ -329,7 +359,7 @@ export default {
                 </template>
             </div>
             <template v-else>
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3">
+                <div :class="['grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3', refreshing ? 'is-refreshing' : 'is-settled']" :aria-busy="refreshing">
                     <div v-for="(p, i) in products" :key="p.id" :data-id="p.id" :class="['shop-card', revealed[p.id] && 'is-in']" :style="{ transitionDelay: (i % 24 % 5) * 50 + 'ms' }">
                         <ProductCard :product="p" />
                     </div>

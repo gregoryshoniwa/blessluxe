@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { busy } from '../lib/smooth.js';
 import { authStore } from './auth-store.js';
 
 const routes = [
@@ -60,7 +61,10 @@ const router = createRouter({
      * Hash links jump to the anchor. Forward navigations go to top.
      * Wait a beat so the new page has rendered before we scroll.
      */
-    scrollBehavior(to, _from, savedPosition) {
+    scrollBehavior(to, from, savedPosition) {
+        // A filter, sort or search is the same page with a new question. Jumping
+        // to the top on every tap was half of what made filtering feel like a cut.
+        if (from && to.path === from.path && !to.hash) return false;
         if (savedPosition) {
             return new Promise((resolve) => {
                 setTimeout(() => resolve(savedPosition), 60);
@@ -82,5 +86,13 @@ router.beforeEach(async (to) => {
     if (await authStore.check()) return true;
     return { path: '/account/login', query: { next: to.fullPath } };
 });
+
+// The progress line runs while a page's code is fetched and its guards resolve.
+let pageDone = null;
+router.beforeEach((to, from) => {
+    if (to.path !== from.path) { pageDone?.(); pageDone = busy(); }
+});
+router.afterEach(() => { pageDone?.(); pageDone = null; });
+router.onError(() => { pageDone?.(); pageDone = null; });
 
 export default router;

@@ -1,6 +1,7 @@
 <script>
 import { api } from '../../lib/api.js';
 import { affiliateStore } from '../affiliate-store.js';
+import { smoothSwap, busy } from '../../lib/smooth.js';
 import { Sparkles, Users, Star, Heart, MapPin, Plane, Search, X, Clock, Play, MessageCircle, ArrowRight, Loader2 } from 'lucide-vue-next';
 
 // Scrolling brings in this many pages by itself; after that the button has
@@ -29,7 +30,10 @@ export default {
             pagination: null,
             stats: null,             // { open, people, closing_today }
             activity: [],            // the ticker: who took what, where, when
-            loading: true,
+            loading: true,            // first load: skeletons
+            refreshing: false,        // a re-filter: dim what's there, then cross-fade
+            slow: false,
+            slowTimer: null,
             loadingMore: false,
             hiddenByShop: false,
             search: this.$route.query.q || '',
@@ -105,6 +109,7 @@ export default {
         window.removeEventListener('blessluxe:affiliate-changed', this.reload);
         clearInterval(this.tick);
         clearTimeout(this.searchTimer);
+        clearTimeout(this.slowTimer);
         this.revealer?.disconnect();
         this.tail?.disconnect();
         this.headerObs?.disconnect();
@@ -120,23 +125,45 @@ export default {
 
             return p.toString();
         },
+        /** Skeletons on the first load only; a re-filter dims, then cross-fades (see Shop.vue). */
         async load(page) {
             const append = page > 1;
-            if (append) this.loadingMore = true; else { this.loading = true; this.autoLoads = 0; }
+            const first = !append && !this.packs.length;
+            if (append) this.loadingMore = true;
+            else {
+                this.autoLoads = 0;
+                if (first) this.loading = true;
+                else {
+                    this.refreshing = true;
+                    clearTimeout(this.slowTimer);
+                    this.slowTimer = setTimeout(() => { this.slow = true; }, 700);
+                }
+            }
+            const done = append ? () => {} : busy();
             try {
                 const data = await api.get(`/api/store/series?${this.query(page)}`);
                 const fresh = data.packs || [];
-                this.packs = append ? this.packs.concat(fresh) : fresh;
-                this.categories = data.categories || [];
-                this.pagination = data.pagination || null;
-                if (data.stats) this.stats = data.stats;
-                if (data.activity) this.activity = data.activity;
-                // The SERVER says why it's empty — a curated affiliate shop lists
-                // no series — so this page can say so rather than claim there are none.
-                this.hiddenByShop = Boolean(data.hidden_by_storefront);
+                const apply = () => {
+                    this.packs = append ? this.packs.concat(fresh) : fresh;
+                    this.categories = data.categories || [];
+                    this.pagination = data.pagination || null;
+                    if (data.stats) this.stats = data.stats;
+                    if (data.activity) this.activity = data.activity;
+                    // The SERVER says why it's empty — a curated affiliate shop lists
+                    // no series — so this page can say so rather than claim there are none.
+                    this.hiddenByShop = Boolean(data.hidden_by_storefront);
+                    if (!append) for (const p of fresh) this.revealed[p.public_code] = true;
+                    this.refreshing = false;
+                    this.slow = false;
+                };
+                if (append || first) apply(); else await smoothSwap(apply);
             } finally {
+                clearTimeout(this.slowTimer);
+                done();
                 this.loading = false;
                 this.loadingMore = false;
+                this.refreshing = false;
+                this.slow = false;
                 this.$nextTick(this.watchCards);
             }
         },
@@ -335,7 +362,7 @@ export default {
             </nav>
 
             <!-- ─── Loading ─────────────────────────────────────────────── -->
-            <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            <div v-if="loading || slow" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3" aria-busy="true">
                 <div v-for="n in 10" :key="n" class="border border-black/10">
                     <div class="aspect-[3/4] bg-cream-dark animate-pulse" />
                     <div class="p-3 space-y-2"><div class="h-3 bg-cream-dark animate-pulse w-2/3" /><div class="h-2 bg-cream-dark animate-pulse w-full" /></div>
@@ -353,7 +380,7 @@ export default {
                 </template>
             </div>
 
-            <template v-else>
+            <div v-else :class="refreshing ? 'is-refreshing' : 'is-settled'" :aria-busy="refreshing">
                 <!-- ─── Featured: the one nearest to shipping ──────────── -->
                 <router-link
                     v-if="featured"
@@ -474,7 +501,7 @@ export default {
                     </button>
                     <p class="text-[10px] tracking-widest uppercase text-black/40 mt-3">{{ packs.length }} of {{ pagination.total }}</p>
                 </div>
-            </template>
+            </div>
         </template>
     </div>
 </template>

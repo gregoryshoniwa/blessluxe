@@ -4,22 +4,56 @@ import { affiliateStore } from '../affiliate-store.js';
 import HeroSlideshow from '../components/HeroSlideshow.vue';
 import ProductStrip from '../components/ProductStrip.vue';
 import { recentlyViewed } from '../recently-viewed.js';
+import { Sparkles, ArrowRight, ShoppingBag, Clock } from 'lucide-vue-next';
 
+/**
+ * The front door. The hero is the brand's moment; everything under it is there
+ * to show a shop that's alive, then put the doors to it within reach:
+ *
+ *   - a pulse under the hero — what's selling, what's filling, what closes
+ *     today — and a ticker of what just happened, so the first scroll lands on
+ *     movement rather than a heading;
+ *   - "Filling now": the series closest to shipping, as rings that show how
+ *     full they are — buying together is what nobody else here offers;
+ *   - the departments, tighter, each saying what's inside;
+ *   - new in, then trending, then what you looked at last.
+ *
+ * Every number is real and from the server; nothing on this page is staged.
+ */
 export default {
     name: 'HomePage',
-    components: { ProductCard, ProductStrip, HeroSlideshow },
+    components: { ProductCard, ProductStrip, HeroSlideshow, Sparkles, ArrowRight, ShoppingBag, Clock },
     computed: {
-        // Inside an affiliate's hand-picked shop: no packs, only their pieces.
+        // Inside an affiliate's hand-picked shop: no series, only their pieces.
         curated() { return affiliateStore.isCurated(); },
-        // Packs takes one of the four slots — unless this shop has no packs.
-        headings() { return this.allHeadings.slice(0, this.curated ? 4 : 3); },
+        headings() { return this.allHeadings.slice(0, 4); },
         shopName() { return this.shop.affiliate?.name || this.shop.affiliate?.code || 'This shop'; },
         recentlyViewedIds() { return recentlyViewed.ids(); },
+        filling() { return this.series.filter((p) => p.needs > 0).slice(0, 10); },
+        /** One ticker: pieces that sold and sizes taken in series, newest first. */
+        ticker() {
+            const sold = this.sold.map((a) => ({ kind: 'sold', key: `s-${a.handle}-${a.at}`, ...a }));
+            const joined = this.seriesActivity.filter((a) => a.kind === 'joined').map((a) => ({ key: `j-${a.code}-${a.at}-${a.size}`, ...a }));
+            const filled = this.seriesActivity.filter((a) => a.kind === 'filled').map((a) => ({ key: `f-${a.code}`, ...a }));
+            const all = [...sold, ...joined, ...filled].sort((x, y) => new Date(y.at) - new Date(x.at)).slice(0, 16);
+
+            return all.length >= 3 ? all.concat(all) : [];       // drawn twice for a seamless loop
+        },
+        /** The pulse: only the parts that are true right now. */
+        pulse() {
+            const out = [];
+            if (this.shopStats?.sold_week) out.push({ n: this.shopStats.sold_week, label: 'sold this week', live: true });
+            if (this.seriesStats?.open && !this.curated) out.push({ n: this.seriesStats.open, label: 'series filling', to: '/shop/series' });
+            if (this.seriesStats?.closing_today && !this.curated) out.push({ n: this.seriesStats.closing_today, label: 'closing today', hot: true, to: '/shop/series?sort=ending' });
+            if (this.shopStats?.new) out.push({ n: this.shopStats.new, label: 'new in', to: '/shop?new=1' });
+            if (this.shopStats?.available) out.push({ n: this.shopStats.available, label: 'here now', to: '/shop?where=local' });
+
+            return out;
+        },
     },
     data() {
         return {
             // Default slide — used when no active hero announcement exists.
-            // The first row coming back from /api/store/announcements wins.
             heroSlide: {
                 heading: 'Embrace Your Luxe',
                 subheading: 'Discover the art of effortless elegance',
@@ -30,62 +64,88 @@ export default {
             },
             featured: [],
             loadingFeatured: true,
-            // Cover image for the "Series" category card — the newest open
-            // pack campaign's thumbnail (falls back to a gradient).
-            packThumb: null,
-            // Every active slide; the slideshow falls back to `heroSlide`'s copy
-            // for any field a slide leaves blank, and when there are none.
             heroSlides: [],
             allHeadings: [],
+            series: [],
+            seriesStats: null,
+            seriesActivity: [],
+            shopStats: null,
+            sold: [],
             shop: affiliateStore.state,
+            now: Date.now(),
+            tick: null,
+            revealed: {},
+            revealer: null,
         };
     },
     beforeUnmount() {
         window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
+        clearInterval(this.tick);
+        this.revealer?.disconnect();
     },
     mounted() {
         affiliateStore.refresh();
         // × on the banner (or opening another affiliate's link) changes what
         // this page may show, without changing the route.
         window.addEventListener('blessluxe:affiliate-changed', this.reloadForShop);
-        this.fetchHeadings();
-        this.fetchFeatured();
-        this.fetchHero();
-        this.fetchPackThumb();
+        this.tick = setInterval(() => { this.now = Date.now(); }, 1000);
+        if (typeof IntersectionObserver !== 'undefined') {
+            this.revealer = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    if (!e.isIntersecting) continue;
+                    this.revealed[e.target.dataset.reveal] = true;
+                    this.revealer.unobserve(e.target);
+                }
+            }, { rootMargin: '40px' });
+        }
+        this.reloadForShop();
     },
     methods: {
         reloadForShop() {
             this.fetchHeadings();
             this.fetchFeatured();
-            this.fetchPackThumb();
+            this.fetchSeries();
             this.fetchHero();          // their hero, or back to ours
         },
         leaveShop() { affiliateStore.clear(); },
-        async fetchHeadings() {
-            const res = await fetch('/api/store/headings', { credentials: 'include', cache: 'no-store' });
-            if (!res.ok) return;
-            const data = await res.json();
-            // Up to four tiles. The server already narrows these to a curated
-            // shop's own categories; the Series card takes one slot when shown.
-            this.allHeadings = (data.headings || []).filter((h) => !h.is_sale);
+        watchReveals() {
+            this.$nextTick(() => {
+                for (const el of this.$el.querySelectorAll('[data-reveal]')) {
+                    if (!this.revealed[el.dataset.reveal]) this.revealer?.observe(el);
+                }
+            });
         },
-        async fetchPackThumb() {
+        async fetchHeadings() {
             try {
-                const res = await fetch('/api/store/series');
+                const res = await fetch('/api/store/headings', { credentials: 'include', cache: 'no-store' });
                 if (!res.ok) return;
-                const data = await res.json();
-                this.packThumb = (data.packs || []).find((p) => p.thumbnail)?.thumbnail || null;
-            } catch { /* gradient fallback stays */ }
+                // The server already narrows these to a curated shop's own categories.
+                this.allHeadings = ((await res.json()).headings || []).filter((h) => !h.is_sale);
+                this.watchReveals();
+            } catch { /* tiles simply don't show */ }
+        },
+        async fetchSeries() {
+            try {
+                const res = await fetch('/api/store/series?limit=10&sort=closest', { credentials: 'include' });
+                if (!res.ok) return;
+                const d = await res.json();
+                this.series = d.packs || [];
+                this.seriesStats = d.stats || null;
+                this.seriesActivity = d.activity || [];
+            } catch { /* the rail and its pulse simply don't show */ }
         },
         async fetchFeatured() {
             this.loadingFeatured = true;
             try {
-                const res = await fetch('/api/store/products?limit=8&sort=newest');
+                const res = await fetch('/api/store/products?limit=10&sort=newest', { credentials: 'include' });
                 if (!res.ok) return;
-                const data = await res.json();
-                this.featured = data.products || [];
+                const d = await res.json();
+                this.featured = d.products || [];
+                this.shopStats = d.stats || null;
+                this.sold = d.activity || [];
             } finally {
                 this.loadingFeatured = false;
+                this.watchReveals();
             }
         },
         async fetchHero() {
@@ -94,6 +154,26 @@ export default {
                 if (!res.ok) return;
                 this.heroSlides = (await res.json()).announcements || [];
             } catch { /* the default slide stays */ }
+        },
+
+        // ── Small words ─────────────────────────────────────────────────
+        ago(iso) {
+            const mins = Math.floor((this.now - new Date(iso).getTime()) / 60000);
+            if (mins < 60) return mins < 1 ? 'just now' : `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+
+            return `${Math.floor(hrs / 24)}d ago`;
+        },
+        fillPct(p) { return p.slots_total ? Math.round((p.slots_paid / p.slots_total) * 100) : 0; },
+        ring(p) { return { background: `conic-gradient(var(--color-gold) ${this.fillPct(p)}%, rgba(0,0,0,.08) 0)` }; },
+        closesIn(p) {
+            if (!p.expires_at) return null;
+            const ms = new Date(p.expires_at).getTime() - this.now;
+            if (ms <= 0) return null;
+            const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000);
+            if (h >= 24) return null;
+            return h >= 1 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(s).padStart(2, '0')}`;
         },
     },
 };
@@ -105,116 +185,179 @@ export default {
              shop (the server decides which; see ContentController). -->
         <HeroSlideshow :slides="heroSlides" :fallback="heroSlide" />
 
-        <!-- Shop By Category (driven by /api/store/headings) -->
-        <section v-if="headings.length" class="py-20 max-w-[1400px] mx-auto px-[5%]">
-            <div class="text-center mb-12">
-                <p class="font-script text-3xl text-gold mb-2">Discover</p>
-                <h2 class="font-display text-3xl md:text-4xl tracking-widest uppercase">Shop By Category</h2>
-            </div>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Packs — group-buy drops at /shop/series. Leads the grid,
-                     except inside a curated affiliate shop: packs are
-                     BLESSLUXE's own, never part of someone's chosen line. -->
-                <router-link
-                    v-if="!curated"
-                    to="/shop/series"
-                    class="group relative aspect-[3/4] overflow-hidden cursor-pointer bg-gradient-to-br from-amber-200/40 to-rose-200/30"
+        <!-- ─── The pulse: what's moving, right now ──────────────────────── -->
+        <section v-if="pulse.length || ticker.length" class="border-b border-gold/15 bg-white/70">
+            <div v-if="pulse.length" class="max-w-[1400px] mx-auto px-[5%] py-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+                <component
+                    :is="p.to ? 'router-link' : 'span'"
+                    v-for="p in pulse"
+                    :key="p.label"
+                    :to="p.to"
+                    class="inline-flex items-baseline gap-1.5 text-[11px] tracking-[0.15em] uppercase text-black/60 hover:text-gold transition-colors"
                 >
-                    <template v-if="packThumb">
-                        <img :src="packThumb" alt="Series" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
-                        <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent"></div>
-                    </template>
-                    <div class="absolute inset-0 flex items-end justify-center pb-10">
-                        <span :class="['font-display text-2xl tracking-widest uppercase transition-colors group-hover:text-gold', packThumb ? 'text-white' : 'text-black']">
-                            Packs
-                        </span>
-                    </div>
-                </router-link>
+                    <span v-if="p.live" class="w-1.5 h-1.5 rounded-full bg-red-500 live-dot self-center"></span>
+                    <strong :class="['font-display text-lg leading-none tracking-normal', p.hot ? 'text-red-600' : 'text-gold-dark']">{{ p.n }}</strong>
+                    {{ p.label }}
+                </component>
+            </div>
+            <div v-if="ticker.length" class="ticker relative overflow-hidden border-t border-gold/10" aria-label="What's happening">
+                <div class="ticker-track flex items-center gap-10 py-2.5 whitespace-nowrap">
+                    <router-link
+                        v-for="(a, i) in ticker"
+                        :key="a.key + '-' + i"
+                        :to="a.kind === 'sold' ? `/shop/${a.handle}` : `/shop/series/${a.code}`"
+                        class="inline-flex items-center gap-2.5 text-xs text-black/70 hover:text-gold transition-colors"
+                    >
+                        <template v-if="a.kind === 'sold'">
+                            <img v-if="a.thumbnail" :src="a.thumbnail" :alt="''" loading="lazy" class="w-7 h-7 rounded-full object-cover object-top ring-1 ring-gold/30" />
+                            <ShoppingBag v-else class="w-3.5 h-3.5 text-gold" />
+                            <span><strong class="font-medium text-black/85">{{ a.title }}</strong><template v-if="a.size"> · size {{ a.size }}</template> sold</span>
+                        </template>
+                        <template v-else-if="a.kind === 'filled'">
+                            <Sparkles class="w-3.5 h-3.5 text-emerald-600" />
+                            <span><strong class="font-medium text-emerald-700">{{ a.series }}</strong> filled — it ships</span>
+                        </template>
+                        <template v-else>
+                            <span class="w-6 h-6 rounded-full bg-gold text-white text-[9px] font-semibold inline-flex items-center justify-center">{{ a.initials }}</span>
+                            <span><strong class="font-medium text-black/85">{{ a.initials }}</strong> took size {{ a.size }} in <strong class="font-medium text-black/85">{{ a.series }}</strong></span>
+                        </template>
+                        <span class="text-black/40">{{ ago(a.at) }}</span>
+                    </router-link>
+                </div>
+            </div>
+        </section>
 
+        <!-- ─── Filling now: buying together, the thing nobody else offers ── -->
+        <section v-if="!curated && filling.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
+            <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+                <div>
+                    <p class="font-script text-3xl text-gold leading-none">Buy it together</p>
+                    <h2 class="font-display text-2xl md:text-3xl tracking-widest uppercase mt-1">Filling now</h2>
+                    <p class="text-sm text-black/55 mt-2 max-w-md">Claim your size in a limited run. When every size is taken it ships — if it never fills, you're refunded.</p>
+                </div>
+                <router-link to="/shop/series" class="inline-flex items-center gap-2 border border-gold text-gold-dark px-6 py-3 text-[10px] font-semibold tracking-[0.25em] uppercase hover:bg-gold hover:text-white transition-colors press">
+                    All series <ArrowRight class="w-3.5 h-3.5" />
+                </router-link>
+            </div>
+            <div class="scroll-strip flex gap-6 -mx-[5%] px-[5%] scroll-px-[5%] pb-2">
+                <router-link
+                    v-for="p in filling"
+                    :key="p.public_code"
+                    :to="`/shop/series/${p.public_code}`"
+                    class="flex-shrink-0 w-28 sm:w-32 text-center group"
+                    :title="`${p.title} — ${p.slots_paid} of ${p.slots_total} claimed`"
+                >
+                    <span :class="['block w-28 h-28 sm:w-32 sm:h-32 rounded-full p-[3px] transition-transform duration-300 group-hover:scale-105', p.needs === 1 && 'glow-gold']" :style="ring(p)">
+                        <span class="block w-full h-full rounded-full bg-cream p-[3px]">
+                            <img v-if="p.thumbnail" :src="p.thumbnail" :alt="''" loading="lazy" class="w-full h-full rounded-full object-cover object-top" />
+                            <span v-else class="block w-full h-full rounded-full bg-cream-dark"></span>
+                        </span>
+                    </span>
+                    <span class="block mt-2.5 text-xs font-medium leading-tight line-clamp-2 group-hover:text-gold transition-colors">{{ p.title }}</span>
+                    <span :class="['block mt-1 text-[10px] font-semibold tracking-[0.12em] uppercase tabular-nums', closesIn(p) ? 'text-red-600' : p.needs === 1 ? 'text-gold-dark' : 'text-black/50']">
+                        <template v-if="closesIn(p)"><Clock class="w-3 h-3 inline -mt-0.5" /> {{ closesIn(p) }}</template>
+                        <template v-else-if="p.needs === 1">One more</template>
+                        <template v-else>Needs {{ p.needs }}</template>
+                    </span>
+                </router-link>
+            </div>
+        </section>
+
+        <!-- ─── The departments, each saying what's inside ──────────────── -->
+        <section v-if="headings.length" class="max-w-[1400px] mx-auto px-[5%] pt-14">
+            <div class="flex items-end justify-between gap-4 mb-6">
+                <div>
+                    <p class="font-script text-3xl text-gold leading-none">Discover</p>
+                    <h2 class="font-display text-2xl md:text-3xl tracking-widest uppercase mt-1">Shop by department</h2>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <router-link
                     v-for="(h, i) in headings"
                     :key="h.handle"
                     :to="`/shop?heading=${h.handle}`"
-                    :class="[
-                        'group relative aspect-[3/4] overflow-hidden cursor-pointer bg-gradient-to-br',
-                        i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30',
-                    ]"
+                    :data-reveal="'h-' + h.handle"
+                    :class="['reveal img-shine group relative aspect-[4/5] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['h-' + h.handle] && 'is-in']"
+                    :style="{ transitionDelay: i * 70 + 'ms' }"
                 >
                     <template v-if="h.image_url">
-                        <img :src="h.image_url" :alt="h.name" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
-                        <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent"></div>
+                        <img :src="h.image_url" :alt="h.name" loading="lazy" class="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent"></div>
                     </template>
-                    <div class="absolute inset-0 flex items-end justify-center pb-10">
-                        <span :class="['font-display text-2xl tracking-widest uppercase transition-colors group-hover:text-gold', h.image_url ? 'text-white' : 'text-black']">
-                            {{ h.name }}
+                    <div class="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between gap-3">
+                        <div>
+                            <p :class="['font-display text-2xl tracking-widest uppercase leading-none', h.image_url ? 'text-white' : 'text-black']">{{ h.name }}</p>
+                            <p v-if="h.catalogues?.length" :class="['text-[11px] mt-2 line-clamp-1', h.image_url ? 'text-white/75' : 'text-black/55']">{{ h.catalogues.map((c) => c.name).join(' · ') }}</p>
+                        </div>
+                        <span :class="['w-10 h-10 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-gold group-hover:text-white group-hover:translate-x-0.5', h.image_url ? 'bg-white/90 text-black' : 'bg-black text-white']">
+                            <ArrowRight class="w-4 h-4" />
                         </span>
                     </div>
                 </router-link>
             </div>
         </section>
 
-        <!-- Featured products (driven by /api/store/products) -->
-        <section class="py-20 max-w-[1400px] mx-auto px-[5%] border-t border-gold/10">
-            <div class="text-center mb-12">
-                <p class="font-script text-3xl text-gold mb-2">Featured</p>
-                <h2 class="font-display text-3xl md:text-4xl tracking-widest uppercase">New Arrivals</h2>
+        <!-- ─── New in ────────────────────────────────────────────────────── -->
+        <section class="max-w-[1400px] mx-auto px-[5%] pt-14 pb-6">
+            <div class="flex items-end justify-between gap-4 mb-6">
+                <div>
+                    <p class="font-script text-3xl text-gold leading-none">Featured</p>
+                    <h2 class="font-display text-2xl md:text-3xl tracking-widest uppercase mt-1">New in</h2>
+                </div>
+                <router-link v-if="featured.length" to="/shop" class="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.25em] uppercase text-gold-dark hover:text-gold min-h-11">
+                    View all <ArrowRight class="w-3.5 h-3.5" />
+                </router-link>
             </div>
-            <div v-if="loadingFeatured" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                <div v-for="n in 8" :key="n" class="aspect-[3/4] bg-gradient-to-br from-cream-dark to-blush animate-pulse" />
+            <div v-if="loadingFeatured" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                <div v-for="n in 10" :key="n" class="border border-black/10">
+                    <div class="aspect-[3/4] bg-cream-dark animate-pulse" />
+                    <div class="p-3 space-y-2"><div class="h-3 bg-cream-dark animate-pulse w-2/3" /><div class="h-3 bg-cream-dark animate-pulse w-1/3" /></div>
+                </div>
             </div>
-            <!-- Empty. Written for a SHOPPER — this used to be a developer's
-                 note about seeding the database, shown to customers. An empty
-                 curated shop also says whose choice that is, and gives a way
-                 out, so it never reads as a broken site. -->
-            <div v-else-if="!featured.length" class="text-center max-w-md mx-auto">
+            <!-- Empty. Written for a SHOPPER — an empty curated shop also says
+                 whose choice that is, and gives a way out. -->
+            <div v-else-if="!featured.length" class="text-center max-w-md mx-auto py-10">
                 <template v-if="curated">
                     <p class="font-display text-lg tracking-wide mb-2">{{ shopName }} is still choosing their pieces</p>
-                    <p class="text-sm text-black/55 leading-relaxed">
-                        Nothing has been added to this shop yet. Check back soon — or browse everything BLESSLUXE has to offer.
-                    </p>
-                    <button
-                        @click="leaveShop"
-                        class="mt-6 text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold"
-                    >
-                        Browse the full collection
-                    </button>
+                    <p class="text-sm text-black/55 leading-relaxed">Nothing has been added to this shop yet. Check back soon — or browse everything BLESSLUXE has to offer.</p>
+                    <button @click="leaveShop" class="mt-6 text-[11px] tracking-widest uppercase text-gold-dark underline underline-offset-4 hover:text-gold">Browse the full collection</button>
                 </template>
                 <template v-else>
                     <p class="font-display text-lg tracking-wide mb-2">New pieces are on their way</p>
                     <p class="text-sm text-black/55">Our next arrivals are being prepared. Please check back soon.</p>
                 </template>
             </div>
-            <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                <ProductCard v-for="p in featured" :key="p.id" :product="p" />
-            </div>
-            <div v-if="featured.length" class="text-center mt-12">
-                <router-link
-                    to="/shop"
-                    class="inline-block border border-gold text-gold px-8 py-3 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold hover:text-white transition-colors"
-                >
-                    View All
-                </router-link>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                <div v-for="(p, i) in featured" :key="p.id" :data-reveal="'p-' + p.id" :class="['reveal', revealed['p-' + p.id] && 'is-in']" :style="{ transitionDelay: (i % 5) * 60 + 'ms' }">
+                    <ProductCard :product="p" />
+                </div>
             </div>
         </section>
 
         <!-- What people are reacting to lately. Renders nothing until they are. -->
         <section class="max-w-[1400px] mx-auto px-[5%]">
-            <ProductStrip
-                title="Trending now"
-                script="Loved this month"
-                endpoint="/api/store/products/trending"
-                :limit="8"
-            />
+            <ProductStrip title="Trending now" script="Loved this month" endpoint="/api/store/products/trending" :limit="8" />
         </section>
 
         <!-- Recently viewed strip — only renders if there's at least one. -->
         <section v-if="recentlyViewedIds.length" class="max-w-[1400px] mx-auto px-[5%]">
-            <ProductStrip
-                title="Pick up where you left off"
-                script="Just for you"
-                :ids="recentlyViewedIds"
-                :limit="6"
-            />
+            <ProductStrip title="Pick up where you left off" script="Just for you" :ids="recentlyViewedIds" :limit="6" />
         </section>
     </div>
 </template>
+
+<style scoped>
+/* Things rise into place as they scroll in, a beat apart. */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease; }
+.reveal.is-in { opacity: 1; transform: none; }
+.ticker-track { animation: ticker 55s linear infinite; width: max-content; }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.live-dot { animation: live 2s ease-in-out infinite; }
+@keyframes live { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .ticker-track { animation: none; flex-wrap: wrap; white-space: normal; width: auto; justify-content: center; gap: 1rem; }
+    .live-dot { animation: none; }
+}
+</style>

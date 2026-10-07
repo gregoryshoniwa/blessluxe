@@ -209,6 +209,17 @@ The fixed nav entries and the footer's help/company links are staff-switched at 
 - Cards carry `sizes` (with `in_stock`) and `is_new`. [ProductCard](resources/js/storefront/components/ProductCard.vue) reveals the sizes on hover (a "+" on phones) and adds straight to the bag, which slides open to confirm — Baymard's preferred list action. Sold-out sizes are shown struck through, not hidden.
 - **Motion is one shared vocabulary in [app.css](resources/css/app.css)**: every `button.bg-gold`/`a.bg-gold` gets a sheen on hover and gives under a press; `.img-shine` sweeps light across a picture; `.glow-gold` breathes; `.pop-once` pops a saved heart and the bag count. Each one confirms or invites an action — none is decoration — and `prefers-reduced-motion` switches all of them off. Add new motion there, not per page.
 
+### Smoothness: no page cuts, no filter flashes
+
+- **Filtering never blanks the page.** [smooth.js](resources/js/lib/smooth.js): skeletons only on a page's FIRST load; on a re-filter the current results stay, dim as ONE area (`.is-refreshing`, `aria-busy`), and `smoothSwap()` cross-fades to the new set with the View Transitions API (Baseline in Chrome/Safari/Firefox; it simply applies the change elsewhere or under reduced motion). If a refresh passes 700ms the skeletons come back, because dimmed results start to look like the answer. Shop, Series and reviews all do this — new list pages should too.
+- **The router no longer scrolls to the top when only the query changes** (`scrollBehavior` returns `false` for same-path navigations). Jumping on every filter tap was half of the "cut".
+- [RouteProgress](resources/js/storefront/components/RouteProgress.vue) is a 2px gold line across the top, fed by `busy()` from the router and from any fetch that wants it; it never shows for anything under 150ms. Each page rises in (`.route-in`, keyed by `route.path` so query changes don't remount).
+- **The motion CSS lives in `@layer utilities`** — unlayered rules beat Tailwind utilities whatever their specificity, which is how `.img-shine` once overrode `absolute`.
+
+### The home page
+
+The hero, then a **pulse** (sold this week · series filling · closing today · new in · here now — only the ones that are true, each a link) over one ticker merging pieces sold and sizes taken in series; **Filling now** — the series nearest to shipping as rings, "one more" glowing; departments as tiles that say what's inside; New in (5 across, rising as they scroll in); Trending; Recently viewed. Every number is real.
+
 ### Footers and endless scrolling
 
 - **The full black footer is the home page's alone**; every other page ends in [FooterSlim](resources/js/storefront/components/FooterSlim.vue), one line of FAQ · Track · Shipping · Returns · Size guide · Contact. Those links exist nowhere else — the header carries none of them — and "what if it doesn't fit?" is asked on a product page, not the home page. Don't delete that line without putting them somewhere.

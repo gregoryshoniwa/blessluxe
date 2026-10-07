@@ -184,6 +184,7 @@ table code {
     body.in-hive .dlg-toasts { bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
 }
 
+@layer utilities {
 /* ─── Motion: one vocabulary for the whole shop ────────────────────────────
  * Every movement here confirms or invites an action — none is decoration.
  * The research is consistent: purposeful micro-interactions lift conversion,
@@ -252,4 +253,22 @@ table code {
     :where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky)::after, .btn-shine::after, .img-shine::after { display: none; }
     :where(button.bg-gold, a.bg-gold):active, .press:active { transform: none; }
     .glow-gold, .pop-once { animation: none; }
+}
+
+/* A page rises in on arrival — no exit animation, so there's never a blank beat. */
+.route-in { animation: route-in .32s cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes route-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Result swaps (lib/smooth.js): a short cross-fade, not the browser's default. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .24s; animation-timing-function: ease-out; }
+
+/* "Working on it": the old results dim as ONE area while the new ones come —
+   items flashing on and off one by one is what reads as cheap. */
+.is-refreshing { opacity: .45; filter: saturate(.6); pointer-events: none; transition: opacity .2s ease, filter .2s ease; }
+.is-settled { opacity: 1; filter: none; transition: opacity .25s ease, filter .25s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+    .route-in { animation: none; }
+    ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
 }
