@@ -150,16 +150,14 @@ TXT;
     }
 
     /**
-     * Selling price: cost + the percentage + a fixed amount per piece, rounded UP
-     * to the whole dollar. Either part may be 0 — "just add $15" is margin 0, fixed 15.
+     * Selling price: cost + the percentage + a fixed amount per piece, to the
+     * cent ($90 + 5% = $94.50). Either part may be 0 — "just add $15" is margin 0, fixed 15.
      */
     public static function priceCents(float $cost, int $margin, float $fixed = 0): int
     {
         // Worked in whole cents first: 90 × 1.10 in floating point is 99.00000000000001,
         // which a plain ceil() turned into $100.
-        $cents = (int) round($cost * (100 + $margin) + $fixed * 100);   // = (cost × (1 + margin%) + fixed) × 100, exact to the cent
-
-        return (int) (ceil($cents / 100) * 100);
+        return (int) round($cost * (100 + $margin) + $fixed * 100);   // = (cost × (1 + margin%) + fixed) × 100, to the nearest cent
     }
 
     /**

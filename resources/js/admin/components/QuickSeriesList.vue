@@ -55,7 +55,7 @@ export default {
         setPer(n) { this.per = n; this.load(1); },
         clearFilters() { Object.assign(this, { q: '', status: '', heading: '', origin: '' }); this.load(1); },
 
-        money(c) { return c == null ? '—' : '$' + (c / 100).toFixed(2).replace(/\.00$/, ''); },
+        money(c) { return c == null ? '—' : '$' + (c / 100).toFixed(2); },
         margin(r) { return r.cost && r.price ? Math.round((r.price / r.cost - 1) * 100) + '%' : '—'; },
         closes(r) {
             if (!r.expires_at || r.status !== 'open') return '—';

@@ -64,22 +64,20 @@ export default {
         cost() { return parseFloat(this.form.cost) || 0; },
         fixed() { return parseFloat(this.form.fixed) || 0; },
         /**
-         * Cost + the percentage + the fixed amount, rounded UP to the dollar — worked
-         * in whole cents so 90 × 1.10 is 99, not 99.00000000000001 → 100.
+         * Cost + the percentage + the fixed amount, to the cent ($90 + 5% = $94.50) —
+         * worked in whole cents so floating point can't add a stray cent.
          */
-        price() { return this.cost ? Math.ceil(Math.round(this.cost * (100 + (Number(this.form.margin) || 0)) + this.fixed * 100) / 100) : 0; },
+        price() { return this.cost ? Math.round(this.cost * (100 + (Number(this.form.margin) || 0)) + this.fixed * 100) / 100 : 0; },
         /** Where the profit comes from, so the rounding never looks like a mistake. */
         profitParts() {
             if (!this.cost) return '';
             const pct = Math.round(this.cost * (Number(this.form.margin) || 0)) / 100;
-            const round = Math.round((this.profit - pct - this.fixed) * 100) / 100;
             const parts = [];
             if (pct) parts.push(`${this.money(pct)} from ${this.form.margin}%`);
             if (this.fixed) parts.push(`${this.money(this.fixed)} fixed`);
-            if (round > 0.004) parts.push(`${this.money(round)} rounding up`);
             return parts.length > 1 ? parts.join(' + ') : '';
         },
-        profit() { return this.price - this.cost; },
+        profit() { return Math.round((this.price - this.cost) * 100) / 100; },
         /** Their own single-piece price is what a shopper could pay going direct. */
         single_price_note() {
             const single = parseFloat(this.form.single_price) || 0;
@@ -115,7 +113,7 @@ export default {
         [...this.shots, ...this.photos].forEach((x) => URL.revokeObjectURL(x.url));
     },
     methods: {
-        money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, ''); },
+        money(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); },
         /** AI costs are fractions of a cent — shown in dollars to four places so they don't read as $0.00. */
         aiMoney(n) { return '$' + Number(n || 0).toFixed(4).replace(/(\.\d\d\d*?)0+$/, '$1'); },   // always US dollars, to the hundredth of a cent: $0.0019, $0.039, $0.067
 
