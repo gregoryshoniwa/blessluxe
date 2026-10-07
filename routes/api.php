@@ -410,6 +410,7 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);
 
         // Quick process → Series: a supplier's post to a live series.
+        Route::get ('/quick/series',         [\App\Http\Controllers\Api\Admin\QuickSeriesController::class, 'index']);
         Route::get ('/quick/series/options', [\App\Http\Controllers\Api\Admin\QuickSeriesController::class, 'options']);
         Route::post('/quick/series/read',    [\App\Http\Controllers\Api\Admin\QuickSeriesController::class, 'read'])->middleware('throttle:20,1');
         Route::post('/quick/series',         [\App\Http\Controllers\Api\Admin\QuickSeriesController::class, 'store']);

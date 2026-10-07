@@ -2,7 +2,7 @@
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import { resizeImage } from '../../lib/image-resize.js';
-import { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus, Copy, ExternalLink, Check } from 'lucide-vue-next';
+import { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus } from 'lucide-vue-next';
 
 /**
  * A supplier's post (Telegram / WhatsApp) → a live series, in seven steps.
@@ -32,7 +32,8 @@ function blank(defaults = {}) {
 
 export default {
     name: 'QuickSeriesForm',
-    components: { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus, Copy, ExternalLink, Check },
+    components: { Sparkles, Upload, X, ArrowLeft, ArrowRight, Plus },
+    emits: ['saved'],
     data() {
         return {
             opts: { catalogues: [], suppliers: [], origins: [], open_days: [], defaults: {}, reader: true },
@@ -43,10 +44,8 @@ export default {
             reading: false,
             readNote: '',
             saving: false,
-            done: null,           // the result after Publish / Save draft
             pasteTarget: 'shots',
             presets: PRESETS,
-            copied: '',
         };
     },
     computed: {
@@ -177,53 +176,20 @@ export default {
                 fd.append('catalogue_ids', JSON.stringify(f.catalogue_ids));
                 fd.append('publish', publish ? '1' : '0');
                 for (const p of this.photos) fd.append('images[]', await resizeImage(p.file, { max: 1600, quality: 0.86 }), 'photo.jpg');
-                this.done = { ...(await api.post('/api/admin/quick/series', fd)), publish, title: f.title };
-                toast(publish ? 'Series published' : 'Saved as a draft');
-                if (this.supplierMatch == null && f.supplier.name) this.opts = await api.get('/api/admin/quick/series/options');
+                const r = await api.post('/api/admin/quick/series', fd);
+                toast(publish ? `Published — selling at ${this.money(r.price / 100)} a piece` : 'Saved as a draft — launch it from Series when ready');
+                this.$emit('saved', { ...r, publish });
             } catch (e) {
                 const p = e?.payload || {};
                 toast(p.error || Object.values(p.errors || {})[0]?.[0] || p.message || 'Could not save that.', { tone: 'error' });
             } finally { this.saving = false; }
-        },
-        another() {
-            [...this.shots, ...this.photos].forEach((x) => URL.revokeObjectURL(x.url));
-            this.shots = []; this.photos = []; this.readNote = ''; this.sizeDraft = [''];
-            this.form = blank({ margin: this.form.margin, open_days: this.form.open_days });
-            this.done = null; this.pasteTarget = 'shots';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        },
-        async copy(link) {
-            try { await navigator.clipboard.writeText(link); this.copied = link; setTimeout(() => (this.copied = ''), 1500); } catch { /* ignore */ }
         },
     },
 };
 </script>
 
 <template>
-    <!-- Done: where it went, and straight on to the next one. -->
-    <section v-if="done" class="bg-white border border-zinc-200 p-6 sm:p-8">
-        <p class="text-xs tracking-widest uppercase text-emerald-700 mb-1 inline-flex items-center gap-1.5"><Check class="w-4 h-4" /> {{ done.publish ? 'Published' : 'Saved as a draft' }}</p>
-        <h2 class="text-xl font-semibold mb-1">{{ done.title }}</h2>
-        <p class="text-sm text-zinc-600 mb-5">Selling at <strong>{{ money(done.price / 100) }}</strong> a piece.
-            <template v-if="!done.publish"> It isn't on sale yet — launch it from Series when you're ready.</template>
-        </p>
-        <ul v-if="done.links?.length" class="space-y-2 mb-6">
-            <li v-for="(l, i) in done.links" :key="l" class="flex flex-wrap items-center gap-2 border border-zinc-200 px-3 py-2 text-sm">
-                <span class="text-zinc-500 text-xs uppercase tracking-widest">Series {{ done.links.length > 1 ? i + 1 : '' }}</span>
-                <a :href="l" target="_blank" class="font-mono text-xs break-all flex-1 min-w-0 hover:text-gold">{{ l }}</a>
-                <button @click="copy(l)" class="inline-flex items-center gap-1 text-xs border border-zinc-300 px-2 py-1 hover:border-zinc-500">
-                    <component :is="copied === l ? 'Check' : 'Copy'" class="w-3.5 h-3.5" /> {{ copied === l ? 'Copied' : 'Copy link' }}
-                </button>
-                <a :href="l" target="_blank" class="inline-flex items-center gap-1 text-xs border border-zinc-300 px-2 py-1 hover:border-zinc-500"><ExternalLink class="w-3.5 h-3.5" /> Open</a>
-            </li>
-        </ul>
-        <div class="flex flex-wrap gap-3">
-            <button @click="another" class="bg-gold text-white px-5 py-2.5 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark">Add another series</button>
-            <router-link :to="`/admin/products/${done.product_id}`" class="border border-zinc-300 px-5 py-2.5 text-xs font-semibold tracking-[0.2em] uppercase hover:border-zinc-500">Edit the product</router-link>
-        </div>
-    </section>
-
-    <div v-else class="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-y-6 gap-x-0 lg:gap-x-6 items-start">
+    <div class="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-y-6 gap-x-0 lg:gap-x-6 items-start">
         <div class="space-y-4 min-w-0">
             <!-- 0. Read a post -->
             <section

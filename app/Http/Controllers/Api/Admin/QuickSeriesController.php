@@ -26,6 +26,52 @@ class QuickSeriesController extends Controller
         ];
     }
 
+    /**
+     * GET /api/admin/quick/series?q=&status=&page= — the table: newest first,
+     * one row per series with what staff check at a glance.
+     */
+    public function index(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        $status = $request->query('status');
+
+        $rows = \Illuminate\Support\Facades\DB::table('pack_campaigns as c')
+            ->join('pack_definitions as d', 'd.id', '=', 'c.pack_definition_id')
+            ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+            ->leftJoin('suppliers as s', 's.id', '=', 'p.supplier_id')
+            ->whereNull('c.deleted_at')
+            ->when(in_array($status, ['open', 'filled', 'closed', 'cancelled'], true), fn ($w) => $w->where('c.status', $status))
+            ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('c.title', 'like', "%{$q}%")->orWhere('c.public_code', 'like', "%{$q}%")->orWhere('s.name', 'like', "%{$q}%")))
+            ->orderByDesc('c.created_at')->orderByDesc('c.id')
+            ->select('c.id', 'c.public_code', 'c.title', 'c.status', 'c.expires_at', 'c.created_at', 'p.id as product_id', 'p.thumbnail', 'p.origin_country', 's.name as supplier')
+            ->selectSub(fn ($x) => $x->from('pack_slots')->whereColumn('pack_campaign_id', 'c.id')->whereNull('deleted_at')->selectRaw('count(*)'), 'slots')
+            ->selectSub(fn ($x) => $x->from('pack_slots')->whereColumn('pack_campaign_id', 'c.id')->whereNull('deleted_at')->where('status', 'paid')->selectRaw('count(*)'), 'paid')
+            ->selectSub(fn ($x) => $x->from('pack_slots as ps')->join('product_variants as v', 'v.id', '=', 'ps.variant_id')->whereColumn('ps.pack_campaign_id', 'c.id')->selectRaw('min(v.cost_price)'), 'cost')
+            ->selectSub(fn ($x) => $x->from('pack_slots as ps')->join('variant_prices as vp', 'vp.variant_id', '=', 'ps.variant_id')->whereColumn('ps.pack_campaign_id', 'c.id')->where('vp.currency_code', 'usd')->selectRaw('min(vp.amount)'), 'price')
+            ->paginate(25);
+
+        return [
+            'rows' => collect($rows->items())->map(fn ($r) => [
+                'id'        => $r->id,
+                'code'      => $r->public_code,
+                'title'     => $r->title,
+                'status'    => $r->status,
+                'thumbnail' => $r->thumbnail,
+                'product_id' => $r->product_id,
+                'supplier'  => $r->supplier,
+                'origin'    => $r->origin_country,
+                'slots'     => (int) $r->slots,
+                'paid'      => (int) $r->paid,
+                'cost'      => $r->cost !== null ? (int) $r->cost : null,
+                'price'     => $r->price !== null ? (int) $r->price : null,
+                'expires_at' => $r->expires_at ? \Illuminate\Support\Carbon::parse($r->expires_at)->toIso8601String() : null,
+                'created_at' => \Illuminate\Support\Carbon::parse($r->created_at)->toIso8601String(),
+                'link'      => url("/shop/series/{$r->public_code}"),
+            ]),
+            'page' => $rows->currentPage(), 'last_page' => $rows->lastPage(), 'total' => $rows->total(),
+        ];
+    }
+
     /** POST /api/admin/quick/series/read  { shots[] } — fills the form; saves nothing. */
     public function read(Request $request)
     {

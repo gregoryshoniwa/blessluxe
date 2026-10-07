@@ -65,6 +65,12 @@ class QuickSeriesTest extends TestCase
         $this->assertNotNull($camps[0]->expires_at);
         $this->assertSame(6, DB::table('pack_slots')->whereIn('pack_campaign_id', $camps->pluck('id'))->count());
 
+        // The admin table shows both, with cost, price and fill; search finds them by supplier.
+        $rows = $this->getJson('/api/admin/quick/series?q=mario')->assertOk()->json('rows');
+        $this->assertCount(2, $rows);
+        $this->assertSame([6000, 8400, 0, 3], [$rows[0]['cost'], $rows[0]['price'], $rows[0]['paid'], $rows[0]['slots']]);
+        $this->assertSame(0, $this->getJson('/api/admin/quick/series?status=cancelled')->json('total'));
+
         // The series is on the public listing.
         $this->getJson('/api/store/series/' . $r['codes'][0])->assertOk();
 
