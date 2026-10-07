@@ -160,10 +160,7 @@ export default {
                         <td class="px-3 py-2 text-right tabular-nums font-medium">{{ money(r.price) }}</td>
                         <td class="px-3 py-2 text-right tabular-nums text-zinc-600">{{ margin(r) }}</td>
                         <td class="px-3 py-2">
-                            <div class="flex items-center gap-2" :title="`${r.paid} of ${r.slots} sizes paid`">
-                                <div class="w-16 h-1.5 bg-zinc-100"><div class="h-full bg-gold" :style="{ width: (r.slots ? (r.paid / r.slots) * 100 : 0) + '%' }"></div></div>
-                                <span class="tabular-nums text-xs text-zinc-600">{{ r.paid }}/{{ r.slots }}</span>
-                            </div>
+                            <span class="tabular-nums text-zinc-600" :title="`${r.paid} of ${r.slots} sizes paid`">{{ r.paid }}/{{ r.slots }}</span>
                         </td>
                         <td class="px-3 py-2 text-xs text-zinc-600 whitespace-nowrap">{{ closes(r) }}</td>
                         <td class="px-3 py-2"><span :class="['text-[10px] tracking-widest uppercase border px-1.5 py-0.5 whitespace-nowrap', statuses[r.status]?.[1]]">{{ statuses[r.status]?.[0] || r.status }}</span></td>
