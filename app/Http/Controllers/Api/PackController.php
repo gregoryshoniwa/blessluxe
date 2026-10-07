@@ -47,6 +47,17 @@ class PackController extends Controller
         ];
     }
 
+    /** "RM" for Rudo Moyo. The most a public page ever says about a buyer. */
+    public static function initials($customer): ?string
+    {
+        if (! $customer) return null;
+        $a = mb_substr(trim((string) $customer->first_name), 0, 1);
+        $b = mb_substr(trim((string) $customer->last_name), 0, 1);
+        $out = mb_strtoupper($a . $b);
+
+        return $out !== '' ? $out : null;
+    }
+
     /**
      * Sweeps expired reservations back to `available`. Runs on every read so
      * we don't need a cron — the storefront page itself heals the campaign.
@@ -218,8 +229,12 @@ class PackController extends Controller
         $slots = PackSlot::query()
             ->where('pack_campaign_id', $campaign->id)
             ->with([
-                'variant.product:id,title,handle,thumbnail,sourcing,rating_count,rating_sum,likes_count,purchases_count',
+                'variant.product:id,title,handle,thumbnail,description,sourcing,rating_count,rating_sum,likes_count,purchases_count',
+                'variant.product.images' => fn ($q) => $q->orderBy('rank'),
                 'variant.prices' => fn ($q) => $q->where('currency_code', 'usd'),
+                // Only to draw two initials beside a PAID size. Never a name, never
+                // for a hold — a hold is a promise, a payment is a fact.
+                'customer:id,first_name,last_name',
             ])
             ->orderBy('size_label')
             ->get()
@@ -231,6 +246,7 @@ class PackController extends Controller
                     'is_mine'       => $customerId && $s->customer_id === $customerId,
                     'size_label'    => $s->size_label,
                     'reserved_until'=> $s->reserved_until?->toIso8601String(),
+                    'buyer'         => $s->status === 'paid' ? self::initials($s->customer) : null,
                     'product' => [
                         'id'        => $s->variant?->product?->id,
                         'title'     => $s->variant?->product?->title,
@@ -252,11 +268,36 @@ class PackController extends Controller
             'reserved'   => $slots->where('status', 'reserved')->count(),
             'paid'       => $slots->where('status', 'paid')->count(),
         ];
+        $totals['needs'] = max(0, $totals['total'] - $totals['paid']);           // what stands between this and shipping
+        $totals['fill_percent'] = $totals['total'] ? (int) round($totals['paid'] / $totals['total'] * 100) : 0;
+
+        // The piece the series is for, in full: the gallery, the words, the price.
+        // Every slot is normally the same product; the first says it for all.
+        $hero = PackSlot::where('pack_campaign_id', $campaign->id)->with(['variant.product.images' => fn ($q) => $q->orderBy('rank'), 'variant.prices' => fn ($q) => $q->where('currency_code', 'usd')])->first();
+        $product = $hero?->variant?->product;
+        $heroPrice = optional($hero?->variant?->prices->first())->amount;
 
         return [
             'campaign' => [
                 'id'          => $campaign->id,
                 'public_code' => $campaign->public_code,
+                'product'     => $product ? [
+                    'id'          => $product->id,
+                    'title'       => $product->title,
+                    'handle'      => $product->handle,
+                    'description' => $product->description,
+                    'images'      => array_values(array_unique(array_filter(array_merge(
+                        [$product->thumbnail],
+                        $product->images->pluck('url')->all(),
+                    )))),
+                    'price_label' => $heroPrice !== null ? '$' . number_format($heroPrice / 100, 2) : null,
+                ] : null,
+                // Who is already in: two initials each, paid sizes only, no names.
+                // It's the thing a stranger looks for before joining — "is anyone
+                // actually in this?" — and it gives nothing away.
+                'people'      => PackSlot::where('pack_campaign_id', $campaign->id)->where('status', 'paid')->whereNotNull('customer_id')
+                    ->with('customer:id,first_name,last_name')->get()->unique('customer_id')
+                    ->map(fn ($s) => self::initials($s->customer))->filter()->values()->all(),
                 // Inherited from the piece, so the series page says what the
                 // product page says rather than starting a second scoreboard.
                 'reputation'  => self::reputation($slots->isNotEmpty() ? PackSlot::where('pack_campaign_id', $campaign->id)->with('variant.product')->first()?->variant?->product : null),
@@ -447,14 +488,46 @@ class PackController extends Controller
                 ->where('status', '!=', 'paid')
                 ->count();
             if ($unpaid === 0) {
-                DB::table('pack_campaigns')
+                $flipped = DB::table('pack_campaigns')
                     ->where('id', $campaignId)
+                    ->where('status', '!=', 'filled')            // once, however many pay in the same second
                     ->update(['status' => 'filled', 'updated_at' => now()]);
+                if ($flipped) self::tellEveryoneItFilled($campaignId);
             }
         }
 
         // A slot going paid — and a campaign filling — both change what the buyer's
         // order is waiting on, so refresh the derived summary.
         \App\Services\Shipping::syncOrderFulfillment($orderId);
+    }
+
+    /**
+     * Every buyer in a series gets one line the moment the last size is paid.
+     * In a WhatsApp group this is the message that never comes; here it is
+     * the one thing everyone was waiting to hear.
+     */
+    private static function tellEveryoneItFilled(string $campaignId): void
+    {
+        $campaign = PackCampaign::with('definition')->find($campaignId);
+        if (! $campaign) return;
+        $title = $campaign->title ?: ($campaign->definition?->title ?? 'Your series');
+
+        $buyers = DB::table('pack_slots')->where('pack_campaign_id', $campaignId)
+            ->where('status', 'paid')->whereNotNull('customer_id')->whereNull('deleted_at')
+            ->distinct()->pluck('customer_id');
+
+        foreach ($buyers as $customerId) {
+            try {
+                \App\Services\Notifications::forCustomer(
+                    $customerId,
+                    'series_filled',
+                    "{$title} is full",
+                    'Every size is claimed and paid. The series is being ordered now — your order page shows where it stands.',
+                    '/shop/series/' . $campaign->public_code,
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('[series] could not notify a buyer it filled', ['campaign' => $campaignId, 'customer' => $customerId, 'error' => $e->getMessage()]);
+            }
+        }
     }
 }
