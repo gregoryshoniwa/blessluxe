@@ -8,11 +8,12 @@ import ChatWidget from './components/ChatWidget.vue';
 import DialogHost from '../components/DialogHost.vue';
 import CartDrawer from './components/CartDrawer.vue';
 import RouteProgress from './components/RouteProgress.vue';
+import Breadcrumbs from './components/Breadcrumbs.vue';
 
 export default {
     name: 'StorefrontApp',
     components: {
-        Header, Footer, FooterSlim, AnnouncementBar, ChatWidget, DialogHost, CartDrawer, RouteProgress,
+        Header, Footer, FooterSlim, AnnouncementBar, ChatWidget, DialogHost, CartDrawer, RouteProgress, Breadcrumbs,
         // Loaded only when someone enters the Hive — shoppers never download it.
         HiveShell: defineAsyncComponent(() => import('./components/hive/HiveShell.vue')),
     },
@@ -39,6 +40,8 @@ export default {
         <AnnouncementBar />
         <Header />
         <main class="flex-1">
+            <!-- Where you are and the way back — every page but home, checkout and the Hive. -->
+            <Breadcrumbs />
             <!-- Keyed by PATH, not the full URL: a new page rises in, but a filter
                  or a search on the same page doesn't remount anything. -->
             <router-view v-slot="{ Component, route }">

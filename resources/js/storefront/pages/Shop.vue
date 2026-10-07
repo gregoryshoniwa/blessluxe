@@ -2,6 +2,7 @@
 import ProductCard from '../components/ProductCard.vue';
 import { affiliateStore } from '../affiliate-store.js';
 import { smoothSwap, busy } from '../../lib/smooth.js';
+import { setCrumbs } from '../crumbs.js';
 import { Search, X, Sparkles, MapPin, Plane, Star, Play, Tag, ShoppingBag, Loader2, SlidersHorizontal } from 'lucide-vue-next';
 
 // How many pages scrolling may bring in before the button takes over. A module
@@ -70,6 +71,13 @@ export default {
             return '';
         },
         activeHeading() { return this.headings.find((h) => h.handle === this.heading) || null; },
+        shopCrumbs() {
+            const h = this.activeHeading;
+            if (this.q.q && !h && !this.catalogue) return [{ label: 'Shop', to: '/shop' }, { label: `Search: ${this.q.q}` }];
+            if (!h) return [{ label: 'Shop' }];
+            const top = { label: h.name, to: h.is_sale ? '/shop?sale=true' : `/shop?heading=${h.handle}` };
+            return this.catalogue ? [top, { label: this.title }] : [{ label: h.name }];
+        },
         title() {
             if (this.q.q && !this.heading && !this.catalogue) return `“${this.q.q}”`;
             if (this.catalogue) return this.activeHeading?.catalogues?.find((c) => c.handle === this.catalogue)?.name || this.catalogue.replace(/-/g, ' ');
@@ -92,6 +100,8 @@ export default {
         filtering() { return !!(this.q.q || this.quickOn.length); },
     },
     watch: {
+        /** Home › Men › Suits — re-drawn as the department or catalogue changes. */
+        shopCrumbs: { immediate: true, handler(c) { setCrumbs(c); } },
         '$route.query': {
             handler() {
                 const q = this.q.q || '';

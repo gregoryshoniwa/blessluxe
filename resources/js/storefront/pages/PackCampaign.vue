@@ -2,6 +2,7 @@
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import SeriesTalk from '../components/SeriesTalk.vue';
+import { setCrumbs } from '../crumbs.js';
 import {
     Clock, Lock, Check, X, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane,
     Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Play,
@@ -40,6 +41,9 @@ export default {
             image: 0,                // which gallery picture is up
             copied: false,
         };
+    },
+    watch: {
+        title: { handler(t) { if (this.campaign || this.product) setCrumbs([{ label: 'Series', to: '/shop/series' }, { label: t }]); } },
     },
     computed: {
         code() { return (this.$route.params.code || '').toUpperCase(); },

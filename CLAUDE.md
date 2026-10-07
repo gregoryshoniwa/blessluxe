@@ -225,6 +225,10 @@ The fixed nav entries and the footer's help/company links are staff-switched at 
 
 The hero, then a **pulse** (sold this week · series filling · closing today · new in · here now — only the ones that are true, each a link) over one ticker merging pieces sold and sizes taken in series; **Filling now** — the series nearest to shipping as rings, "one more" glowing; departments as tiles that say what's inside, plus a **fourth tile that follows the Hive switch** — The Hive (with the newest look's photo) once staff launch it at `/admin/content`, Series until then (curated affiliate shops get four departments). Tile arrows sit in the top-right corner so a long name can't push them off a narrow phone tile; New in (5 across, rising as they scroll in); Trending; Recently viewed. Every number is real.
 
+### Breadcrumbs and the way back
+
+One trail under the header on every storefront page except home, checkout and the Hive ([Breadcrumbs](resources/js/storefront/components/Breadcrumbs.vue) + [crumbs.js](resources/js/storefront/crumbs.js)). A route's `meta.crumbs` is the fixed part (array, or a function of the route; `false` = none) and the router resets it on every new PATH; a page whose names come from the server calls `setCrumbs()` — product (department › catalogue › piece), Shop (follows heading/catalogue/search), series. **Back** uses `history.back()` when the previous entry was inside the shop (Vue Router keeps it in `history.state.back`), so a filtered list returns with its filters and scroll; arriving from outside (a WhatsApp link) it goes up one level instead and says where ("Back to Dresses"). Phones show only the back link; the full trail is `sm` and up. New pages: add `meta.crumbs` to the route.
+
 ### Footers and endless scrolling
 
 - **The full black footer is the home page's alone**; every other page ends in [FooterSlim](resources/js/storefront/components/FooterSlim.vue), one line of FAQ · Track · Shipping · Returns · Size guide · Contact. Those links exist nowhere else — the header carries none of them — and "what if it doesn't fit?" is asked on a product page, not the home page. Don't delete that line without putting them somewhere.

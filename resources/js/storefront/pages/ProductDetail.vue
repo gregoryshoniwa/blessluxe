@@ -5,6 +5,7 @@ import ProductTryOns from '../components/hive/ProductTryOns.vue';
 import ProductRatingSummary from '../components/ProductRatingSummary.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import { recentlyViewed } from '../recently-viewed.js';
+import { setCrumbs } from '../crumbs.js';
 import { cart } from '../cart-store.js';
 import { Check, ArrowRight, Plane, MapPin, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
@@ -108,6 +109,13 @@ export default {
                 if (data.redirect) { this.$router.replace(data.redirect); return; }
                 this.product = data.product;
                 this.imageIndex = 0;
+                const c = this.product.catalogues?.[0];
+                setCrumbs([
+                    c?.heading && { label: c.heading.name, to: c.heading.is_sale ? '/shop?sale=true' : `/shop?heading=${c.heading.handle}` },
+                    c && !c.heading?.is_sale && { label: c.name, to: `/shop?catalogue=${c.handle}` },
+                    !c && { label: 'Shop', to: '/shop' },
+                    { label: this.product.title },
+                ]);
                 this.selectedVariantId = this.product.variants?.[0]?.id || null;
                 // Stamp this view onto the recently-viewed list.
                 recentlyViewed.record(this.product.id);
