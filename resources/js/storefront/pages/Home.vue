@@ -37,10 +37,11 @@ export default {
         extraTile() {
             if (this.curated) return null;
             if (this.nav.header.some((l) => l.key === 'hive')) {
-                return { to: '/hive', name: 'The Hive', sub: 'Looks · Ask · Lives', image: this.hiveThumb || '/hive-mark.png', contain: !this.hiveThumb, badge: 'Community' };
+                const img = this.info.tile_hive_image || this.hiveThumb;
+                return { to: '/hive', name: 'The Hive', sub: 'Looks · Ask · Lives', image: img || '/hive-mark.png', contain: !img, badge: 'Community' };
             }
 
-            return { to: '/shop/series', name: 'Series', sub: 'Buy it together', image: this.series.find((p) => p.thumbnail)?.thumbnail || null, badge: this.seriesStats?.open ? `${this.seriesStats.open} filling` : null };
+            return { to: '/shop/series', name: 'Series', sub: 'Buy it together', image: this.info.tile_series_image || this.series.find((p) => p.thumbnail)?.thumbnail || null, badge: this.seriesStats?.open ? `${this.seriesStats.open} filling` : null };
         },
         shopName() { return this.shop.affiliate?.name || this.shop.affiliate?.code || 'This shop'; },
         recentlyViewedIds() { return recentlyViewed.ids(); },
@@ -50,7 +51,8 @@ export default {
                 to: `/shop?heading=${h.handle}`, name: h.name, image: h.image_url || null,
                 sub: h.catalogues?.length ? h.catalogues.map((c) => c.name).join(' · ') : null,
             }));
-            if (this.extraTile) out.push(this.extraTile);
+            // It leads: buying together (or the community) is what nobody else here offers.
+            if (this.extraTile) out.unshift(this.extraTile);
             // Light text only where there's a dark photo behind it.
             return out.map((t) => ({ ...t, dark: !!t.image && !t.contain }));
         },
@@ -92,6 +94,7 @@ export default {
             allHeadings: [],
             series: [],
             hiveThumb: null,          // the newest look's photo, for the Hive tile
+            info: {},                 // staff-set tile pictures, from /api/store/shop-info
             nav: siteLinks.state,
             seriesStats: null,
             seriesActivity: [],
@@ -129,6 +132,7 @@ export default {
     methods: {
         reloadForShop() {
             siteLinks.load();
+            this.fetchInfo();
             this.fetchHiveThumb();
             this.fetchHeadings();
             this.fetchFeatured();
@@ -151,6 +155,12 @@ export default {
                 this.allHeadings = ((await res.json()).headings || []).filter((h) => !h.is_sale);
                 this.watchReveals();
             } catch { /* tiles simply don't show */ }
+        },
+        async fetchInfo() {
+            try {
+                const res = await fetch('/api/store/shop-info', { credentials: 'include' });
+                if (res.ok) this.info = (await res.json()).info || {};
+            } catch { /* the tiles fall back to a series' or look's own photo */ }
         },
         async fetchHiveThumb() {
             try {

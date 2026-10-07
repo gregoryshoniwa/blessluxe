@@ -14,6 +14,7 @@ export default {
             savingLinks: false,
             shopInfo: [],            // the details the Contact and policy pages quote
             savingInfo: false,
+            uploadingField: '',
             announcements: [],
             loading: true,
             showForm: false,
@@ -42,6 +43,20 @@ export default {
             finally { this.savingLinks = false; }
         },
         linksIn(group) { return this.siteLinks.filter((l) => l.group === group); },
+        async uploadTile(f, e) {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            this.uploadingField = f.key;
+            try {
+                const fd = new FormData();
+                fd.append('field', f.key);
+                fd.append('image', file);
+                this.shopInfo = (await api.post('/api/admin/shop-info/image', fd)).fields || this.shopInfo;
+                toast('Image saved — it\'s on the home page now');
+            } catch (err) { toast(err?.payload?.message || err?.payload?.error || 'Could not upload that image.', { tone: 'error' }); }
+            finally { this.uploadingField = ''; }
+        },
         /** Saved together — they're one set of facts, not eight settings. */
         async saveInfo() {
             this.savingInfo = true;
@@ -140,7 +155,7 @@ export default {
             <button @click="tab = 'hero'" :class="['px-4 py-2', tab === 'hero' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Hero slides</button>
             <button @click="tab = 'top_bar'" :class="['px-4 py-2', tab === 'top_bar' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Top bar</button>
             <button @click="tab = 'links'" :class="['px-4 py-2', tab === 'links' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Menu & footer links</button>
-            <button @click="tab = 'info'" :class="['px-4 py-2', tab === 'info' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Contact details</button>
+            <button @click="tab = 'info'" :class="['px-4 py-2', tab === 'info' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Shop details</button>
         </div>
 
         <!-- What the Contact page offers and the policy pages quote. A blank
@@ -148,14 +163,33 @@ export default {
              out is worse than no phone number. -->
         <section v-if="tab === 'info'" class="bg-white border border-zinc-200">
             <p class="px-5 py-4 text-sm text-zinc-600 border-b border-zinc-200 max-w-3xl">
-                These appear on the Contact page and in the terms. Leave anything blank that you don't want offered — shoppers only see what's filled in.
+                Contact channels appear on the Contact page and in the terms — leave anything blank you don't want offered. The tile images go on the home page; department pictures are set on each heading at Headings.
             </p>
             <div class="p-5 grid sm:grid-cols-2 gap-4">
-                <label v-for="f in shopInfo" :key="f.key" class="flex flex-col gap-1">
-                    <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
-                    <input v-model="f.value" type="text" maxlength="300" class="border border-zinc-300 px-3 py-2 text-sm" />
-                    <span class="text-xs text-zinc-500">{{ f.hint }}</span>
-                </label>
+                <template v-for="f in shopInfo" :key="f.key">
+                    <!-- A home tile's picture: uploaded, previewed in the tile's own shape. -->
+                    <div v-if="f.image" class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
+                        <div class="flex items-start gap-3">
+                            <div class="w-24 aspect-[4/5] bg-zinc-100 border border-zinc-200 overflow-hidden flex-shrink-0">
+                                <img v-if="f.value" :src="f.value" :alt="f.label" class="w-full h-full object-cover object-top" />
+                            </div>
+                            <div class="space-y-2">
+                                <label class="inline-block border border-zinc-300 px-3 py-2 text-xs cursor-pointer hover:border-zinc-500">
+                                    {{ uploadingField === f.key ? 'Uploading…' : (f.value ? 'Replace image' : 'Upload image') }}
+                                    <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="uploadTile(f, $event)" :disabled="!!uploadingField" />
+                                </label>
+                                <button v-if="f.value" @click="f.value = ''; saveInfo()" class="block text-xs text-zinc-500 hover:text-red-600">Remove</button>
+                                <p class="text-xs text-zinc-500">{{ f.hint }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <label v-else class="flex flex-col gap-1">
+                        <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
+                        <input v-model="f.value" type="text" maxlength="300" class="border border-zinc-300 px-3 py-2 text-sm" />
+                        <span class="text-xs text-zinc-500">{{ f.hint }}</span>
+                    </label>
+                </template>
             </div>
             <div class="px-5 pb-5 flex justify-end">
                 <button @click="saveInfo" :disabled="savingInfo" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-50">

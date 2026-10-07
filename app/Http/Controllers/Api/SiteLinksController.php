@@ -28,6 +28,24 @@ class SiteLinksController extends Controller
         return ['fields' => ShopInfo::forAdmin()];
     }
 
+    /**
+     * POST /api/admin/shop-info/image  { field, image } — a home tile's picture.
+     * Stored through Media (never next to the code), and the old one removed.
+     */
+    public function uploadImage(Request $request)
+    {
+        $data = $request->validate([
+            'field' => ['required', 'string', 'in:' . implode(',', ShopInfo::IMAGES)],
+            'image' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+        ]);
+        $old = ShopInfo::all()[$data['field']] ?? '';
+        $url = \App\Services\Media::upload($request->file('image'), 'site/tiles');
+        ShopInfo::setConfig([$data['field'] => $url]);
+        if ($old !== '' && \App\Services\Media::key($old) !== null) \App\Services\Media::delete($old);
+
+        return ['fields' => ShopInfo::forAdmin()];
+    }
+
     /** PUT /api/admin/shop-info  { info: { key: value } } */
     public function updateShopInfo(Request $request)
     {

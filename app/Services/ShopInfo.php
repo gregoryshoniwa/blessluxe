@@ -29,6 +29,9 @@ class ShopInfo
         'tiktok'       => ['TikTok',           'https://www.tiktok.com/@blessluxeconnect', 'Full link to the profile'],
         'youtube'      => ['YouTube',          'https://www.youtube.com/@Bless-LuxeConnect', 'Full link to the channel'],
         'company_name' => ['Registered name',  'BLESSLUXE', 'The name on the terms'],
+        // The home page's non-department tiles. Set by upload, never typed.
+        'tile_series_image' => ['Series tile image', '', 'Portrait, 4:5 — shown on the home page'],
+        'tile_hive_image'   => ['Hive tile image',   '', 'Portrait, 4:5 — shown once the Hive is launched'],
         'registration' => ['Company number',   '', 'If registered'],
     ];
 
@@ -53,7 +56,7 @@ class ShopInfo
         $values = self::all();
         $out = [];
         foreach (self::FIELDS as $key => [$label, $default, $hint]) {
-            $out[] = ['key' => $key, 'label' => $label, 'hint' => $hint, 'value' => $values[$key]];
+            $out[] = ['key' => $key, 'label' => $label, 'hint' => $hint, 'value' => $values[$key], 'image' => in_array($key, self::IMAGES, true)];
         }
 
         return $out;
@@ -61,6 +64,7 @@ class ShopInfo
 
     /** @param array<string,string> $patch */
     public const SOCIALS = ['instagram', 'facebook', 'tiktok', 'youtube'];
+    public const IMAGES  = ['tile_series_image', 'tile_hive_image'];
 
     public static function setConfig(array $patch): array
     {
@@ -70,6 +74,8 @@ class ShopInfo
             $value = trim((string) $value);
             // A social link is either a real https address or nothing — never text that ends up in an href.
             if (in_array($key, self::SOCIALS, true) && $value !== '' && ! preg_match('~^https://[a-z0-9.-]+\.[a-z]{2,}(/.*)?$~i', $value)) continue;
+            // An image field holds one of OUR files or nothing — never a URL someone typed.
+            if (in_array($key, self::IMAGES, true) && $value !== '' && Media::key($value) === null) continue;
             $next[$key] = $value;
         }
         DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode($next), 'updated_at' => now()]);

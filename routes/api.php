@@ -482,6 +482,7 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put('/site-links', [SiteLinksController::class, 'update']);
         Route::get('/shop-info', [SiteLinksController::class, 'adminShopInfo']);
         Route::put('/shop-info', [SiteLinksController::class, 'updateShopInfo']);
+        Route::post('/shop-info/image', [SiteLinksController::class, 'uploadImage']);
 
         Route::get('/bees', [AdminBeesController::class, 'index']);
         Route::put('/bees', [AdminBeesController::class, 'update']);
