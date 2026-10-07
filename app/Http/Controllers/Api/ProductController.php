@@ -315,7 +315,7 @@ class ProductController extends Controller
             'is_new'    => $p->created_at && $p->created_at->gte(now()->subDays(self::NEW_DAYS)),
             // Sizes for adding straight from the grid. Out of stock is sent, not
             // hidden — a struck-through size says "it existed, it went".
-            'sizes'     => $p->relationLoaded('variants') ? $p->variants->map(fn ($v) => [
+            'sizes'     => $p->relationLoaded('variants') ? \App\Support\Sizes::sort($p->variants)->map(fn ($v) => [
                 'id'       => $v->id,
                 'title'    => $v->title,
                 'in_stock' => ! $v->manage_inventory || $v->allow_backorder || $v->inventory_quantity > 0,
@@ -383,7 +383,7 @@ class ProductController extends Controller
                 'title' => $o->title,
                 'values' => $o->values->map(fn ($v) => ['id' => $v->id, 'value' => $v->value]),
             ]),
-            'variants' => $p->variants->map(fn ($v) => [
+            'variants' => \App\Support\Sizes::sort($p->variants)->map(fn ($v) => [
                 'id'                 => $v->id,
                 'title'              => $v->title,
                 'sku'                => $v->sku,

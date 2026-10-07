@@ -84,6 +84,7 @@ Route::prefix('store')->group(function () {
         // sent the link should see a group that's alive.
         Route::get ('/series/{code}/talk',        [SeriesTalkController::class, 'index'])->middleware('throttle:series-read');
         Route::get ('/shop-info',                 [SiteLinksController::class, 'shopInfo']);
+        Route::get ('/home-tiles',                [\App\Http\Controllers\Api\HomeTilesController::class, 'index']);
         Route::get ('/products/trending',         [ProductEngagementController::class, 'trending']);
         Route::get ('/products/{handle}/related', [ProductController::class, 'related']);
         // Reading what shoppers said needs no account — a rating nobody can see is worth nothing.
@@ -482,7 +483,9 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::put('/site-links', [SiteLinksController::class, 'update']);
         Route::get('/shop-info', [SiteLinksController::class, 'adminShopInfo']);
         Route::put('/shop-info', [SiteLinksController::class, 'updateShopInfo']);
-        Route::post('/shop-info/image', [SiteLinksController::class, 'uploadImage']);
+        Route::get ('/home-tiles',        [\App\Http\Controllers\Api\HomeTilesController::class, 'admin']);
+        Route::post('/home-tiles/images', [\App\Http\Controllers\Api\HomeTilesController::class, 'upload']);
+        Route::put ('/home-tiles',        [\App\Http\Controllers\Api\HomeTilesController::class, 'update']);
 
         Route::get('/bees', [AdminBeesController::class, 'index']);
         Route::put('/bees', [AdminBeesController::class, 'update']);

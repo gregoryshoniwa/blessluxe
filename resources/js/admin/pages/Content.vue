@@ -2,11 +2,11 @@
 import { api } from '../../lib/api.js';
 import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
-import { Pencil, Trash2, Plus, Image as ImageIcon, Upload } from 'lucide-vue-next';
+import { Pencil, Trash2, Plus, Image as ImageIcon, Upload, ArrowLeft, ArrowRight } from 'lucide-vue-next';
 
 export default {
     name: 'AdminContent',
-    components: { IconButton, Pencil, Trash2, Plus, ImageIcon, Upload },
+    components: { IconButton, Pencil, Trash2, Plus, ImageIcon, Upload, ArrowLeft, ArrowRight },
     data() {
         return {
             tab: 'hero',
@@ -14,7 +14,9 @@ export default {
             savingLinks: false,
             shopInfo: [],            // the details the Contact and policy pages quote
             savingInfo: false,
-            uploadingField: '',
+            homeTiles: [],           // the home page's department tiles and their pictures
+            tileMax: 6,
+            tileBusy: '',
             announcements: [],
             loading: true,
             showForm: false,
@@ -43,19 +45,39 @@ export default {
             finally { this.savingLinks = false; }
         },
         linksIn(group) { return this.siteLinks.filter((l) => l.group === group); },
-        async uploadTile(f, e) {
-            const file = e.target.files?.[0];
+        /** Several pictures at once; each is its own upload so one bad file doesn't sink the rest. */
+        async addTileImages(t, e) {
+            const files = [...(e.target.files || [])].slice(0, this.tileMax - t.images.length);
             e.target.value = '';
-            if (!file) return;
-            this.uploadingField = f.key;
-            try {
-                const fd = new FormData();
-                fd.append('field', f.key);
-                fd.append('image', file);
-                this.shopInfo = (await api.post('/api/admin/shop-info/image', fd)).fields || this.shopInfo;
-                toast('Image saved — it\'s on the home page now');
-            } catch (err) { toast(err?.payload?.message || err?.payload?.error || 'Could not upload that image.', { tone: 'error' }); }
-            finally { this.uploadingField = ''; }
+            if (!files.length) return;
+            this.tileBusy = t.key;
+            let failed = 0;
+            for (const file of files) {
+                try {
+                    const fd = new FormData();
+                    fd.append('key', t.key);
+                    fd.append('image', file);
+                    this.homeTiles = (await api.post('/api/admin/home-tiles/images', fd)).tiles || this.homeTiles;
+                } catch (err) { failed++; if (failed === 1) toast(err?.payload?.error || err?.payload?.message || 'Could not upload a picture.', { tone: 'error' }); }
+            }
+            if (files.length > failed) toast(`${files.length - failed} picture${files.length - failed === 1 ? '' : 's'} added to ${t.label}`);
+            this.tileBusy = '';
+        },
+        async setTileImages(t, images) {
+            this.tileBusy = t.key;
+            try { this.homeTiles = (await api.put('/api/admin/home-tiles', { key: t.key, images })).tiles || this.homeTiles; }
+            catch { toast('Could not change that.', { tone: 'error' }); }
+            finally { this.tileBusy = ''; }
+        },
+        moveTileImage(t, i, by) {
+            const next = [...t.images];
+            const [img] = next.splice(i, 1);
+            next.splice(i + by, 0, img);
+            this.setTileImages(t, next);
+        },
+        async removeTileImage(t, i) {
+            if (!(await confirmDialog({ title: 'Remove this picture?', body: `It comes off the ${t.label} tile and is deleted.`, confirmLabel: 'Remove', tone: 'danger' }))) return;
+            this.setTileImages(t, t.images.filter((_, k) => k !== i));
         },
         /** Saved together — they're one set of facts, not eight settings. */
         async saveInfo() {
@@ -82,6 +104,9 @@ export default {
                 try {
                     this.siteLinks = (await api.get('/api/admin/site-links')).links || [];
                     this.shopInfo = (await api.get('/api/admin/shop-info')).fields || [];
+                    const t = await api.get('/api/admin/home-tiles');
+                    this.homeTiles = t.tiles || [];
+                    this.tileMax = t.max || 6;
                 } catch { this.siteLinks = []; }
                 const d = await api.get('/api/admin/announcements');
                 this.announcements = d.announcements;
@@ -155,41 +180,60 @@ export default {
             <button @click="tab = 'hero'" :class="['px-4 py-2', tab === 'hero' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Hero slides</button>
             <button @click="tab = 'top_bar'" :class="['px-4 py-2', tab === 'top_bar' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Top bar</button>
             <button @click="tab = 'links'" :class="['px-4 py-2', tab === 'links' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Menu & footer links</button>
-            <button @click="tab = 'info'" :class="['px-4 py-2', tab === 'info' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Shop details</button>
+            <button @click="tab = 'tiles'" :class="['px-4 py-2', tab === 'tiles' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Home tiles</button>
+            <button @click="tab = 'info'" :class="['px-4 py-2', tab === 'info' ? 'border-b-2 border-gold text-gold' : 'text-zinc-500 hover:text-black']">Contact details</button>
         </div>
+
+        <!-- The home page's "Shop by department" tiles. More than one picture
+             and the tile cross-fades between them, first picture first. -->
+        <section v-if="tab === 'tiles'" class="bg-white border border-zinc-200">
+            <p class="px-5 py-4 text-sm text-zinc-600 border-b border-zinc-200 max-w-3xl">
+                Pictures for the tiles under "Shop by department" on the home page. Give a tile two or more and it slowly cross-fades between them. Portrait <strong>3:4</strong> fits exactly; keep faces in the top two-thirds — the name sits across the bottom. Up to {{ tileMax }} per tile.
+            </p>
+            <div class="divide-y divide-zinc-200">
+                <div v-for="t in homeTiles" :key="t.key" class="p-5">
+                    <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                        <div>
+                            <p class="text-sm font-semibold">{{ t.label }}</p>
+                            <p class="text-xs text-zinc-500">{{ t.hint }}</p>
+                        </div>
+                        <span class="text-xs text-zinc-500">{{ t.images.length }} / {{ tileMax }}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <div v-for="(img, i) in t.images" :key="img" class="w-28">
+                            <div class="relative aspect-[3/4] bg-zinc-100 border border-zinc-200 overflow-hidden">
+                                <img :src="img" :alt="`${t.label} picture ${i + 1}`" class="w-full h-full object-cover object-top" />
+                                <span v-if="i === 0" class="absolute top-1 left-1 bg-black/70 text-white text-[9px] tracking-widest uppercase px-1.5 py-0.5">First</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-1">
+                                <IconButton label="Show earlier" :disabled="i === 0 || tileBusy === t.key" @click="moveTileImage(t, i, -1)"><ArrowLeft class="w-4 h-4" /></IconButton>
+                                <IconButton label="Remove" tone="danger" :disabled="tileBusy === t.key" @click="removeTileImage(t, i)"><Trash2 class="w-4 h-4" /></IconButton>
+                                <IconButton label="Show later" :disabled="i === t.images.length - 1 || tileBusy === t.key" @click="moveTileImage(t, i, 1)"><ArrowRight class="w-4 h-4" /></IconButton>
+                            </div>
+                        </div>
+                        <label v-if="t.images.length < tileMax" :class="['w-28 aspect-[3/4] border-2 border-dashed border-zinc-300 flex flex-col items-center justify-center gap-1 text-xs text-zinc-500 text-center px-2', tileBusy ? 'opacity-50' : 'cursor-pointer hover:border-zinc-500 hover:text-black']">
+                            <Upload class="w-5 h-5" />
+                            {{ tileBusy === t.key ? 'Uploading…' : 'Add pictures' }}
+                            <input type="file" multiple accept="image/jpeg,image/png,image/webp" class="hidden" :disabled="!!tileBusy" @change="addTileImages(t, $event)" />
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <!-- What the Contact page offers and the policy pages quote. A blank
              field is simply not shown to shoppers: a phone number that rings
              out is worse than no phone number. -->
         <section v-if="tab === 'info'" class="bg-white border border-zinc-200">
             <p class="px-5 py-4 text-sm text-zinc-600 border-b border-zinc-200 max-w-3xl">
-                Contact channels appear on the Contact page and in the terms — leave anything blank you don't want offered. The tile images go on the home page; department pictures are set on each heading at Headings.
+                These appear on the Contact page and in the terms. Leave anything blank that you don't want offered — shoppers only see what's filled in.
             </p>
             <div class="p-5 grid sm:grid-cols-2 gap-4">
-                <template v-for="f in shopInfo" :key="f.key">
-                    <!-- A home tile's picture: uploaded, previewed in the tile's own shape. -->
-                    <div v-if="f.image" class="flex flex-col gap-1">
-                        <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
-                        <div class="flex items-start gap-3">
-                            <div class="w-24 aspect-[3/4] bg-zinc-100 border border-zinc-200 overflow-hidden flex-shrink-0">
-                                <img v-if="f.value" :src="f.value" :alt="f.label" class="w-full h-full object-cover object-top" />
-                            </div>
-                            <div class="space-y-2">
-                                <label class="inline-block border border-zinc-300 px-3 py-2 text-xs cursor-pointer hover:border-zinc-500">
-                                    {{ uploadingField === f.key ? 'Uploading…' : (f.value ? 'Replace image' : 'Upload image') }}
-                                    <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="uploadTile(f, $event)" :disabled="!!uploadingField" />
-                                </label>
-                                <button v-if="f.value" @click="f.value = ''; saveInfo()" class="block text-xs text-zinc-500 hover:text-red-600">Remove</button>
-                                <p class="text-xs text-zinc-500">{{ f.hint }}</p>
-                            </div>
-                        </div>
-                    </div>
-                    <label v-else class="flex flex-col gap-1">
-                        <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
-                        <input v-model="f.value" type="text" maxlength="300" class="border border-zinc-300 px-3 py-2 text-sm" />
-                        <span class="text-xs text-zinc-500">{{ f.hint }}</span>
-                    </label>
-                </template>
+                <label v-for="f in shopInfo" :key="f.key" class="flex flex-col gap-1">
+                    <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
+                    <input v-model="f.value" type="text" maxlength="300" class="border border-zinc-300 px-3 py-2 text-sm" />
+                    <span class="text-xs text-zinc-500">{{ f.hint }}</span>
+                </label>
             </div>
             <div class="px-5 pb-5 flex justify-end">
                 <button @click="saveInfo" :disabled="savingInfo" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-[0.3em] uppercase hover:bg-gold-dark disabled:opacity-50">

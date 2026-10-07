@@ -3,10 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\ShopInfo;
 use App\Services\SiteLinks;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use PHPUnit\Framework\Attributes\Test;
@@ -104,27 +101,5 @@ class SiteLinksTest extends TestCase
         $this->putJson('/api/admin/site-links', ['links' => ['hive' => true]])->assertUnauthorized();
         $this->getJson('/api/admin/site-links')->assertUnauthorized();
         $this->putJson('/api/admin/shop-info', ['info' => ['email' => 'x@y.test']])->assertUnauthorized();
-    }
-
-    #[Test]
-    public function a_home_tile_picture_is_uploaded_never_typed(): void
-    {
-        Storage::fake('public');
-        config(['filesystems.default' => 'local']);
-        $this->actingAs(User::factory()->create(), 'web');
-
-        // Typing an outside address into the field is ignored.
-        $this->putJson('/api/admin/shop-info', ['info' => ['tile_series_image' => 'https://evil.example/x.jpg']])->assertOk();
-        $this->assertSame('', ShopInfo::all()['tile_series_image']);
-
-        $this->post('/api/admin/shop-info/image', ['field' => 'tile_series_image', 'image' => UploadedFile::fake()->image('a.jpg', 800, 1000)])->assertOk();
-        $url = ShopInfo::all()['tile_series_image'];
-        $this->assertNotSame('', $url);
-
-        // Only the tile fields take a picture.
-        $this->post('/api/admin/shop-info/image', ['field' => 'email', 'image' => UploadedFile::fake()->image('b.jpg')], ['Accept' => 'application/json'])->assertStatus(422);
-
-        Auth::forgetGuards();
-        $this->getJson('/api/store/shop-info')->assertJsonPath('info.tile_series_image', $url);
     }
 }

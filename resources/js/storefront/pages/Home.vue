@@ -37,24 +37,26 @@ export default {
         extraTile() {
             if (this.curated) return null;
             if (this.nav.header.some((l) => l.key === 'hive')) {
-                const img = this.info.tile_hive_image || this.hiveThumb;
-                return { to: '/hive', name: 'The Hive', sub: 'Looks · Ask · Lives', image: img || '/hive-mark.png', contain: !img, badge: 'Community' };
+                const own = this.tileImages.hive || (this.hiveThumb ? [this.hiveThumb] : []);
+                return { key: 'hive', to: '/hive', name: 'The Hive', sub: 'Looks · Ask · Lives', images: own.length ? own : ['/hive-mark.png'], contain: !own.length, badge: 'Community' };
             }
 
-            return { to: '/shop/series', name: 'Series', sub: 'Buy it together', image: this.info.tile_series_image || this.series.find((p) => p.thumbnail)?.thumbnail || null, badge: this.seriesStats?.open ? `${this.seriesStats.open} filling` : null };
+            const thumb = this.series.find((p) => p.thumbnail)?.thumbnail;
+            return { key: 'series', to: '/shop/series', name: 'Series', sub: 'Buy it together', images: this.tileImages.series || (thumb ? [thumb] : []), badge: this.seriesStats?.open ? `${this.seriesStats.open} filling` : null };
         },
         shopName() { return this.shop.affiliate?.name || this.shop.affiliate?.code || 'This shop'; },
         recentlyViewedIds() { return recentlyViewed.ids(); },
         filling() { return this.series.filter((p) => p.needs > 0).slice(0, 10); },
         tiles() {
             const out = this.headings.map((h) => ({
-                to: `/shop?heading=${h.handle}`, name: h.name, image: h.image_url || null,
+                key: `heading:${h.id}`, to: `/shop?heading=${h.handle}`, name: h.name,
+                images: this.tileImages[`heading:${h.id}`] || (h.image_url ? [h.image_url] : []),
                 sub: h.catalogues?.length ? h.catalogues.map((c) => c.name).join(' · ') : null,
             }));
             // It leads: buying together (or the community) is what nobody else here offers.
             if (this.extraTile) out.unshift(this.extraTile);
             // Light text only where there's a dark photo behind it.
-            return out.map((t) => ({ ...t, dark: !!t.image && !t.contain }));
+            return out.map((t) => ({ ...t, dark: !!t.images.length && !t.contain }));
         },
         /** One ticker: pieces that sold and sizes taken in series, newest first. */
         ticker() {
@@ -94,7 +96,10 @@ export default {
             allHeadings: [],
             series: [],
             hiveThumb: null,          // the newest look's photo, for the Hive tile
-            info: {},                 // staff-set tile pictures, from /api/store/shop-info
+            tileImages: {},           // staff-set tile pictures: { key: [url…] }
+            tileFrame: {},            // which picture each tile is showing
+            tileTurn: 0,              // tiles take turns to change, never all at once
+            tileTimer: null,
             nav: siteLinks.state,
             seriesStats: null,
             seriesActivity: [],
@@ -110,6 +115,7 @@ export default {
     beforeUnmount() {
         window.removeEventListener('blessluxe:affiliate-changed', this.reloadForShop);
         clearInterval(this.tick);
+        clearInterval(this.tileTimer);
         this.revealer?.disconnect();
     },
     mounted() {
@@ -118,6 +124,12 @@ export default {
         // this page may show, without changing the route.
         window.addEventListener('blessluxe:affiliate-changed', this.reloadForShop);
         this.tick = setInterval(() => { this.now = Date.now(); }, 1000);
+        // A tile with several pictures cross-fades; one tile changes every 1.6s,
+        // so each of four comes round about every six seconds. Still for anyone
+        // who asked for less motion, and paused while the tab is hidden.
+        if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            this.tileTimer = setInterval(this.nextTileFrame, 1600);
+        }
         if (typeof IntersectionObserver !== 'undefined') {
             this.revealer = new IntersectionObserver((entries) => {
                 for (const e of entries) {
@@ -132,7 +144,7 @@ export default {
     methods: {
         reloadForShop() {
             siteLinks.load();
-            this.fetchInfo();
+            this.fetchTileImages();
             this.fetchHiveThumb();
             this.fetchHeadings();
             this.fetchFeatured();
@@ -156,11 +168,21 @@ export default {
                 this.watchReveals();
             } catch { /* tiles simply don't show */ }
         },
-        async fetchInfo() {
+        async fetchTileImages() {
             try {
-                const res = await fetch('/api/store/shop-info', { credentials: 'include' });
-                if (res.ok) this.info = (await res.json()).info || {};
-            } catch { /* the tiles fall back to a series' or look's own photo */ }
+                const res = await fetch('/api/store/home-tiles', { credentials: 'include' });
+                if (res.ok) this.tileImages = (await res.json()).tiles || {};
+            } catch { /* the tiles fall back to the heading's, a series' or a look's own photo */ }
+        },
+        nextTileFrame() {
+            if (document.hidden || !this.tiles.length) return;
+            const t = this.tiles[this.tileTurn++ % this.tiles.length];
+            if (t.images.length > 1) this.tileFrame[t.key] = ((this.tileFrame[t.key] || 0) + 1) % t.images.length;
+        },
+        /** Only the picture showing and the next one exist — the rest load when their turn comes. */
+        tileShows(t, k) {
+            const cur = (this.tileFrame[t.key] || 0) % t.images.length;
+            return k === cur || k === (cur + 1) % t.images.length;
         },
         async fetchHiveThumb() {
             try {
@@ -319,14 +341,22 @@ export default {
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <router-link
                     v-for="(t, i) in tiles"
-                    :key="t.to"
+                    :key="t.key"
                     :to="t.to"
                     :data-reveal="'t-' + t.to"
                     :class="['reveal img-shine group relative aspect-[3/4] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['t-' + t.to] && 'is-in']"
                     :style="{ transitionDelay: i * 70 + 'ms' }"
                 >
-                    <template v-if="t.image">
-                        <img :src="t.image" :alt="t.name" loading="lazy" :class="['absolute inset-0 w-full h-full transition-transform duration-700 group-hover:scale-105', t.contain ? 'object-contain p-10 opacity-90' : 'object-cover object-top']" />
+                    <template v-if="t.images.length">
+                        <template v-for="(src, k) in t.images" :key="src">
+                            <img
+                                v-if="tileShows(t, k)"
+                                :src="src"
+                                :alt="k === (tileFrame[t.key] || 0) % t.images.length ? t.name : ''"
+                                loading="lazy"
+                                :class="['absolute inset-0 w-full h-full transition-[opacity,transform] duration-[1200ms,700ms] ease-in-out group-hover:scale-105', t.contain ? 'object-contain p-10' : 'object-cover object-top', k === (tileFrame[t.key] || 0) % t.images.length ? (t.contain ? 'opacity-90' : 'opacity-100') : 'opacity-0']"
+                            />
+                        </template>
                         <div v-if="!t.contain" class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
                     </template>
 
