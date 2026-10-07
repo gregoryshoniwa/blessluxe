@@ -47,10 +47,16 @@ export default {
         signedIn() { return this.auth.signedIn; },
         navLinks() {
             // Map API headings into the same shape the template used to hardcode.
+            // The department you're in stays marked — the header is the only
+            // place that says so since the shop's own tabs were removed.
+            const q = this.$route.path === '/shop' ? this.$route.query : null;
             return this.headings.map((h) => ({
                 label: h.name,
                 handle: h.handle,
                 isSale: h.is_sale,
+                current: !!q && (h.is_sale
+                    ? q.sale === 'true'
+                    : q.heading === h.handle || (h.catalogues || []).some((c) => c.handle === q.catalogue)),
                 href: h.is_sale ? '/shop?sale=true' : `/shop?heading=${h.handle}`,
                 submenu: (h.catalogues || []).map((c) => ({
                     label: c.name,
@@ -187,7 +193,8 @@ export default {
                     <router-link
                         v-if="!curated && showsLink('series')"
                         to="/shop/series"
-                        active-class="text-gold"
+                        active-class="!text-gold"
+                        exact-active-class="!text-gold"
                         class="font-body text-sm font-medium tracking-widest uppercase py-3 text-black hover:text-gold transition-colors"
                     >
                         Series
@@ -203,11 +210,14 @@ export default {
                             :to="link.href"
                             :class="[
                                 'relative flex items-center gap-1.5 font-body text-sm font-medium tracking-widest uppercase py-3 transition-colors',
-                                link.isSale ? 'text-red-600' : 'text-black hover:text-gold',
-                                activeMenu === link.handle && 'text-gold',
+                                link.isSale ? 'text-red-600' : (link.current ? 'text-gold' : 'text-black hover:text-gold'),
+                                activeMenu === link.handle && !link.isSale && 'text-gold',
                             ]"
+                            :aria-current="link.current ? 'page' : null"
                         >
                             {{ link.label }}
+                            <!-- A gold rule under the department you're in. -->
+                            <span :class="['absolute left-0 right-0 bottom-1 h-px origin-left transition-transform duration-300', link.isSale ? 'bg-red-600' : 'bg-gold', link.current ? 'scale-x-100' : 'scale-x-0']"></span>
                             <svg
                                 v-if="link.submenu.length"
                                 :class="['w-3.5 h-3.5 transition-transform', activeMenu === link.handle ? 'rotate-180' : '']"

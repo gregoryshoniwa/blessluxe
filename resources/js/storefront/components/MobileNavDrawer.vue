@@ -87,8 +87,10 @@ export default {
                                 @click="link.submenu.length ? toggle(link.handle) : (close(), $router.push(link.href))"
                                 :class="[
                                     'w-full text-left px-5 py-3 text-sm font-body tracking-widest uppercase flex items-center justify-between transition-colors',
-                                    link.isSale ? 'text-red-600' : 'hover:text-gold',
+                                    link.isSale ? 'text-red-600' : (link.current ? 'text-gold' : 'hover:text-gold'),
+                                    link.current && (link.isSale ? 'border-l-2 border-red-600' : 'border-l-2 border-gold bg-gold/5'),
                                 ]"
+                                :aria-current="link.current ? 'page' : null"
                             >
                                 <span>{{ link.label }}</span>
                                 <ChevronRight v-if="link.submenu.length" :class="['w-4 h-4 transition-transform', expanded === link.handle ? 'rotate-90' : '']" />
