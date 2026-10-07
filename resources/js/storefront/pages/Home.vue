@@ -322,7 +322,7 @@ export default {
                     :key="t.to"
                     :to="t.to"
                     :data-reveal="'t-' + t.to"
-                    :class="['reveal img-shine group relative aspect-[4/5] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['t-' + t.to] && 'is-in']"
+                    :class="['reveal img-shine group relative aspect-[3/4] overflow-hidden bg-gradient-to-br', i % 2 === 0 ? 'from-pink-200/40 to-amber-100/40' : 'from-amber-200/40 to-rose-200/30', revealed['t-' + t.to] && 'is-in']"
                     :style="{ transitionDelay: i * 70 + 'ms' }"
                 >
                     <template v-if="t.image">

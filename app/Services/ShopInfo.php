@@ -30,8 +30,8 @@ class ShopInfo
         'youtube'      => ['YouTube',          'https://www.youtube.com/@Bless-LuxeConnect', 'Full link to the channel'],
         'company_name' => ['Registered name',  'BLESSLUXE', 'The name on the terms'],
         // The home page's non-department tiles. Set by upload, never typed.
-        'tile_series_image' => ['Series tile image', '', 'Portrait, 4:5 — shown on the home page'],
-        'tile_hive_image'   => ['Hive tile image',   '', 'Portrait, 4:5 — shown once the Hive is launched'],
+        'tile_series_image' => ['Series tile image', '', 'Portrait, 3:4 — shown on the home page'],
+        'tile_hive_image'   => ['Hive tile image',   '', 'Portrait, 3:4 — shown once the Hive is launched'],
         'registration' => ['Company number',   '', 'If registered'],
     ];
 

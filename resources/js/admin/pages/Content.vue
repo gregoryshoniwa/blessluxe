@@ -171,7 +171,7 @@ export default {
                     <div v-if="f.image" class="flex flex-col gap-1">
                         <span class="text-xs tracking-widest uppercase text-zinc-500">{{ f.label }}</span>
                         <div class="flex items-start gap-3">
-                            <div class="w-24 aspect-[4/5] bg-zinc-100 border border-zinc-200 overflow-hidden flex-shrink-0">
+                            <div class="w-24 aspect-[3/4] bg-zinc-100 border border-zinc-200 overflow-hidden flex-shrink-0">
                                 <img v-if="f.value" :src="f.value" :alt="f.label" class="w-full h-full object-cover object-top" />
                             </div>
                             <div class="space-y-2">
