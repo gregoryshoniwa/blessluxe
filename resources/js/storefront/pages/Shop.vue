@@ -279,7 +279,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1600px] mx-auto px-[5%] pb-14">
+    <div class="max-w-[1600px] mx-auto px-[5%] pt-2 pb-14">
         <!-- ─── One row: where you are, how alive it is, search and sort. Sticks. ── -->
         <div class="sticky z-30 -mx-[5%] px-[5%] py-3 bg-cream border-b border-gold/10 flex flex-wrap items-center gap-x-4 gap-y-3" :style="{ top: headerH + 'px' }">
             <h1 class="mr-auto min-w-0">
