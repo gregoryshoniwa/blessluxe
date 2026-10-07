@@ -1,7 +1,19 @@
 <script>
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
-import { MessageCircle, Send, Trash2, Check, Sparkles, Loader2, ArrowDown, Plus } from 'lucide-vue-next';
+import { MessageCircle, Send, Trash2, Check, Sparkles, Loader2, ArrowDown, Plus, Smile } from 'lucide-vue-next';
+
+/**
+ * A small, chosen set rather than a 3,000-emoji library: the ones people
+ * actually use about clothes, sizes and buying together. Typed emoji from a
+ * phone keyboard still work — this is the shortcut, not the limit.
+ */
+const EMOJI = {
+    Feelings: ['😍', '🥰', '😊', '😂', '🤩', '😮', '🤔', '🙏', '👏', '🙌', '💯', '🔥'],
+    Fashion:  ['👗', '👠', '👜', '💄', '💅', '👑', '💍', '🕶️', '🧥', '👚', '✨', '💎'],
+    Together: ['🎉', '🥳', '🤝', '❤️', '💛', '🧡', '💕', '👍', '👌', '✅', '📦', '🛍️'],
+};
+const RECENT_KEY = 'blessluxe:emoji-recent';
 
 /**
  * The group chat inside a series — on the page everyone was sent to, so the
@@ -18,7 +30,7 @@ import { MessageCircle, Send, Trash2, Check, Sparkles, Loader2, ArrowDown, Plus 
  */
 export default {
     name: 'SeriesTalk',
-    components: { MessageCircle, Send, Trash2, Check, Sparkles, Loader2, ArrowDown, Plus },
+    components: { MessageCircle, Send, Trash2, Check, Sparkles, Loader2, ArrowDown, Plus, Smile },
     props: {
         code: { type: String, required: true },
         campaign: { type: Object, default: null },
@@ -40,6 +52,9 @@ export default {
             unseen: 0,               // messages that arrived while scrolled up
             now: Date.now(),
             tick: null,
+            emojiOpen: false,
+            emoji: EMOJI,
+            recent: [],              // this viewer's last few, kept in their own browser
         };
     },
     computed: {
@@ -82,6 +97,9 @@ export default {
         code() { this.items = []; this.members = []; this.since = null; this.load(); },
     },
     mounted() {
+        try { this.recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').slice(0, 8); } catch { this.recent = []; }
+        document.addEventListener('click', this.onOutside);
+        document.addEventListener('keydown', this.onEsc);
         this.load();
         this.poll = setInterval(() => { if (document.visibilityState === 'visible') this.load(true); }, 8000);
         this.tick = setInterval(() => { this.now = Date.now(); }, 30000);
@@ -91,6 +109,8 @@ export default {
         clearInterval(this.poll);
         clearInterval(this.tick);
         document.removeEventListener('visibilitychange', this.onVisible);
+        document.removeEventListener('click', this.onOutside);
+        document.removeEventListener('keydown', this.onEsc);
     },
     methods: {
         onVisible() { if (document.visibilityState === 'visible') this.load(true); },
@@ -145,12 +165,34 @@ export default {
                 const d = await api.post(`/api/account/series/${encodeURIComponent(this.code)}/talk`, { body });
                 this.merge([d.post]);
                 this.draft = '';
+                this.emojiOpen = false;
                 this.$nextTick(this.toBottom);
             } catch (e) {
                 if (e?.status === 401) return this.toLogin();
                 toast(e.payload?.error || 'Could not send that.', { tone: 'error' });
             } finally { this.sending = false; }
         },
+        /** Drop the emoji where the cursor is, not at the end — like every keyboard does. */
+        addEmoji(e) {
+            const el = this.$refs.input;
+            const at = el ? el.selectionStart ?? this.draft.length : this.draft.length;
+            const end = el ? el.selectionEnd ?? at : at;
+            const next = this.draft.slice(0, at) + e + this.draft.slice(end);
+            if (next.length > this.max) return;
+            this.draft = next;
+            this.recent = [e, ...this.recent.filter((x) => x !== e)].slice(0, 8);
+            try { localStorage.setItem(RECENT_KEY, JSON.stringify(this.recent)); } catch { /* private mode: fine */ }
+            this.$nextTick(() => {
+                if (!el) return;
+                el.focus();
+                const pos = at + e.length;
+                el.setSelectionRange(pos, pos);
+            });
+        },
+        onOutside(e) {
+            if (this.emojiOpen && !this.$refs.emojiWrap?.contains(e.target)) this.emojiOpen = false;
+        },
+        onEsc(e) { if (e.key === 'Escape') this.emojiOpen = false; },
         onKey(e) {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); }
         },
@@ -303,7 +345,41 @@ export default {
                         <button v-for="s in starters" :key="s" @click="send(s)" :disabled="sending" class="flex-shrink-0 min-h-9 border border-black/15 bg-white px-3 py-1.5 text-xs text-black/70 hover:border-gold hover:text-gold transition-colors disabled:opacity-50">{{ s }}</button>
                     </div>
                     <div class="flex items-end gap-2">
+                        <!-- Emoji: a chosen few, dropped in at the cursor -->
+                        <div ref="emojiWrap" class="relative">
+                            <button
+                                @click="emojiOpen = !emojiOpen"
+                                :class="['w-11 h-11 inline-flex items-center justify-center border transition-colors', emojiOpen ? 'border-gold text-gold bg-white' : 'border-black/15 bg-white text-black/50 hover:text-gold hover:border-gold']"
+                                title="Add an emoji"
+                                aria-label="Add an emoji"
+                                :aria-expanded="emojiOpen"
+                            >
+                                <Smile class="w-5 h-5" />
+                            </button>
+                            <transition name="pop">
+                                <div
+                                    v-if="emojiOpen"
+                                    class="fixed left-2 right-2 bottom-24 sm:absolute sm:left-0 sm:right-auto sm:bottom-14 sm:w-80 z-50 bg-white border border-gold/25 shadow-xl p-3"
+                                    role="dialog"
+                                    aria-label="Emoji"
+                                >
+                                    <div v-if="recent.length" class="mb-2">
+                                        <p class="text-[9px] tracking-[0.2em] uppercase text-black/40 mb-1">Recent</p>
+                                        <div class="grid grid-cols-8 gap-0.5">
+                                            <button v-for="e in recent" :key="'r' + e" @click="addEmoji(e)" class="h-9 text-xl leading-none hover:bg-cream-dark transition-colors" :aria-label="e">{{ e }}</button>
+                                        </div>
+                                    </div>
+                                    <div v-for="(set, name) in emoji" :key="name" class="mb-2 last:mb-0">
+                                        <p class="text-[9px] tracking-[0.2em] uppercase text-black/40 mb-1">{{ name }}</p>
+                                        <div class="grid grid-cols-8 sm:grid-cols-6 gap-0.5">
+                                            <button v-for="e in set" :key="e" @click="addEmoji(e)" class="h-9 text-xl leading-none hover:bg-cream-dark transition-colors hover:scale-110" :aria-label="e">{{ e }}</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </transition>
+                        </div>
                         <textarea
+                            ref="input"
                             v-model="draft"
                             @keydown="onKey"
                             rows="1"
@@ -316,7 +392,7 @@ export default {
                             <Send v-else class="w-4 h-4" />
                         </button>
                     </div>
-                    <p class="text-[11px] text-black/40 mt-2">Everyone on this page can read it · Enter sends, Shift+Enter for a new line</p>
+                    <p class="text-[11px] text-black/40 mt-2">Everyone on this page can read it · Enter sends, Shift+Enter for a new line · Esc closes the emoji</p>
                 </template>
             </div>
         </div>
@@ -328,9 +404,11 @@ export default {
 .msg-enter-active { transition: opacity .25s ease, transform .25s ease; }
 .msg-enter-from { opacity: 0; transform: translateY(6px); }
 .live-dot { animation: live 2s ease-in-out infinite; }
+.pop-enter-active, .pop-leave-active { transition: opacity .15s ease, transform .15s ease; }
+.pop-enter-from, .pop-leave-to { opacity: 0; transform: translateY(6px) scale(.98); }
 @keyframes live { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) {
-    .msg-enter-active { transition: none; }
+    .msg-enter-active, .pop-enter-active, .pop-leave-active { transition: none; }
     .live-dot { animation: none; }
 }
 </style>
