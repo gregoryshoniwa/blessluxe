@@ -37,12 +37,13 @@ class QuickSeries
     {
         $raw = json_decode((string) DB::table('settings')->where('key', self::KEY)->value('value'), true);
 
-        return ['margin' => (int) ($raw['margin'] ?? 40), 'open_days' => (int) ($raw['open_days'] ?? 14)];
+        return ['margin' => (int) ($raw['margin'] ?? 40), 'fixed' => (float) ($raw['fixed'] ?? 0), 'open_days' => (int) ($raw['open_days'] ?? 14)];
     }
 
-    private static function remember(int $margin, ?int $days): void
+    private static function remember(int $margin, float $fixed, ?int $days): void
     {
-        DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode(['margin' => $margin, 'open_days' => $days ?? 0]), 'updated_at' => now()]);
+        $days ??= self::settings()['open_days'];        // a product save mustn't reset the series deadline
+        DB::table('settings')->updateOrInsert(['key' => self::KEY], ['value' => json_encode(['margin' => $margin, 'fixed' => $fixed, 'open_days' => $days]), 'updated_at' => now()]);
     }
 
     /** Catalogues as "Men › Suits", for the form and for the reader to choose from. */
@@ -148,12 +149,15 @@ TXT;
         return $out;
     }
 
-    /** Selling price for a cost and margin: the whole dollar at or above cost × (1 + margin). */
-    public static function priceCents(float $cost, int $margin): int
+    /**
+     * Selling price: cost + the percentage + a fixed amount per piece, rounded UP
+     * to the whole dollar. Either part may be 0 — "just add $15" is margin 0, fixed 15.
+     */
+    public static function priceCents(float $cost, int $margin, float $fixed = 0): int
     {
         // Worked in whole cents first: 90 × 1.10 in floating point is 99.00000000000001,
         // which a plain ceil() turned into $100.
-        $cents = (int) round($cost * (100 + $margin));      // = cost × (1 + margin%) × 100, exact to the cent
+        $cents = (int) round($cost * (100 + $margin) + $fixed * 100);   // = (cost × (1 + margin%) + fixed) × 100, exact to the cent
 
         return (int) (ceil($cents / 100) * 100);
     }
@@ -210,7 +214,7 @@ TXT;
                 }
             }
 
-            self::remember((int) $d['margin'], isset($d['open_days']) ? (int) $d['open_days'] : null);
+            self::remember((int) $d['margin'], (float) ($d['fixed'] ?? 0), isset($d['open_days']) ? (int) $d['open_days'] : null);
 
             return ['product_id' => $product->id, 'handle' => $product->handle, 'definition_id' => $def->id, 'codes' => $codes, 'price' => $price];
         });
@@ -232,7 +236,7 @@ TXT;
 
         return self::withPhotos($files, function (array $urls) use ($d, $sizes, $publish, $sourcing) {
             [$product, , $price] = self::makeProduct($d, $urls, $sizes, $publish, $sourcing, (array) ($d['stock'] ?? []));
-            self::remember((int) $d['margin'], null);
+            self::remember((int) $d['margin'], (float) ($d['fixed'] ?? 0), null);
 
             return ['product_id' => $product->id, 'handle' => $product->handle, 'price' => $price, 'link' => url("/shop/{$product->handle}")];
         });
@@ -253,7 +257,7 @@ TXT;
     /** @return array{0: Product, 1: array<string,string>, 2: int} the product, size => variant id, price in cents */
     private static function makeProduct(array $d, array $urls, array $sizes, bool $publish, string $sourcing, array $stock): array
     {
-        $price = self::priceCents((float) $d['cost'], (int) $d['margin']);
+        $price = self::priceCents((float) $d['cost'], (int) $d['margin'], (float) ($d['fixed'] ?? 0));
         $cost = (int) round((float) $d['cost'] * 100);
         $supplier = self::supplier($d);
         $id = 'prod_' . Str::random(16);

@@ -133,6 +133,13 @@ class QuickSeriesTest extends TestCase
         ], ['Accept' => 'application/json'])->assertOk()->json();
         $this->assertSame(5400, $local['price']);                                // $36 + 50%
 
+        // A fixed profit is honoured by the server, not just the form: $36 + 0% + $12 = $48.
+        $fixed = $this->post('/api/admin/quick/products', array_merge($base, ['title' => 'Fixed Profit Dress', 'margin' => '0', 'fixed' => '12']) + [
+            'sourcing' => 'import', 'sizes' => json_encode(['M']),
+        ], ['Accept' => 'application/json'])->assertOk()->json();
+        $this->assertSame(4800, $fixed['price']);
+        DB::table('products')->where('id', $fixed['product_id'])->delete();
+
         $v = DB::table('product_variants')->where('product_id', $local['product_id'])->pluck('inventory_quantity', 'title')->all();
         $this->assertEquals(['S' => 2, 'M' => 3, 'L' => 0], $v);
         $this->assertSame('local', DB::table('products')->where('id', $local['product_id'])->value('sourcing'));

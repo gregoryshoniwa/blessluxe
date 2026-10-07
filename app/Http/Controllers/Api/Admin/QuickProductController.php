@@ -84,6 +84,7 @@ class QuickProductController extends Controller
             'description'    => ['nullable', 'string', 'max:3000'],
             'cost'           => ['required', 'numeric', 'min:0.5', 'max:10000'],
             'margin'         => ['required', 'integer', 'min:0', 'max:500'],
+            'fixed'          => ['nullable', 'numeric', 'min:0', 'max:10000'],   // dollars added per piece
             'single_price'   => ['nullable', 'numeric', 'min:0', 'max:10000'],
             'reference'      => ['nullable', 'string', 'max:60'],
             'ai_cost'        => ['nullable', 'numeric', 'min:0', 'max:5'],

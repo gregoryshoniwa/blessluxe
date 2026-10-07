@@ -23,7 +23,7 @@ const PRESETS = [
 function blank(defaults = {}) {
     return {
         title: '', description: '', reference: '', catalogue_ids: [],
-        cost: '', single_price: '', margin: defaults.margin ?? 40,
+        cost: '', single_price: '', margin: defaults.margin ?? 40, fixed: defaults.fixed || '',
         supplier: { id: null, name: '', phone: '', link: '' },
         origin: 'TR',
         size_runs: [[]],
@@ -62,8 +62,23 @@ export default {
         noun() { return this.isProduct ? 'product' : 'series'; },
         units() { return Object.values(this.form.stock).reduce((n, q) => n + (Number(q) || 0), 0); },
         cost() { return parseFloat(this.form.cost) || 0; },
-        /** Cost + margin, rounded UP to the dollar — worked in whole cents so 90 × 1.10 is 99, not 99.00000000000001 → 100. */
-        price() { return this.cost ? Math.ceil(Math.round(this.cost * (100 + (Number(this.form.margin) || 0))) / 100) : 0; },
+        fixed() { return parseFloat(this.form.fixed) || 0; },
+        /**
+         * Cost + the percentage + the fixed amount, rounded UP to the dollar — worked
+         * in whole cents so 90 × 1.10 is 99, not 99.00000000000001 → 100.
+         */
+        price() { return this.cost ? Math.ceil(Math.round(this.cost * (100 + (Number(this.form.margin) || 0)) + this.fixed * 100) / 100) : 0; },
+        /** Where the profit comes from, so the rounding never looks like a mistake. */
+        profitParts() {
+            if (!this.cost) return '';
+            const pct = Math.round(this.cost * (Number(this.form.margin) || 0)) / 100;
+            const round = Math.round((this.profit - pct - this.fixed) * 100) / 100;
+            const parts = [];
+            if (pct) parts.push(`${this.money(pct)} from ${this.form.margin}%`);
+            if (this.fixed) parts.push(`${this.money(this.fixed)} fixed`);
+            if (round > 0.004) parts.push(`${this.money(round)} rounding up`);
+            return parts.length > 1 ? parts.join(' + ') : '';
+        },
         profit() { return this.price - this.cost; },
         /** Their own single-piece price is what a shopper could pay going direct. */
         single_price_note() {
@@ -199,7 +214,7 @@ export default {
             try {
                 const fd = new FormData();
                 const f = this.form;
-                for (const k of ['title', 'description', 'reference', 'cost', 'margin', 'single_price', 'origin', 'open_days', 'ai_cost']) fd.append(k, f[k] ?? '');
+                for (const k of ['title', 'description', 'reference', 'cost', 'margin', 'fixed', 'single_price', 'origin', 'open_days', 'ai_cost']) fd.append(k, f[k] ?? '');
                 fd.append('supplier', JSON.stringify(f.supplier));
                 if (this.isProduct) {
                     const sizes = this.runs[0] || [];
@@ -334,15 +349,30 @@ export default {
                     </label>
                 </div>
                 <div>
-                    <h3 class="text-xs tracking-widest uppercase text-zinc-500 mb-3"><span class="text-gold font-semibold">4</span> · Profit margin</h3>
-                    <div class="flex items-center gap-2 mb-2">
-                        <input v-model.number="form.margin" type="number" min="0" max="500" class="border border-zinc-300 px-3 py-2 text-sm w-24" />
-                        <span class="text-sm text-zinc-500">%</span>
+                    <h3 class="text-xs tracking-widest uppercase text-zinc-500 mb-3"><span class="text-gold font-semibold">4</span> · Profit</h3>
+                    <div class="flex flex-wrap items-end gap-3 mb-2">
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xs text-zinc-600">Percentage on cost</span>
+                            <span class="flex items-center gap-1.5">
+                                <input v-model.number="form.margin" type="number" min="0" max="500" class="border border-zinc-300 px-3 py-2 text-sm w-20" />
+                                <span class="text-sm text-zinc-500">%</span>
+                            </span>
+                        </label>
+                        <span class="text-sm text-zinc-400 pb-2">+</span>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xs text-zinc-600">Fixed profit a piece</span>
+                            <span class="flex items-center gap-1.5">
+                                <span class="text-sm text-zinc-500">$</span>
+                                <input v-model="form.fixed" type="number" min="0" step="0.5" inputmode="decimal" placeholder="0" class="border border-zinc-300 px-3 py-2 text-sm w-24" />
+                            </span>
+                        </label>
                     </div>
+                    <p class="text-xs text-zinc-500 mb-2">Use either or both — set the % to 0 for a fixed amount only.</p>
                     <div class="flex flex-wrap gap-1.5 mb-3">
                         <button v-for="m in [25, 30, 40, 50, 60, 80]" :key="m" @click="form.margin = m" :class="['px-2.5 py-1 text-xs border', form.margin === m ? 'border-gold bg-gold/10 text-gold-dark' : 'border-zinc-300 hover:border-zinc-500']">{{ m }}%</button>
                     </div>
                     <p v-if="cost" class="text-sm">Sells at <strong class="text-lg">{{ money(price) }}</strong> <span class="text-zinc-500">· {{ money(profit) }} profit a piece</span></p>
+                    <p v-if="profitParts" class="text-xs text-zinc-500 mt-0.5">{{ profitParts }}</p>
                     <p v-if="cost && single_price_note && !isProduct" class="text-xs text-zinc-500 mt-1">{{ single_price_note }}</p>
                 </div>
             </section>
