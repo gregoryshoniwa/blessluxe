@@ -95,8 +95,13 @@ class PackController extends Controller
             ->latest()
             ->get();
 
+        $placed = self::categoriesOf($campaigns->pluck('id')->all());
+
         return [
-            'packs' => $campaigns->map(function (PackCampaign $c) {
+            // The filter tree is built from the series that are open right now,
+            // so a heading or catalogue with nothing in it never appears.
+            'categories' => self::facets($placed),
+            'packs' => $campaigns->map(function (PackCampaign $c) use ($placed) {
                 // Cherry-pick the first available slot's thumbnail as the
                 // hero image so the listing tile has something to render.
                 $firstSlot = $c->slots()
@@ -116,9 +121,83 @@ class PackController extends Controller
                     'slots_total'     => $c->slots_count,
                     'slots_available' => $c->slots_available,
                     'slots_paid'      => $c->slots_paid,
+                    // Where it sits in the shop — Women › Dresses, and so on —
+                    // taken from the pieces in it, never set on the series.
+                    'headings'        => array_values(array_unique(array_column($placed[$c->id] ?? [], 'heading'))),
+                    'catalogues'      => array_values(array_unique(array_column($placed[$c->id] ?? [], 'catalogue'))),
+                    'category_names'  => implode(' ', array_unique(array_merge(
+                        array_column($placed[$c->id] ?? [], 'heading_name'),
+                        array_column($placed[$c->id] ?? [], 'catalogue_name'),
+                    ))),
                 ];
             }),
         ];
+    }
+
+    /**
+     * Which headings and catalogues each series falls under, read from the
+     * catalogues of the products in its slots. One query for the whole page.
+     * The Sale heading is not a place in the shop, so it never counts.
+     *
+     * @return array<string,array<int,array{heading:string,heading_name:string,catalogue:string,catalogue_name:string}>>
+     */
+    private static function categoriesOf(array $campaignIds): array
+    {
+        if (! $campaignIds) return [];
+
+        $rows = DB::table('pack_slots as s')
+            ->join('product_variants as v', 'v.id', '=', 's.variant_id')
+            ->join('product_catalogue_map as m', 'm.product_id', '=', 'v.product_id')
+            ->join('catalogues as c', 'c.id', '=', 'm.catalogue_id')
+            ->join('headings as h', 'h.id', '=', 'c.heading_id')
+            ->whereIn('s.pack_campaign_id', $campaignIds)
+            ->whereNull('s.deleted_at')
+            ->where('c.is_active', true)
+            ->where('h.is_active', true)
+            ->where('h.is_sale', false)
+            ->distinct()
+            ->get([
+                's.pack_campaign_id', 'h.handle as heading', 'h.name as heading_name', 'h.rank as heading_rank',
+                'c.handle as catalogue', 'c.name as catalogue_name', 'c.rank as catalogue_rank',
+            ]);
+
+        $out = [];
+        foreach ($rows as $r) $out[$r->pack_campaign_id][] = (array) $r;
+
+        return $out;
+    }
+
+    /**
+     * The filter tree: headings in the shop's own order, each with the
+     * catalogues that have a series in them and how many.
+     */
+    private static function facets(array $placed): array
+    {
+        $headings = [];
+        foreach ($placed as $campaignId => $rows) {
+            $seenH = []; $seenC = [];
+            foreach ($rows as $r) {
+                $h = $r['heading'];
+                $headings[$h] ??= ['handle' => $h, 'name' => $r['heading_name'], 'rank' => (int) $r['heading_rank'], 'count' => 0, 'catalogues' => []];
+                if (! isset($seenH[$h])) { $headings[$h]['count']++; $seenH[$h] = true; }
+
+                $c = $r['catalogue'];
+                $headings[$h]['catalogues'][$c] ??= ['handle' => $c, 'name' => $r['catalogue_name'], 'rank' => (int) $r['catalogue_rank'], 'count' => 0];
+                if (! isset($seenC[$c])) { $headings[$h]['catalogues'][$c]['count']++; $seenC[$c] = true; }
+            }
+        }
+
+        $byRank = fn ($a, $b) => [$a['rank'], $a['name']] <=> [$b['rank'], $b['name']];
+        foreach ($headings as &$h) {
+            $cats = array_values($h['catalogues']);
+            usort($cats, $byRank);
+            $h['catalogues'] = array_map(fn ($c) => array_diff_key($c, ['rank' => 1]), $cats);
+        }
+        unset($h);
+        $list = array_values($headings);
+        usort($list, $byRank);
+
+        return array_map(fn ($h) => array_diff_key($h, ['rank' => 1]), $list);
     }
 
     public function show(string $code)

@@ -11,6 +11,7 @@ export default {
             packs: [],
             loading: true,
             hiddenByShop: false,
+            categories: [],          // [{ handle, name, count, catalogues: [{ handle, name, count }] }]
             search: '',
             where: 'all',            // all | local | import
             sort: 'closest',
@@ -24,13 +25,21 @@ export default {
          * them), so searching is instant and costs no request. If this ever
          * needs paging, the filter moves to the API with it.
          */
+        // The heading and catalogue live in the ADDRESS, so a filtered list can
+        // be shared — "the Women's dresses series" is a link, not instructions.
+        heading() { return this.$route.query.heading || ''; },
+        catalogue() { return this.$route.query.catalogue || ''; },
+        activeHeading() { return this.categories.find((h) => h.handle === this.heading) || null; },
         shown() {
             const term = this.search.trim().toLowerCase();
             let out = this.packs.filter((p) => {
+                if (this.heading && !(p.headings || []).includes(this.heading)) return false;
+                if (this.catalogue && !(p.catalogues || []).includes(this.catalogue)) return false;
                 if (this.where !== 'all' && (p.reputation?.sourcing?.kind || 'local') !== this.where) return false;
                 if (!term) return true;
 
-                return `${p.title || ''} ${p.description || ''} ${p.public_code || ''}`.toLowerCase().includes(term);
+                // Typing "dress" finds a series in Dresses even if its title never says so.
+                return `${p.title || ''} ${p.description || ''} ${p.public_code || ''} ${p.category_names || ''}`.toLowerCase().includes(term);
             });
 
             const left = (p) => (p.slots_total || 0) - (p.slots_paid || 0);
@@ -49,7 +58,7 @@ export default {
 
             return out;
         },
-        filtering() { return !!this.search.trim() || this.where !== 'all'; },
+        filtering() { return !!this.search.trim() || this.where !== 'all' || !!this.heading || !!this.catalogue; },
     },
     mounted() {
         this.load();
@@ -64,6 +73,7 @@ export default {
             try {
                 const data = await api.get('/api/store/series');
                 this.packs = data.packs || [];
+                this.categories = data.categories || [];
                 // The SERVER says why it is empty — a curated affiliate shop
                 // lists no packs — so this page can say so, rather than claiming
                 // there are none open anywhere.
@@ -71,7 +81,23 @@ export default {
             } finally { this.loading = false; }
         },
         leaveShop() { affiliateStore.clear(); },
-        clearFilters() { this.search = ''; this.where = 'all'; },
+        clearFilters() {
+            this.search = '';
+            this.where = 'all';
+            this.pick('', '');
+        },
+        /**
+         * Choose a heading (and optionally a catalogue under it). Picking the
+         * one already chosen clears it. `replace`, not `push`: browsing filters
+         * shouldn't fill the back button with every tap.
+         */
+        pick(heading, catalogue = '') {
+            if (heading === this.heading && catalogue === this.catalogue) { heading = catalogue ? heading : ''; catalogue = ''; }
+            const query = { ...this.$route.query };
+            if (heading) query.heading = heading; else delete query.heading;
+            if (catalogue) query.catalogue = catalogue; else delete query.catalogue;
+            this.$router.replace({ query });
+        },
         fillPct(p) {
             if (!p.slots_total) return 0;
             return Math.round((p.slots_paid / p.slots_total) * 100);
@@ -153,6 +179,41 @@ export default {
                 <option value="newest">Newest</option>
             </select>
         </div>
+
+        <!-- Women · Men · Children, as the shop names them. Built from the series
+             that are open now, so nothing here ever leads to an empty page. -->
+        <nav v-if="categories.length" class="mb-8" aria-label="Series by category">
+            <div class="scroll-strip flex items-center gap-1 border-b border-black/10">
+                <button
+                    @click="pick('', '')"
+                    :class="['min-h-11 px-4 text-[11px] font-semibold tracking-[0.2em] uppercase border-b-2 -mb-px transition-colors whitespace-nowrap', !heading ? 'border-gold text-gold' : 'border-transparent text-black/55 hover:text-black']"
+                >
+                    All <span class="text-black/35 font-normal">{{ packs.length }}</span>
+                </button>
+                <button
+                    v-for="h in categories"
+                    :key="h.handle"
+                    @click="pick(h.handle)"
+                    :class="['min-h-11 px-4 text-[11px] font-semibold tracking-[0.2em] uppercase border-b-2 -mb-px transition-colors whitespace-nowrap', heading === h.handle ? 'border-gold text-gold' : 'border-transparent text-black/55 hover:text-black']"
+                    :aria-pressed="heading === h.handle"
+                >
+                    {{ h.name }} <span class="text-black/35 font-normal">{{ h.count }}</span>
+                </button>
+            </div>
+
+            <!-- The catalogues under the chosen heading. -->
+            <div v-if="activeHeading && activeHeading.catalogues.length" class="flex flex-wrap gap-2 mt-4">
+                <button
+                    v-for="c in activeHeading.catalogues"
+                    :key="c.handle"
+                    @click="pick(activeHeading.handle, c.handle)"
+                    :class="['min-h-11 px-4 border text-xs transition-colors', catalogue === c.handle ? 'border-gold bg-gold text-white' : 'border-black/15 text-black/70 hover:border-gold hover:text-gold']"
+                    :aria-pressed="catalogue === c.handle"
+                >
+                    {{ c.name }} <span :class="catalogue === c.handle ? 'text-white/70' : 'text-black/35'">{{ c.count }}</span>
+                </button>
+            </div>
+        </nav>
 
         <div v-if="!packs.length" class="text-center py-20 max-w-md mx-auto">
             <p class="text-sm text-black/55 mb-6">No open series right now. Check back soon, or follow your favourite affiliate for hosted drops.</p>
