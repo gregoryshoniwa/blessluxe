@@ -190,14 +190,17 @@ table code {
  * aimless ones are cognitive load. And every one stops for prefers-reduced-motion.
  */
 
-/* Gold primary buttons: a sheen crosses on hover, and they give under a press. */
-button.bg-gold, a.bg-gold, .btn-shine {
+/* Gold primary buttons: a sheen crosses on hover, and they give under a press.
+ * NOT floating ones (.fixed/.absolute/.sticky — the LUXE launcher, a card's "+"):
+ * forcing `position: relative` on those pulled the launcher out of its corner.
+ * :where() keeps the selector at zero specificity so a utility always wins. */
+:where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky), .btn-shine {
     position: relative;
     overflow: hidden;
     isolation: isolate;
     transition: transform .12s ease, background-color .2s ease, box-shadow .2s ease;
 }
-button.bg-gold::after, a.bg-gold::after, .btn-shine::after {
+:where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky)::after, .btn-shine::after {
     content: '';
     position: absolute;
     inset: -2px auto -2px -60%;
@@ -208,11 +211,11 @@ button.bg-gold::after, a.bg-gold::after, .btn-shine::after {
     z-index: 1;
     opacity: 0;
 }
-button.bg-gold:hover::after, a.bg-gold:hover::after, .btn-shine:hover::after {
+:where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky):hover::after, .btn-shine:hover::after {
     animation: sheen .8s ease forwards;
 }
-button.bg-gold:active:not(:disabled), a.bg-gold:active, .press:active { transform: scale(.97); }
-button.bg-gold:hover:not(:disabled), a.bg-gold:hover { box-shadow: 0 6px 22px -8px color-mix(in srgb, var(--color-gold) 75%, transparent); }
+:where(button.bg-gold:not(:disabled), a.bg-gold):active, .press:active { transform: scale(.97); }
+:where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky):hover:not(:disabled) { box-shadow: 0 6px 22px -8px color-mix(in srgb, var(--color-gold) 75%, transparent); }
 @keyframes sheen {
     0%   { opacity: 0; transform: skewX(-18deg) translateX(0); }
     15%  { opacity: 1; }
@@ -246,7 +249,7 @@ button.bg-gold:hover:not(:disabled), a.bg-gold:hover { box-shadow: 0 6px 22px -8
 @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
 @media (prefers-reduced-motion: reduce) {
-    button.bg-gold::after, a.bg-gold::after, .btn-shine::after, .img-shine::after { display: none; }
-    button.bg-gold:active, a.bg-gold:active, .press:active { transform: none; }
+    :where(button.bg-gold, a.bg-gold):not(.fixed, .absolute, .sticky)::after, .btn-shine::after, .img-shine::after { display: none; }
+    :where(button.bg-gold, a.bg-gold):active, .press:active { transform: none; }
     .glow-gold, .pop-once { animation: none; }
 }
