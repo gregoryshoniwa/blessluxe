@@ -41,6 +41,8 @@ export default {
             revealer: null,
             tail: null,              // the observer on the "load more" sentinel
             autoLoads: 0,
+            headerH: 80,             // the shop header's live height; the bar sticks right under it
+            headerObs: null,
         };
     },
     computed: {
@@ -75,6 +77,16 @@ export default {
         },
     },
     mounted() {
+        // The header shrinks once you scroll and grows when an affiliate's strip
+        // shows, so a fixed offset leaves a gap the rail shows through. Measure it.
+        const header = document.querySelector('header.sticky');
+        if (header) {
+            this.headerH = Math.round(header.getBoundingClientRect().height);
+            if (typeof ResizeObserver !== 'undefined') {
+                this.headerObs = new ResizeObserver(() => { this.headerH = Math.round(header.getBoundingClientRect().height); });
+                this.headerObs.observe(header);
+            }
+        }
         this.load(1);
         window.addEventListener('blessluxe:affiliate-changed', this.reload);
         // Timers tick once a second; they are real deadlines, so they must move.
@@ -95,6 +107,7 @@ export default {
         clearTimeout(this.searchTimer);
         this.revealer?.disconnect();
         this.tail?.disconnect();
+        this.headerObs?.disconnect();
     },
     methods: {
         reload() { this.load(1); },
@@ -231,7 +244,9 @@ export default {
 
         <template v-else>
             <!-- ─── One row: what this is, how alive it is, and the controls. Sticks. ── -->
-            <div class="sticky top-20 lg:top-24 z-30 -mx-[5%] px-[5%] py-3 bg-cream/95 backdrop-blur border-b border-gold/10 flex flex-wrap items-center gap-3">
+            <!-- Sticks exactly under the shop header, whatever height that is right now,
+                 and is solid so nothing scrolls through behind it. -->
+            <div class="sticky z-30 -mx-[5%] px-[5%] py-3 bg-cream border-b border-gold/10 flex flex-wrap items-center gap-3" :style="{ top: headerH + 'px' }">
                 <h1 class="font-display text-lg tracking-widest uppercase leading-none flex items-baseline gap-3 mr-auto">
                     Series
                     <span v-if="stats" class="text-[11px] tracking-[0.15em] text-black/50 font-body normal-case">
