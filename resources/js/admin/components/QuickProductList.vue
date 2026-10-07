@@ -122,7 +122,7 @@ export default {
                         <th class="text-right font-medium px-3 py-2">Stock</th>
                         <th class="text-right font-medium px-3 py-2">Sold</th>
                         <th class="text-left font-medium px-3 py-2">Status</th>
-                        <th class="px-3 py-2"><span class="sr-only">Actions</span></th>
+                        <th class="text-right font-medium px-3 py-2">Actions</th>
                     </tr>
                 </thead>
                 <tbody v-if="loading && !rows.length">
