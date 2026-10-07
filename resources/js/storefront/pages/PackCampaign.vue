@@ -4,7 +4,7 @@ import { toast } from '../../lib/dialog.js';
 import SeriesTalk from '../components/SeriesTalk.vue';
 import {
     Clock, Lock, Check, X, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane,
-    Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, Play,
+    Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Play,
 } from 'lucide-vue-next';
 
 /**
@@ -25,7 +25,7 @@ export default {
     components: {
         SeriesTalk,
         Clock, Lock, Check, X, ShoppingBag, LoaderCircle, Sparkles, Star, Heart, MapPin, Plane,
-        Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, Play,
+        Link2, Share2, MessageCircle, ShieldCheck, Users, Eye, RotateCcw, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Play,
     },
     data() {
         return {
@@ -125,6 +125,16 @@ export default {
             return `${lead} ${state}${sizes}${price} Claim yours: ${this.shareUrl}`;
         },
         whatsappHref() { return `https://wa.me/?text=${encodeURIComponent(this.shareText)}`; },
+        /** Why this beats a group chat — one line each, the detail behind a tap. */
+        reasons() {
+            return [
+                { icon: 'Eye', title: 'Everyone sees who has paid', body: 'Every size on this page shows whether it\'s open, held or paid — no scrolling back for screenshots, no "did you get mine?"' },
+                { icon: 'Lock', title: 'A size can\'t be taken twice', body: 'The moment you claim it, it\'s yours while you pay. Nobody can post "I\'ll take M" over you.' },
+                { icon: 'Clock', title: 'Nobody can stall it', body: `A hold that isn't paid for goes back to open on its own. "Needs ${this.totals.needs || 1} more" is always true.` },
+                { icon: 'ShieldCheck', title: 'Your money is with the shop', body: 'Not with a person who might go quiet. If the series doesn\'t fill, it comes straight back.' },
+                { icon: 'Users', title: 'You don\'t need to know anyone', body: 'Strangers fill a series as well as friends do. Share it anywhere, or simply wait — the page does the organising.' },
+            ];
+        },
         canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
     },
     async mounted() {
@@ -484,28 +494,19 @@ export default {
 
                     <section>
                         <h2 class="font-display text-lg tracking-widest uppercase mb-4">Why it's better than a group chat</h2>
-                        <ul class="space-y-3.5 text-sm">
-                            <li class="flex items-start gap-3">
-                                <Eye class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                                <span><strong class="font-medium">Everyone sees who has paid.</strong> <span class="text-black/65">Every size on this page shows whether it's open, held or paid — no scrolling back for screenshots, no "did you get mine?"</span></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <Lock class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                                <span><strong class="font-medium">A size can't be taken twice.</strong> <span class="text-black/65">The moment you claim it, it's yours while you pay. Nobody can post "I'll take M" over you.</span></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <Clock class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                                <span><strong class="font-medium">Nobody can stall it.</strong> <span class="text-black/65">A hold that isn't paid for goes back to open on its own. "Needs {{ totals.needs || 1 }} more" is always true.</span></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <ShieldCheck class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                                <span><strong class="font-medium">Your money is with the shop.</strong> <span class="text-black/65">Not with a person who might go quiet. If the series doesn't fill, it comes straight back.</span></span>
-                            </li>
-                            <li class="flex items-start gap-3">
-                                <Users class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
-                                <span><strong class="font-medium">You don't need to know anyone.</strong> <span class="text-black/65">Strangers fill a series as well as friends do. Share it anywhere, or simply wait — the page does the organising.</span></span>
-                            </li>
-                        </ul>
+                        <!-- Native <details>: opens with a keyboard, reads to a screen reader,
+                             needs no state. The headings alone say enough; the detail is there
+                             for whoever wants it. -->
+                        <div class="border border-gold/20 divide-y divide-gold/15 text-sm">
+                            <details v-for="(r, i) in reasons" :key="i" class="group/why">
+                                <summary class="flex items-center gap-3 px-4 min-h-12 py-3 cursor-pointer list-none select-none hover:bg-cream-dark/30 transition-colors [&::-webkit-details-marker]:hidden">
+                                    <component :is="r.icon" class="w-4 h-4 text-gold flex-shrink-0" />
+                                    <span class="flex-1 font-medium">{{ r.title }}</span>
+                                    <ChevronDown class="w-4 h-4 text-black/40 flex-shrink-0 transition-transform group-open/why:rotate-180" />
+                                </summary>
+                                <p class="px-4 pb-4 pl-11 -mt-1 text-black/65 leading-relaxed">{{ r.body }}</p>
+                            </details>
+                        </div>
                     </section>
                 </aside>
             </div>
