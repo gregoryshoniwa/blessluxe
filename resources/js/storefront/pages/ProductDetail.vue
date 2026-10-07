@@ -6,14 +6,16 @@ import ProductRatingSummary from '../components/ProductRatingSummary.vue';
 import ProductReviews from '../components/ProductReviews.vue';
 import { recentlyViewed } from '../recently-viewed.js';
 import { cart } from '../cart-store.js';
-import { Check, ArrowRight, Plane, MapPin } from 'lucide-vue-next';
+import { Check, ArrowRight, Plane, MapPin, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 export default {
     name: 'ProductDetailPage',
-    components: { ProductStrip, ProductTryOns, ProductRatingSummary, ProductReviews, Check, ArrowRight, Plane, MapPin },
+    components: { ProductStrip, ProductTryOns, ProductRatingSummary, ProductReviews, Check, ArrowRight, Plane, MapPin, ChevronLeft, ChevronRight },
     data() {
         return {
             product: null,
+            imageIndex: 0,          // which photo the gallery shows
+            touchX: null,
             loading: true,
             notFound: false,
             selectedVariantId: null,
@@ -42,11 +44,14 @@ export default {
             const cents = this.selectedVariant?.price;
             return cents != null ? '$' + (cents / 100).toFixed(2) : '—';
         },
-        heroImage() {
-            if (!this.product) return null;
-            const primary = (this.product.media || []).find((m) => m.is_primary && m.media_type === 'image');
-            return primary?.media_url || this.product.images?.[0]?.url || this.product.thumbnail || null;
+        /** Every photo once: the primary first, then the rest in their saved order. */
+        gallery() {
+            if (!this.product) return [];
+            const primary = (this.product.media || []).find((m) => m.is_primary && m.media_type === 'image')?.media_url;
+            const urls = [primary, ...(this.product.images || []).map((i) => i.url), this.product.thumbnail].filter(Boolean);
+            return [...new Set(urls)];
         },
+        heroImage() { return this.gallery[this.imageIndex] || this.gallery[0] || null; },
         // Muted, looping, chrome-less YouTube embed for the hero hover.
         youtubeHoverSrc() {
             const embed = this.product?.video?.embed_url;
@@ -76,6 +81,18 @@ export default {
     },
     beforeUnmount() { clearTimeout(this.flashTimer); },
     methods: {
+        showImage(i) {
+            const n = this.gallery.length;
+            if (n) this.imageIndex = (i + n) % n;
+        },
+        onTouchStart(e) { this.touchX = e.touches[0].clientX; },
+        /** A sideways swipe of 40px or more turns the page; anything less is a tap or a scroll. */
+        onTouchEnd(e) {
+            if (this.touchX == null) return;
+            const dx = e.changedTouches[0].clientX - this.touchX;
+            this.touchX = null;
+            if (Math.abs(dx) >= 40) this.showImage(this.imageIndex + (dx < 0 ? 1 : -1));
+        },
         async fetchProduct() {
             this.loading = true;
             this.notFound = false;
@@ -88,6 +105,7 @@ export default {
                 if (!res.ok) return;
                 const data = await res.json();
                 this.product = data.product;
+                this.imageIndex = 0;
                 this.selectedVariantId = this.product.variants?.[0]?.id || null;
                 // Stamp this view onto the recently-viewed list.
                 recentlyViewed.record(this.product.id);
@@ -145,17 +163,35 @@ export default {
         </div>
 
         <div v-else-if="product" class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div class="min-w-0">
             <div
-                class="relative aspect-[3/4] bg-cream-dark overflow-hidden"
+                class="relative aspect-[3/4] bg-cream-dark overflow-hidden group/gal"
+                tabindex="0"
+                aria-roledescription="carousel"
+                :aria-label="`${product.title} — photo ${imageIndex + 1} of ${gallery.length}`"
                 @mouseenter="heroHovering = true"
                 @mouseleave="heroHovering = false"
+                @touchstart.passive="onTouchStart"
+                @touchend="onTouchEnd"
+                @keydown.left.prevent="showImage(imageIndex - 1)"
+                @keydown.right.prevent="showImage(imageIndex + 1)"
             >
-                <img
-                    v-if="heroImage"
-                    :src="heroImage"
-                    :alt="product.title"
-                    class="w-full h-full object-cover object-top"
-                />
+                <Transition name="gal" mode="out-in">
+                    <img
+                        v-if="heroImage"
+                        :key="heroImage"
+                        :src="heroImage"
+                        :alt="`${product.title} — photo ${imageIndex + 1}`"
+                        class="w-full h-full object-cover object-top"
+                    />
+                </Transition>
+
+                <!-- More than one photo: arrows (always on phones, on hover on desktop) and a count. -->
+                <template v-if="gallery.length > 1">
+                    <button @click="showImage(imageIndex - 1)" class="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/85 text-black inline-flex items-center justify-center shadow-sm hover:bg-white lg:opacity-0 lg:group-hover/gal:opacity-100 focus-visible:opacity-100 transition-opacity" aria-label="Previous photo"><ChevronLeft class="w-5 h-5" /></button>
+                    <button @click="showImage(imageIndex + 1)" class="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/85 text-black inline-flex items-center justify-center shadow-sm hover:bg-white lg:opacity-0 lg:group-hover/gal:opacity-100 focus-visible:opacity-100 transition-opacity" aria-label="Next photo"><ChevronRight class="w-5 h-5" /></button>
+                    <span class="absolute bottom-3 right-3 z-10 bg-black/55 text-white text-[10px] tracking-widest px-2 py-1 tabular-nums">{{ imageIndex + 1 }} / {{ gallery.length }}</span>
+                </template>
 
                 <!-- Video plays over the hero image on hover, same as the shop card. -->
                 <template v-if="product.video && heroHovering">
@@ -186,6 +222,20 @@ export default {
                 >
                     <svg class="w-3.5 h-3.5 text-white fill-white" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                 </span>
+            </div>
+            <!-- Every photo as a thumbnail; the one showing is outlined in gold. -->
+            <div v-if="gallery.length > 1" class="scroll-strip flex gap-2 mt-3 overflow-x-auto">
+                <button
+                    v-for="(src, i) in gallery"
+                    :key="src"
+                    @click="showImage(i)"
+                    :aria-label="`Show photo ${i + 1}`"
+                    :aria-current="i === imageIndex ? 'true' : null"
+                    :class="['flex-shrink-0 w-16 sm:w-20 aspect-[3/4] overflow-hidden border-2 transition-colors', i === imageIndex ? 'border-gold' : 'border-transparent opacity-70 hover:opacity-100']"
+                >
+                    <img :src="src" alt="" loading="lazy" class="w-full h-full object-cover object-top" />
+                </button>
+            </div>
             </div>
             <div>
                 <p v-if="breadcrumb" class="text-[10px] tracking-widest uppercase text-black/55 mb-2">{{ breadcrumb }}</p>
@@ -293,3 +343,10 @@ export default {
         />
     </div>
 </template>
+
+<style scoped>
+/* A quick cross-fade between photos; none at all for reduced motion. */
+.gal-enter-active, .gal-leave-active { transition: opacity 0.18s ease; }
+.gal-enter-from, .gal-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .gal-enter-active, .gal-leave-active { transition: none; } }
+</style>
