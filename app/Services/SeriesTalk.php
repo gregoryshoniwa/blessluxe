@@ -140,6 +140,30 @@ class SeriesTalk
         return DB::table('pack_campaign_posts')->where('id', $postId)->update(['hidden_at' => $hidden ? now() : null]) > 0;
     }
 
+    /**
+     * The members row: one entry per PERSON who has paid, with every size they
+     * took, in the order they joined. Initials only — buying is not a decision
+     * to be named. Grouped by customer, not initials, so two "GS" stay two.
+     *
+     * @return array<int,array{initials:?string,sizes:string[],joined_at:string,mine:bool}>
+     */
+    public static function members(string $campaignId, ?string $viewerId = null): array
+    {
+        return DB::table('pack_slots as s')
+            ->join('customers as c', 'c.id', '=', 's.customer_id')
+            ->where('s.pack_campaign_id', $campaignId)->where('s.status', 'paid')->whereNull('s.deleted_at')
+            ->orderBy('s.updated_at')
+            ->get(['s.customer_id', 's.size_label', 's.updated_at', 'c.first_name', 'c.last_name'])
+            ->groupBy('customer_id')
+            ->map(fn ($rows) => [
+                'initials'  => PackController::initials($rows->first()),
+                'sizes'     => $rows->pluck('size_label')->filter()->values()->all(),
+                'joined_at' => Carbon::parse($rows->min('updated_at'))->toIso8601String(),
+                'mine'      => $viewerId !== null && $rows->first()->customer_id === $viewerId,
+            ])
+            ->sortBy('joined_at')->values()->all();
+    }
+
     /** Who has actually paid for a size — the people who are "in". */
     public static function buyers(string $campaignId): array
     {

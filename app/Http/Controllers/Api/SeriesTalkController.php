@@ -21,6 +21,7 @@ class SeriesTalkController extends Controller
 
         return [
             'items'    => SeriesTalk::timeline($campaign->id, $request->query('since'), $viewer),
+            'members'  => SeriesTalk::members($campaign->id, $viewer),
             'starters' => SeriesTalk::STARTERS,
             'max'      => SeriesTalk::MAX_LENGTH,
             'now'      => now()->toIso8601String(),           // the page polls from here, not from its own clock

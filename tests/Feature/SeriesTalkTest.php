@@ -64,6 +64,10 @@ class SeriesTalkTest extends TestCase
         $this->assertSame(['Rudo M.', 'Tendai K.'], array_column(array_column($posts, 'author'), 'name'));
         $this->assertFalse($posts[0]['author']['mine']);                        // nobody is "me" to a stranger
 
+        // The members row: one entry per person with every size they took, initials only.
+        $members = $this->getJson('/api/store/series/GOWN1/talk')->json('members');
+        $this->assertSame([['initials' => 'RM', 'sizes' => ['M']]], array_map(fn ($m) => ['initials' => $m['initials'], 'sizes' => $m['sizes']], $members));
+
         // Taking a size shows up in the stream — as initials, never a name.
         $joins = array_values(array_filter($items, fn ($i) => $i['kind'] === 'joined'));
         $this->assertCount(1, $joins);

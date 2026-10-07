@@ -444,10 +444,13 @@ export default {
 
             <!-- ─── Below: the group, the piece, and how this works ───────── -->
             <div class="lg:grid lg:grid-cols-12 lg:gap-12 mt-14">
-                <div class="lg:col-span-7 space-y-12">
+                <div class="lg:col-span-7">
                     <!-- The group chat a WhatsApp series would have — minus the screenshots. -->
                     <SeriesTalk :code="code" :campaign="campaign" :customer="customer" :i-am-in="iAmIn" />
+                </div>
 
+                <!-- Beside the chat: the piece, and how all of this works. -->
+                <aside class="lg:col-span-5 mt-12 lg:mt-0 space-y-10">
                     <section v-if="product?.description">
                         <h2 class="font-display text-lg tracking-widest uppercase mb-3">About the piece</h2>
                         <p class="text-sm text-black/75 leading-relaxed whitespace-pre-line">{{ product.description }}</p>
@@ -462,29 +465,26 @@ export default {
                     </section>
 
                     <section>
-                        <h2 class="font-display text-lg tracking-widest uppercase mb-5">How a series works</h2>
-                        <ol class="grid sm:grid-cols-3 gap-4">
-                            <li class="border border-gold/20 bg-cream-dark/30 p-5">
-                                <p class="font-script text-2xl text-gold leading-none mb-2">1</p>
-                                <p class="font-medium text-sm mb-1">Take your size</p>
-                                <p class="text-xs text-black/60 leading-relaxed">It's held for you for {{ campaign.reservation_minutes }} minutes. Nobody else can claim it while you pay.</p>
+                        <h2 class="font-display text-lg tracking-widest uppercase mb-4">How a series works</h2>
+                        <ol class="border border-gold/20 bg-cream-dark/30 divide-y divide-gold/15">
+                            <li class="flex gap-4 p-4">
+                                <p class="font-script text-2xl text-gold leading-none w-5 flex-shrink-0">1</p>
+                                <div><p class="font-medium text-sm mb-0.5">Take your size</p><p class="text-xs text-black/60 leading-relaxed">It's held for you for {{ campaign.reservation_minutes }} minutes. Nobody else can claim it while you pay.</p></div>
                             </li>
-                            <li class="border border-gold/20 bg-cream-dark/30 p-5">
-                                <p class="font-script text-2xl text-gold leading-none mb-2">2</p>
-                                <p class="font-medium text-sm mb-1">Pay BLESSLUXE</p>
-                                <p class="text-xs text-black/60 leading-relaxed">By EcoCash or card, to us — not to whoever started the group. Your size turns green for everyone to see.</p>
+                            <li class="flex gap-4 p-4">
+                                <p class="font-script text-2xl text-gold leading-none w-5 flex-shrink-0">2</p>
+                                <div><p class="font-medium text-sm mb-0.5">Pay BLESSLUXE</p><p class="text-xs text-black/60 leading-relaxed">By EcoCash or card, to us — not to whoever started the group. Your size turns green for everyone to see.</p></div>
                             </li>
-                            <li class="border border-gold/20 bg-cream-dark/30 p-5">
-                                <p class="font-script text-2xl text-gold leading-none mb-2">3</p>
-                                <p class="font-medium text-sm mb-1">It ships together</p>
-                                <p class="text-xs text-black/60 leading-relaxed">When the last size is paid, everyone is told and the run is ordered as one. If it never fills, everyone is refunded in full.</p>
+                            <li class="flex gap-4 p-4">
+                                <p class="font-script text-2xl text-gold leading-none w-5 flex-shrink-0">3</p>
+                                <div><p class="font-medium text-sm mb-0.5">It ships together</p><p class="text-xs text-black/60 leading-relaxed">When the last size is paid, everyone is told and the run is ordered as one. If it never fills, everyone is refunded in full.</p></div>
                             </li>
                         </ol>
                     </section>
 
                     <section>
-                        <h2 class="font-display text-lg tracking-widest uppercase mb-5">Why it's better than a group chat</h2>
-                        <ul class="space-y-4 text-sm">
+                        <h2 class="font-display text-lg tracking-widest uppercase mb-4">Why it's better than a group chat</h2>
+                        <ul class="space-y-3.5 text-sm">
                             <li class="flex items-start gap-3">
                                 <Eye class="w-4 h-4 text-gold mt-0.5 flex-shrink-0" />
                                 <span><strong class="font-medium">Everyone sees who has paid.</strong> <span class="text-black/65">Every size on this page shows whether it's open, held or paid — no scrolling back for screenshots, no "did you get mine?"</span></span>
@@ -507,7 +507,7 @@ export default {
                             </li>
                         </ul>
                     </section>
-                </div>
+                </aside>
             </div>
         </div>
 
