@@ -62,7 +62,8 @@ export default {
         noun() { return this.isProduct ? 'product' : 'series'; },
         units() { return Object.values(this.form.stock).reduce((n, q) => n + (Number(q) || 0), 0); },
         cost() { return parseFloat(this.form.cost) || 0; },
-        price() { return this.cost ? Math.ceil(this.cost * (1 + (Number(this.form.margin) || 0) / 100)) : 0; },
+        /** Cost + margin, rounded UP to the dollar — worked in whole cents so 90 × 1.10 is 99, not 99.00000000000001 → 100. */
+        price() { return this.cost ? Math.ceil(Math.round(this.cost * (100 + (Number(this.form.margin) || 0))) / 100) : 0; },
         profit() { return this.price - this.cost; },
         /** Their own single-piece price is what a shopper could pay going direct. */
         single_price_note() {

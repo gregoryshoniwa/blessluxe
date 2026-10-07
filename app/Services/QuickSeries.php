@@ -151,7 +151,11 @@ TXT;
     /** Selling price for a cost and margin: the whole dollar at or above cost × (1 + margin). */
     public static function priceCents(float $cost, int $margin): int
     {
-        return (int) (ceil($cost * (1 + $margin / 100)) * 100);
+        // Worked in whole cents first: 90 × 1.10 in floating point is 99.00000000000001,
+        // which a plain ceil() turned into $100.
+        $cents = (int) round($cost * (100 + $margin));      // = cost × (1 + margin%) × 100, exact to the cent
+
+        return (int) (ceil($cents / 100) * 100);
     }
 
     /**
