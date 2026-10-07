@@ -140,7 +140,7 @@ class AdminPackController extends Controller
 
         return DB::transaction(function () use ($def, $data, $variants) {
             $campaignId = 'pcam_' . Str::random(16);
-            $publicCode = $this->makePublicCode();
+            $publicCode = self::makePublicCode();
             $campaign = PackCampaign::create([
                 'id'                 => $campaignId,
                 'pack_definition_id' => $def->id,
@@ -237,7 +237,7 @@ class AdminPackController extends Controller
      * until it gets one that isn't already taken — collisions are astro-
      * nomically unlikely but the check is cheap.
      */
-    private function makePublicCode(): string
+    public static function makePublicCode(): string
     {
         $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
         do {

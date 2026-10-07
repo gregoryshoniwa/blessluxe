@@ -99,7 +99,11 @@ class GeminiService
             'system_instruction' => ['parts' => [['text' => $systemPrompt]]],
             'contents' => [[
                 'role'  => 'user',
-                'parts' => [['text' => $userText]],
+                // Pictures to read go before the question (`images` => [{base64, mime}]).
+                'parts' => [
+                    ...array_map(fn ($i) => ['inlineData' => ['mimeType' => $i['mime'], 'data' => $i['base64']]], $opts['images'] ?? []),
+                    ['text' => $userText],
+                ],
             ]],
             'generationConfig' => [
                 'temperature' => $opts['temperature'] ?? 0.6,
@@ -109,7 +113,7 @@ class GeminiService
         if (! empty($opts['json_mode'])) {
             $payload['generationConfig']['responseMimeType'] = 'application/json';
         }
-        $res = Http::timeout(45)->post(
+        $res = Http::timeout(empty($opts['images']) ? 45 : 90)->post(
             self::API_BASE . "/models/{$model}:generateContent?key={$this->apiKey}",
             $payload,
         );

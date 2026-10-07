@@ -1,5 +1,6 @@
 <script>
 import { Layers, Shirt, ShoppingBag } from 'lucide-vue-next';
+import QuickSeriesForm from '../components/QuickSeriesForm.vue';
 
 /**
  * Quick process — the jobs staff do every day, one tap from the top of the
@@ -14,7 +15,7 @@ const TABS = [
 
 export default {
     name: 'AdminQuickProcess',
-    components: { Layers, Shirt, ShoppingBag },
+    components: { Layers, Shirt, ShoppingBag, QuickSeriesForm },
     data() { return { tabs: TABS }; },
     computed: {
         tab() { return TABS.find((t) => t.key === this.$route.query.tab) || TABS[0]; },
@@ -49,8 +50,8 @@ export default {
         </div>
 
         <!-- Each tab's quick tools go here, one section per tab. -->
-        <section v-if="tab.key === 'series'" role="tabpanel" class="bg-white border border-zinc-200 p-8 text-sm text-zinc-500 text-center">
-            Series quick tools — coming next.
+        <section v-if="tab.key === 'series'" role="tabpanel">
+            <QuickSeriesForm />
         </section>
         <section v-else-if="tab.key === 'products'" role="tabpanel" class="bg-white border border-zinc-200 p-8 text-sm text-zinc-500 text-center">
             Products quick tools — coming next.
