@@ -68,6 +68,27 @@ class SeriesPageTest extends TestCase
     }
 
     #[Test]
+    public function the_board_says_how_alive_it_is_and_what_just_happened(): void
+    {
+        $this->customer('cust_rudo', 'Rudo', 'Moyo');
+        $this->customer('cust_tendai', 'Tendai', 'Kaseke');
+        $this->series(['S' => 'cust_rudo', 'M' => 'cust_tendai']);
+        DB::table('pack_campaigns')->where('id', 'camp_1')->update(['expires_at' => now()->addHours(3)]);
+
+        $d = $this->getJson('/api/store/series')->assertOk();
+
+        // Open series, distinct people in, and what closes before midnight.
+        $this->assertSame(['open' => 1, 'people' => 2, 'closing_today' => 1], $d->json('stats'));
+
+        // The ticker: a size taken is news, as initials; it links back to the series.
+        $a = $d->json('activity');
+        $this->assertCount(2, $a);
+        $this->assertEqualsCanonicalizing(['RM', 'TK'], array_column($a, 'initials'));
+        $this->assertSame(['joined', 'GOWN1', 'Gown run'], [$a[0]['kind'], $a[0]['code'], $a[0]['series']]);
+        $this->assertStringNotContainsString('Rudo', json_encode($a));
+    }
+
+    #[Test]
     public function the_moment_the_last_size_is_paid_every_buyer_is_told_once(): void
     {
         $this->customer('cust_rudo', 'Rudo', 'Moyo');

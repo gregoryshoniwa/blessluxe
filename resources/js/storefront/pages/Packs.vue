@@ -27,6 +27,8 @@ export default {
             packs: [],
             categories: [],          // [{ handle, name, count, catalogues: [{ handle, name, count }] }]
             pagination: null,
+            stats: null,             // { open, people, closing_today }
+            activity: [],            // the ticker: who took what, where, when
             loading: true,
             loadingMore: false,
             hiddenByShop: false,
@@ -57,6 +59,10 @@ export default {
             return first && first.needs > 0 ? first : null;
         },
         grid() { return this.featured ? this.packs.slice(1) : this.packs; },
+        /** The rail along the top: every open series on this page, as a ring. */
+        rail() { return this.packs.filter((p) => p.needs > 0).slice(0, 12); },
+        /** The ticker needs to loop seamlessly, so it is drawn twice. */
+        ticker() { return this.activity.length ? this.activity.concat(this.activity) : []; },
     },
     watch: {
         '$route.query': {
@@ -110,6 +116,8 @@ export default {
                 this.packs = append ? this.packs.concat(fresh) : fresh;
                 this.categories = data.categories || [];
                 this.pagination = data.pagination || null;
+                if (data.stats) this.stats = data.stats;
+                if (data.activity) this.activity = data.activity;
                 // The SERVER says why it's empty — a curated affiliate shop lists
                 // no series — so this page can say so rather than claim there are none.
                 this.hiddenByShop = Boolean(data.hidden_by_storefront);
@@ -184,6 +192,21 @@ export default {
 
             return `${video.embed_url}?autoplay=1&mute=1&controls=0&loop=1&playlist=${id}&playsinline=1&rel=0&modestbranding=1`;
         },
+        ago(iso) {
+            const mins = Math.floor((this.now - new Date(iso).getTime()) / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+
+            return `${Math.floor(hrs / 24)}d ago`;
+        },
+        /** The ring: how full, as a conic sweep of gold. */
+        ring(p) {
+            const pct = this.fillPct(p);
+
+            return { background: `conic-gradient(var(--color-gold) ${pct}%, rgba(0,0,0,.08) 0)` };
+        },
         /** The WhatsApp message, written for them — the same words the series page uses. */
         whatsapp(p) {
             const url = `${window.location.origin}/shop/series/${p.public_code}`;
@@ -197,16 +220,7 @@ export default {
 </script>
 
 <template>
-    <div class="max-w-[1400px] mx-auto px-[5%] py-10 min-h-[60vh]">
-        <header class="text-center mb-10">
-            <p class="font-script text-3xl text-gold mb-2 flex items-center justify-center gap-2">
-                <Sparkles class="w-5 h-5" /> Buy it together
-            </p>
-            <h1 class="font-display text-4xl md:text-5xl tracking-widest uppercase">Series</h1>
-            <p class="text-sm text-black/65 mt-4 max-w-xl mx-auto">
-                Claim your size in a limited run. Once every size is taken, the series is ordered and shipped together — and if it never fills, everyone is refunded.
-            </p>
-        </header>
+    <div class="max-w-[1400px] mx-auto px-[5%] pt-4 pb-10 min-h-[60vh]">
 
         <!-- Reached by a saved link while shopping a curated affiliate shop. -->
         <div v-if="!loading && hiddenByShop" class="text-center py-20 max-w-md mx-auto">
@@ -216,9 +230,17 @@ export default {
         </div>
 
         <template v-else>
-            <!-- ─── Filters ─────────────────────────────────────────────── -->
-            <div class="flex flex-wrap items-center gap-3 mb-6">
-                <div class="relative flex-1 min-w-[12rem]">
+            <!-- ─── One row: what this is, how alive it is, and the controls. Sticks. ── -->
+            <div class="sticky top-20 lg:top-24 z-30 -mx-[5%] px-[5%] py-3 bg-cream/95 backdrop-blur border-b border-gold/10 flex flex-wrap items-center gap-3">
+                <h1 class="font-display text-lg tracking-widest uppercase leading-none flex items-baseline gap-3 mr-auto">
+                    Series
+                    <span v-if="stats" class="text-[11px] tracking-[0.15em] text-black/50 font-body normal-case">
+                        <span class="text-gold-dark font-semibold">{{ stats.open }}</span> open ·
+                        <span class="text-gold-dark font-semibold">{{ stats.people }}</span> in
+                        <template v-if="stats.closing_today"> · <span class="text-red-600 font-semibold">{{ stats.closing_today }}</span> closing today</template>
+                    </span>
+                </h1>
+                <div class="relative w-full sm:w-64">
                     <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/35 pointer-events-none" />
                     <input v-model="search" @input="onSearch" type="search" enterkeyhint="search" placeholder="Search the series" aria-label="Search the series"
                         class="w-full border border-black/15 bg-white pl-10 pr-10 py-3 text-sm focus:outline-none focus:border-gold" />
@@ -233,6 +255,51 @@ export default {
                     <option value="ending">Ending soonest</option>
                     <option value="newest">Newest</option>
                 </select>
+            </div>
+
+            <!-- ─── The rail: every open series as a ring that shows how full it is ── -->
+            <div v-if="!loading && rail.length" class="scroll-strip flex gap-4 py-5 -mx-[5%] px-[5%] scroll-px-[5%]">
+                <router-link
+                    v-for="p in rail"
+                    :key="'ring-' + p.public_code"
+                    :to="`/shop/series/${p.public_code}`"
+                    class="flex-shrink-0 w-[4.75rem] text-center group"
+                    :title="`${p.title} — ${p.slots_paid} of ${p.slots_total} claimed`"
+                >
+                    <span class="block w-[4.75rem] h-[4.75rem] rounded-full p-[3px] transition-transform group-hover:scale-105" :style="ring(p)">
+                        <span class="block w-full h-full rounded-full bg-cream p-[2px]">
+                            <img v-if="p.thumbnail" :src="p.thumbnail" :alt="''" loading="lazy" class="w-full h-full rounded-full object-cover object-top" />
+                            <span v-else class="block w-full h-full rounded-full bg-cream-dark"></span>
+                        </span>
+                    </span>
+                    <span :class="['block mt-1.5 text-[9px] font-semibold tracking-[0.12em] uppercase tabular-nums truncate', urgent(p) ? 'text-red-600' : p.needs === 1 ? 'text-gold-dark' : 'text-black/55']">
+                        <template v-if="urgent(p)">{{ closesIn(p) }}</template>
+                        <template v-else-if="p.needs === 1">One more</template>
+                        <template v-else>Needs {{ p.needs }}</template>
+                    </span>
+                </router-link>
+            </div>
+
+            <!-- ─── The ticker: what just happened, across every series ─────── -->
+            <div v-if="ticker.length" class="ticker relative overflow-hidden border-y border-gold/15 mb-6 bg-white/60" aria-label="Recent activity">
+                <div class="ticker-track flex items-center gap-8 py-2.5 whitespace-nowrap">
+                    <router-link
+                        v-for="(a, i) in ticker"
+                        :key="i"
+                        :to="`/shop/series/${a.code}`"
+                        class="inline-flex items-center gap-2 text-xs text-black/70 hover:text-gold transition-colors"
+                    >
+                        <template v-if="a.kind === 'filled'">
+                            <Sparkles class="w-3.5 h-3.5 text-emerald-600" />
+                            <span class="font-semibold text-emerald-700">{{ a.series }}</span> filled <span class="text-black/40">· {{ ago(a.at) }}</span>
+                        </template>
+                        <template v-else>
+                            <span class="w-5 h-5 rounded-full bg-gold text-white text-[8px] font-semibold inline-flex items-center justify-center">{{ a.initials }}</span>
+                            <span><strong class="font-medium text-black/85">{{ a.initials }}</strong> took size {{ a.size }} in <span class="font-medium">{{ a.series }}</span></span>
+                            <span class="text-black/40">· {{ ago(a.at) }}</span>
+                        </template>
+                    </router-link>
+                </div>
             </div>
 
             <!-- Women · Men · Children, built only from series that are open. -->
@@ -310,7 +377,8 @@ export default {
                             </div>
                         </div>
 
-                        <div class="flex flex-wrap items-center gap-3 mt-6">
+                        <p class="text-xs text-black/50 mt-4">Pay BLESSLUXE for your size; it ships when every size is taken — and if it never fills, everyone is refunded.</p>
+                        <div class="flex flex-wrap items-center gap-3 mt-5">
                             <span class="inline-flex items-center gap-2 bg-gold text-white px-6 py-3 text-[10px] font-semibold tracking-[0.3em] uppercase">Take a size <ArrowRight class="w-4 h-4" /></span>
                             <a :href="whatsapp(featured)" target="_blank" rel="noopener" @click.stop class="inline-flex items-center gap-2 min-h-11 border border-emerald-600 text-emerald-700 px-5 py-3 text-[10px] font-semibold tracking-[0.2em] uppercase hover:bg-emerald-600 hover:text-white transition-colors">
                                 <MessageCircle class="w-4 h-4" /> Share on WhatsApp
@@ -401,10 +469,15 @@ export default {
 .series-card { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .5s ease, border-color .2s ease; }
 .series-card.is-in { opacity: 1; transform: none; }
 .bar { transition: width .9s cubic-bezier(.22, 1, .36, 1); }
+/* The ticker drifts left for ever; the content is drawn twice so the loop never shows a seam. Hovering holds it. */
+.ticker-track { animation: ticker 40s linear infinite; width: max-content; }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 /* "One more" breathes, gently: it's the series worth joining right now. */
 .needs-one { animation: breathe 2.4s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 @media (prefers-reduced-motion: reduce) {
+    .ticker-track { animation: none; flex-wrap: wrap; white-space: normal; width: auto; gap: 1rem; }
     .series-card { opacity: 1; transform: none; transition: border-color .2s ease; }
     .bar { transition: none; }
     .needs-one { animation: none; }

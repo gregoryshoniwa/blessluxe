@@ -156,6 +156,9 @@ class PackController extends Controller
 
         return [
             'categories' => self::facets($placedAll),
+            // What the whole board is doing right now — the hook above the fold.
+            'stats'      => self::stats($open),
+            'activity'   => self::activity($open),
             'pagination' => [
                 'page'      => $paginator->currentPage(),
                 'per_page'  => $paginator->perPage(),
@@ -189,6 +192,48 @@ class PackController extends Controller
                 ];
             })->values(),
         ];
+    }
+
+    /** The three numbers a stranger glances at: how much is on, how many are in, what closes today. */
+    private static function stats(\Closure $open): array
+    {
+        $ids = $open()->pluck('id');
+
+        return [
+            'open'          => $ids->count(),
+            'people'        => (int) PackSlot::whereIn('pack_campaign_id', $ids)->where('status', 'paid')->whereNotNull('customer_id')->distinct()->count('customer_id'),
+            'closing_today' => (int) $open()->whereNotNull('expires_at')->where('expires_at', '<=', now()->endOfDay())->count(),
+        ];
+    }
+
+    /**
+     * The last things that happened across every open series — someone taking
+     * a size, a series filling — as a ticker. Initials only; a size being taken
+     * is news, the buyer's name is not.
+     */
+    private static function activity(\Closure $open, int $limit = 14): array
+    {
+        $ids = $open()->pluck('id');
+
+        $joins = PackSlot::whereIn('pack_campaign_id', $ids)->where('status', 'paid')->whereNotNull('customer_id')->whereNull('deleted_at')
+            ->with(['customer:id,first_name,last_name', 'campaign:id,public_code,title,pack_definition_id', 'campaign.definition:id,title'])
+            ->orderByDesc('updated_at')->limit($limit)->get()
+            ->map(fn ($s) => [
+                'kind'     => 'joined',
+                'initials' => self::initials($s->customer),
+                'size'     => $s->size_label,
+                'series'   => $s->campaign?->title ?: $s->campaign?->definition?->title,
+                'code'     => $s->campaign?->public_code,
+                'at'       => $s->updated_at?->toIso8601String(),
+            ]);
+
+        // Series that just filled are the best news on the board; they left the
+        // "open" list, so look at them directly.
+        $filled = PackCampaign::where('status', 'filled')->whereNull('deleted_at')->where('updated_at', '>=', now()->subDays(7))
+            ->with('definition:id,title')->orderByDesc('updated_at')->limit(3)->get()
+            ->map(fn ($c) => ['kind' => 'filled', 'series' => $c->title ?: $c->definition?->title, 'code' => $c->public_code, 'at' => $c->updated_at?->toIso8601String()]);
+
+        return $joins->concat($filled)->sortByDesc('at')->take($limit)->values()->all();
     }
 
     /**
