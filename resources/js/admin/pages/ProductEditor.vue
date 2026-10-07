@@ -2,13 +2,16 @@
 import { api } from '../../lib/api.js';
 import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from '../components/IconButton.vue';
-import { ArrowLeft, Trash2, Pencil, Upload, Image as ImageIcon, Plus, Star } from 'lucide-vue-next';
+import { ArrowLeft, Trash2, Pencil, Upload, Image as ImageIcon, Plus, Star, Sparkles, X } from 'lucide-vue-next';
 
 export default {
     name: 'AdminProductEditor',
-    components: { IconButton, ArrowLeft, Trash2, Pencil, Upload, ImageIcon, Plus, Star },
+    components: { IconButton, ArrowLeft, Trash2, Pencil, Upload, ImageIcon, Plus, Star, Sparkles, X },
     data() {
         return {
+            // AI photo restore: { image, clean, busy, preview: {url, cost} | null }
+            enhance: null,
+            enhanceQuote: { estimate: 0.067, spent: 0, ready: true },
             loading: true,
             saving: false,
             error: '',
@@ -39,6 +42,7 @@ export default {
         id() { return this.$route.params.id; },
     },
     async mounted() {
+        this.loadEnhanceQuote();
         await this.fetchAll();
     },
     methods: {
@@ -176,6 +180,42 @@ export default {
                 this.uploading = false;
                 this.$refs.fileInput.value = '';
             }
+        },
+        // ── AI photo restore ──────────────────────────────────────────────
+        money4(n) { return n >= 0.01 ? '$' + Number(n).toFixed(3).replace(/0$/, '') : (n * 100).toFixed(2) + '¢'; },
+        async loadEnhanceQuote() {
+            try { this.enhanceQuote = await api.get(`/api/admin/products/${this.id}/enhance`); } catch { /* keep the default */ }
+        },
+        openEnhance(img) { this.enhance = { image: img, clean: true, busy: false, preview: null, error: '' }; },
+        async runEnhance() {
+            const e = this.enhance;
+            if (!e || e.busy) return;
+            if (e.preview) await this.discardEnhance(false);       // "Try again" throws the last one away
+            e.busy = true; e.error = '';
+            try {
+                const r = await api.post(`/api/admin/products/${this.id}/images/${e.image.id}/enhance`, { clean: e.clean });
+                e.preview = r;
+                this.enhanceQuote.spent = r.ai_cost;
+            } catch (err) { e.error = err?.payload?.error || 'The AI couldn\'t improve that photo just now.'; }
+            finally { e.busy = false; }
+        },
+        async keepEnhance() {
+            const e = this.enhance;
+            e.busy = true;
+            try {
+                await api.post(`/api/admin/products/${this.id}/images/${e.image.id}/enhance/keep`, { url: e.preview.url });
+                toast('Photo replaced with the improved one');
+                this.enhance = null;
+                await this.fetchAll();
+            } catch (err) { e.error = err?.payload?.error || 'Could not keep it.'; e.busy = false; }
+        },
+        async discardEnhance(close = true) {
+            const e = this.enhance;
+            if (e?.preview) {
+                try { await api.post(`/api/admin/products/${this.id}/enhance/discard`, { url: e.preview.url }); } catch { /* it's only a preview file */ }
+                e.preview = null;
+            }
+            if (close) this.enhance = null;
         },
         async removeImage(image) {
             if (!await confirmDialog({ title: 'Delete this image?', confirmLabel: 'Delete', tone: 'danger' })) return;
@@ -336,7 +376,13 @@ export default {
             <!-- Images -->
             <section class="bg-white border border-zinc-200 p-5 mb-6">
                 <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <h2 class="font-semibold flex items-center gap-2"><ImageIcon class="w-4 h-4" /> Images</h2>
+                    <div>
+                        <h2 class="font-semibold flex items-center gap-2"><ImageIcon class="w-4 h-4" /> Images</h2>
+                        <p class="text-xs text-zinc-500 mt-0.5">
+                            Blurry WhatsApp or Telegram photo? Use <Sparkles class="w-3 h-3 inline -mt-0.5 text-gold" /> to restore it with AI — about {{ money4(enhanceQuote.estimate) }} a photo.
+                            <template v-if="enhanceQuote.spent"> AI spent on this product so far: <strong class="text-zinc-700">{{ money4(enhanceQuote.spent) }}</strong>.</template>
+                        </p>
+                    </div>
                     <label class="bg-gold text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark cursor-pointer inline-flex items-center gap-2">
                         <Upload class="w-4 h-4" />
                         {{ uploading ? 'Uploading…' : 'Upload' }}
@@ -358,6 +404,9 @@ export default {
                             <IconButton v-if="product.thumbnail !== img.url" label="Set as primary" tone="warning" @click="makeThumbnail(img)">
                                 <Star class="w-4 h-4 text-white" />
                             </IconButton>
+                            <IconButton v-if="enhanceQuote.ready" :label="`Improve with AI · about ${money4(enhanceQuote.estimate)}`" @click="openEnhance(img)">
+                                <Sparkles class="w-4 h-4 text-white" />
+                            </IconButton>
                             <IconButton label="Delete image" tone="danger" @click="removeImage(img)">
                                 <Trash2 class="w-4 h-4 text-white" />
                             </IconButton>
@@ -365,6 +414,60 @@ export default {
                     </div>
                 </div>
             </section>
+
+            <!-- AI photo restore: nothing happens until "Improve" is pressed, and
+                 nothing is replaced until the new one is compared and kept. -->
+            <div v-if="enhance" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3" @click.self="!enhance.busy && discardEnhance()">
+                <div class="bg-white w-full max-w-3xl max-h-[92dvh] overflow-y-auto">
+                    <header class="flex items-center justify-between px-5 py-3 border-b border-zinc-200">
+                        <h3 class="font-semibold inline-flex items-center gap-2"><Sparkles class="w-4 h-4 text-gold" /> Improve this photo with AI</h3>
+                        <IconButton label="Close" :disabled="enhance.busy" @click="discardEnhance()"><X class="w-4 h-4" /></IconButton>
+                    </header>
+                    <div class="p-5">
+                        <div :class="['grid gap-3', enhance.preview || enhance.busy ? 'grid-cols-2' : 'grid-cols-1 max-w-xs mx-auto']">
+                            <figure>
+                                <figcaption class="text-[10px] tracking-widest uppercase text-zinc-500 mb-1">{{ enhance.preview || enhance.busy ? 'Before' : 'This photo' }}</figcaption>
+                                <img :src="enhance.image.url" alt="Original" class="w-full aspect-[3/4] object-contain bg-zinc-100 border border-zinc-200" />
+                            </figure>
+                            <figure v-if="enhance.preview || enhance.busy">
+                                <figcaption class="text-[10px] tracking-widest uppercase text-zinc-500 mb-1">After</figcaption>
+                                <div v-if="enhance.busy" class="w-full aspect-[3/4] bg-zinc-100 border border-zinc-200 flex flex-col items-center justify-center gap-2 text-sm text-zinc-500">
+                                    <Sparkles class="w-6 h-6 text-gold animate-pulse" /> Working… (10–30 seconds)
+                                </div>
+                                <a v-else :href="enhance.preview.url" target="_blank" title="Open full size"><img :src="enhance.preview.url" alt="Improved" class="w-full aspect-[3/4] object-contain bg-zinc-100 border border-gold" /></a>
+                            </figure>
+                        </div>
+
+                        <label v-if="!enhance.preview" class="flex items-start gap-2 text-sm mt-4">
+                            <input type="checkbox" v-model="enhance.clean" :disabled="enhance.busy" class="mt-1" />
+                            <span>Also remove prices, size stickers, phone numbers and supplier logos printed on the photo</span>
+                        </label>
+
+                        <p v-if="enhance.preview" class="text-sm mt-4">
+                            This one cost <strong>{{ money4(enhance.preview.cost) }}</strong>
+                            <span class="text-zinc-500"> · {{ money4(enhanceQuote.spent) }} spent on AI for this product in all</span>
+                        </p>
+                        <p v-if="enhance.preview" class="text-xs text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 mt-2">
+                            Check it closely — buttons, pattern, colour, lapels. If anything about the garment changed, discard it: shoppers must get what the photo shows.
+                        </p>
+                        <p v-if="enhance.error" class="text-sm text-red-600 mt-3">{{ enhance.error }}</p>
+
+                        <div class="flex flex-wrap justify-end gap-2 mt-5">
+                            <template v-if="enhance.preview">
+                                <button @click="discardEnhance()" :disabled="enhance.busy" class="border border-zinc-300 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-zinc-500 disabled:opacity-40">Discard</button>
+                                <button @click="runEnhance" :disabled="enhance.busy" class="border border-zinc-300 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-zinc-500 disabled:opacity-40">Try again · ≈{{ money4(enhanceQuote.estimate) }}</button>
+                                <button @click="keepEnhance" :disabled="enhance.busy" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark disabled:opacity-40">Keep the new one</button>
+                            </template>
+                            <template v-else>
+                                <button @click="discardEnhance()" :disabled="enhance.busy" class="border border-zinc-300 px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:border-zinc-500 disabled:opacity-40">Cancel</button>
+                                <button @click="runEnhance" :disabled="enhance.busy" class="bg-gold text-white px-5 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-gold-dark disabled:opacity-40 inline-flex items-center gap-2">
+                                    <Sparkles class="w-4 h-4" /> {{ enhance.busy ? 'Improving…' : `Improve · about ${money4(enhanceQuote.estimate)}` }}
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Video -->
             <section class="bg-white border border-zinc-200 p-5 mb-6">

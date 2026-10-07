@@ -157,4 +157,48 @@ class QuickSeriesTest extends TestCase
         $this->assertSame(2, $this->getJson('/api/admin/quick/series?heading=head_m&origin=TR&per=10')->json('total'));
         $this->assertSame(0, $this->getJson('/api/admin/quick/series?origin=CN')->json('total'));
     }
+
+    #[Test]
+    public function a_series_piece_never_sells_singly_in_the_shop(): void
+    {
+        $r = $this->publish()->assertOk()->json();
+        \Illuminate\Support\Facades\Auth::forgetGuards();
+
+        // Not in the grid, its page sends you to the series, and the bag refuses it.
+        $this->assertSame([], $this->getJson('/api/store/products')->assertOk()->json('products'));
+        $this->getJson("/api/store/products/{$r['handle']}")->assertOk()->assertJsonPath('redirect', "/shop/series/{$r['codes'][0]}");
+        $variant = DB::table('product_variants')->where('product_id', $r['product_id'])->value('id');
+        $this->postJson('/api/store/cart/line-items', ['variant_id' => $variant])->assertStatus(422);
+
+        // A shop product that ALSO runs as a series still sells on its own.
+        DB::table('products')->where('id', $r['product_id'])->update(['metadata' => json_encode(['created_by' => 'admin'])]);
+        $this->assertCount(1, $this->getJson('/api/store/products')->json('products'));
+    }
+
+    #[Test]
+    public function a_photo_is_improved_only_on_request_previewed_then_kept_and_its_cost_counted(): void
+    {
+        $r = $this->publish()->assertOk()->json();
+        $img = DB::table('product_images')->where('product_id', $r['product_id'])->orderBy('rank')->first();
+        $png = base64_encode(UploadedFile::fake()->image('x.png', 30, 40)->getContent());
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['inlineData' => ['mimeType' => 'image/png', 'data' => $png]]]]]],
+            'usageMetadata' => ['promptTokenCount' => 1000, 'candidatesTokenCount' => 1290]])]);
+
+        $this->getJson("/api/admin/products/{$r['product_id']}/enhance")->assertOk()->assertJsonStructure(['estimate', 'spent']);
+        $p = $this->postJson("/api/admin/products/{$r['product_id']}/images/{$img->id}/enhance", ['clean' => true])->assertOk()->json();
+        $this->assertEqualsWithDelta(0.0390, $p['cost'], 0.0001);                   // 1000 × $0.30/M + 1290 × $30/M
+        $this->assertSame($img->url, DB::table('product_images')->where('id', $img->id)->value('url'));   // nothing replaced yet
+
+        // Only this product's own preview can be kept.
+        $this->postJson("/api/admin/products/{$r['product_id']}/images/{$img->id}/enhance/keep", ['url' => 'https://evil.example/x.png'])->assertStatus(422);
+        $this->postJson("/api/admin/products/{$r['product_id']}/images/{$img->id}/enhance/keep", ['url' => $p['url']])->assertOk();
+        $this->assertSame($p['url'], DB::table('product_images')->where('id', $img->id)->value('url'));
+        $this->assertSame($p['url'], DB::table('products')->where('id', $r['product_id'])->value('thumbnail'));   // it was the cover
+
+        // A second try that's thrown away still counts — the money was spent.
+        $p2 = $this->postJson("/api/admin/products/{$r['product_id']}/images/{$img->id}/enhance")->assertOk()->json();
+        $this->postJson("/api/admin/products/{$r['product_id']}/enhance/discard", ['url' => $p2['url']])->assertOk();
+        $meta = json_decode(DB::table('products')->where('id', $r['product_id'])->value('metadata'), true);
+        $this->assertEqualsWithDelta(0.0019 + 0.039 * 2, $meta['ai_cost'], 0.0001);
+    }
 }

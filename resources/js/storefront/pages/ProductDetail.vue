@@ -104,6 +104,8 @@ export default {
                 }
                 if (!res.ok) return;
                 const data = await res.json();
+                // A series piece is bought through its series, not here.
+                if (data.redirect) { this.$router.replace(data.redirect); return; }
                 this.product = data.product;
                 this.imageIndex = 0;
                 this.selectedVariantId = this.product.variants?.[0]?.id || null;

@@ -439,6 +439,11 @@ Route::middleware('web')->prefix('admin')->group(function () {
         Route::post  ('/products/{id}/images',                     [AdminProductController::class, 'uploadImage']);
         Route::post  ('/products/{id}/images/reorder',             [AdminProductController::class, 'reorderImages']);
         Route::delete('/products/{id}/images/{imageId}',           [AdminProductController::class, 'destroyImage']);
+        // Restore a WhatsApp-quality photo with AI — on request only, previewed before it replaces anything.
+        Route::get   ('/products/{id}/enhance',                    [\App\Http\Controllers\Api\Admin\ImageEnhanceController::class, 'quote']);
+        Route::post  ('/products/{id}/images/{imageId}/enhance',   [\App\Http\Controllers\Api\Admin\ImageEnhanceController::class, 'preview'])->middleware('throttle:12,1');
+        Route::post  ('/products/{id}/images/{imageId}/enhance/keep', [\App\Http\Controllers\Api\Admin\ImageEnhanceController::class, 'keep']);
+        Route::post  ('/products/{id}/enhance/discard',            [\App\Http\Controllers\Api\Admin\ImageEnhanceController::class, 'discard']);
         Route::post  ('/products/{id}/video',                      [AdminProductController::class, 'setVideo']);
         Route::delete('/products/{id}/video',                      [AdminProductController::class, 'destroyVideo']);
 

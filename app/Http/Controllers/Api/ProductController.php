@@ -35,7 +35,7 @@ class ProductController extends Controller
         // The SCOPE is where the shopper is (a heading, a catalogue, sale); the
         // quick filters narrow within it. Stats describe the scope, so "12 new
         // this week" doesn't shrink to 0 the moment you tap "Top rated".
-        $scope = fn () => Product::query()
+        $scope = fn () => Product::query()->soldSingly()
             ->where('status', 'published')
             ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
             ->when($request->query('catalogue'), fn ($q, $c) => $q->whereHas('catalogues', fn ($qq) => $qq->where('handle', $c)))
@@ -180,7 +180,7 @@ class ProductController extends Controller
         // A curated affiliate only sells their own line, here as everywhere else.
         $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
 
-        $byId = Product::query()
+        $byId = Product::query()->soldSingly()
             ->where('status', 'published')
             ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
             ->whereIn('id', $ids)
@@ -227,7 +227,7 @@ class ProductController extends Controller
 
         $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
 
-        $query = Product::query()
+        $query = Product::query()->soldSingly()
             ->where('status', 'published')
             ->where('id', '!=', $seed->id)
             ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
@@ -247,7 +247,7 @@ class ProductController extends Controller
 
         // Fallback to same heading if catalogue-match returned nothing.
         if ($results->isEmpty() && ! empty($headingIds)) {
-            $results = Product::query()
+            $results = Product::query()->soldSingly()
                 ->where('status', 'published')
                 ->where('id', '!=', $seed->id)
                 ->whereHas('catalogues', fn ($q) => $q->whereIn('heading_id', $headingIds))
@@ -285,6 +285,18 @@ class ProductController extends Controller
 
         if (! $product) {
             return response()->json(['error' => 'Product not found'], 404);
+        }
+
+        // A series piece has no page of its own to buy from: send the shopper to
+        // its open series (the newest), or nowhere if none is open.
+        if ($product->isSeriesOnly()) {
+            $code = \Illuminate\Support\Facades\DB::table('pack_campaigns as c')->join('pack_definitions as d', 'd.id', '=', 'c.pack_definition_id')
+                ->where('d.product_id', $product->id)->where('c.status', 'open')->whereNull('c.deleted_at')
+                ->orderByDesc('c.created_at')->value('c.public_code');
+
+            return $code
+                ? ['series' => $code, 'redirect' => "/shop/series/{$code}"]
+                : response()->json(['error' => 'Product not found'], 404);
         }
 
         return [

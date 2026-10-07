@@ -29,6 +29,22 @@ class Product extends Model
         static::addGlobalScope(new \App\Models\Scopes\ExclusivityScope());
     }
 
+    /**
+     * Pieces the shop sells one at a time. A product created AS a series (Quick
+     * process → Series) is only ever bought by claiming a size in its series, so
+     * it never appears in grids, search, recommendations or the sitemap, and it
+     * can't be added to the bag on its own.
+     */
+    public function scopeSoldSingly($query)
+    {
+        return $query->where(fn ($w) => $w->whereNull('products.metadata->created_by')->orWhere('products.metadata->created_by', '!=', 'quick_series'));
+    }
+
+    public function isSeriesOnly(): bool
+    {
+        return ($this->metadata['created_by'] ?? null) === 'quick_series';
+    }
+
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);

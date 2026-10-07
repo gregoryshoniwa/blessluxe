@@ -190,8 +190,19 @@ class GeminiService
             Log::warning('[gemini image] '.$res->status().' '.Str::limit($res->body(), 500));
             throw new RuntimeException('Gemini image API error: '.$res->status());
         }
-        $this->logUsage('image', $model, 1, (float) env('AI_COST_IMAGE', 0.067));
         $data = $res->json();
+        // Priced from the tokens Google reports when it reports them (image output
+        // tokens bill at the image rate); the flat per-image figure otherwise.
+        $u = $data['usageMetadata'] ?? null;
+        if ($u && ! empty($u['candidatesTokenCount'])) {
+            $in = (int) ($u['promptTokenCount'] ?? 0);
+            $out = (int) $u['candidatesTokenCount'] + (int) ($u['thoughtsTokenCount'] ?? 0);
+            $cost = $in / 1e6 * (float) env('AI_PRICE_IN_PER_M', 0.30) + $out / 1e6 * (float) env('AI_IMAGE_OUT_PER_M', 30);
+            self::$lastUsage = ['in' => $in, 'out' => $out, 'cost' => $cost];
+        } else {
+            self::$lastUsage = ['in' => 0, 'out' => 0, 'cost' => (float) env('AI_COST_IMAGE', 0.067)];
+        }
+        $this->logUsage('image', $model, 1, self::$lastUsage['cost']);
         $candidates = $data['candidates'] ?? [];
         foreach ($candidates as $c) {
             foreach ($c['content']['parts'] ?? [] as $p) {

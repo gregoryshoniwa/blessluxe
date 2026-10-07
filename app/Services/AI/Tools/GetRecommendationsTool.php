@@ -43,7 +43,7 @@ class GetRecommendationsTool extends AiTool
         $category = trim((string) ($params['category'] ?? ''));
 
         // LUXE must not recommend what the shop it is standing in doesn't sell.
-        $q = \App\Services\AffiliatePricing::scopeToShop(Product::query())
+        $q = \App\Services\AffiliatePricing::scopeToShop(Product::query()->soldSingly())
             ->where('status', 'published')
             ->orderByDesc('updated_at')
             ->with([

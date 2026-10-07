@@ -46,6 +46,10 @@ class CartController extends Controller
         if (! $variant) {
             return response()->json(['error' => 'Variant not found'], 404);
         }
+        // A series piece is bought by claiming a size in its series, never on its own.
+        if ($variant->product && $variant->product->isSeriesOnly()) {
+            return response()->json(['error' => 'This piece is sold as a series — claim your size on its series page.'], 422);
+        }
 
         $cart = $this->currentOrNewCart($request);
 

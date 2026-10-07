@@ -94,7 +94,7 @@ class SeoController extends Controller
             });
 
         // Products. Skip drafts and archived.
-        Product::query()->where('status', 'published')
+        Product::query()->soldSingly()->where('status', 'published')
             ->orderByDesc('updated_at')
             ->limit(5000)
             ->get(['handle', 'updated_at'])
