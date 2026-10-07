@@ -31,6 +31,10 @@ class ImageEnhanceController extends Controller
             throw $e;
         } catch (\Throwable $e) {
             Log::warning('[image enhance] ' . $e->getMessage());
+            // 429 = Google's quota: on the free tier the image model's allowance is 0.
+            if (str_contains($e->getMessage(), '429')) {
+                return response()->json(['error' => 'Google refused: this API key has no image allowance. Image AI needs billing switched on for the key\'s project at aistudio.google.com (the free tier allows 0 images). Nothing was charged.'], 422);
+            }
 
             return response()->json(['error' => 'The AI couldn\'t improve that photo just now — try again in a moment.'], 422);
         }
