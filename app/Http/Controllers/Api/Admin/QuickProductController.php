@@ -11,8 +11,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * Admin → Quick process → Products: single pieces sold one at a time, each
- * size its own variant. Series products are left out — they live on the
- * Series tab. Reading a post uses the same reader as Series.
+ * size its own variant. Products created as a series here are left out —
+ * they live on the Series tab. Reading a post uses the same reader as Series.
  */
 class QuickProductController extends Controller
 {
@@ -26,7 +26,9 @@ class QuickProductController extends Controller
 
         $rows = DB::table('products as p')
             ->leftJoin('suppliers as s', 's.id', '=', 'p.supplier_id')
-            ->whereNotExists(fn ($x) => $x->from('pack_definitions as d')->whereColumn('d.product_id', 'p.id'))
+            // Hide only products that were made AS a series here — a shop product can
+            // also run as a series and still sells piece by piece.
+            ->where(fn ($w) => $w->whereNull('p.metadata->created_by')->orWhere('p.metadata->created_by', '!=', 'quick_series'))
             ->when($q !== '', fn ($w) => $w->where(fn ($x) => $x->where('p.title', 'like', "%{$q}%")->orWhere('p.handle', 'like', "%{$q}%")->orWhere('s.name', 'like', "%{$q}%")))
             ->when($status, fn ($w) => $w->where('p.status', $status))
             ->when($sourcing, fn ($w) => $w->where('p.sourcing', $sourcing))

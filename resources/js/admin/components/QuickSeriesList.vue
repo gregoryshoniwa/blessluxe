@@ -91,25 +91,27 @@ export default {
     </div>
 
     <div v-else>
-        <div class="flex flex-wrap items-center gap-2 mb-3">
-            <label class="relative w-full sm:w-72">
+        <div class="flex items-start gap-2 mb-3">
+          <div class="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+            <label class="relative w-full sm:w-56">
                 <Search class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input v-model="q" @input="search" placeholder="Search name, code or supplier" class="w-full border border-zinc-300 pl-8 pr-3 py-2 text-sm" />
             </label>
-            <select v-model="heading" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Department">
+            <select v-model="heading" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Department">
                 <option value="">All departments</option>
                 <option v-for="h in headings" :key="h.id" :value="h.id">{{ h.name }}</option>
             </select>
-            <select v-model="origin" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Ships from">
+            <select v-model="origin" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Ships from">
                 <option value="">Ships from anywhere</option>
                 <option v-for="o in origins" :key="o.code" :value="o.code">{{ o.label }}</option>
             </select>
-            <select v-model="status" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Status">
+            <select v-model="status" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Status">
                 <option value="">Any status</option>
                 <option v-for="(s, k) in statuses" :key="k" :value="k">{{ s[0] }}</option>
             </select>
             <button v-if="q || status || heading || origin" @click="clearFilters" class="text-xs text-zinc-500 underline hover:text-black">Clear</button>
-            <button @click="open(true)" class="ml-auto bg-gold text-white px-4 py-2 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5">
+          </div>
+            <button @click="open(true)" class="flex-shrink-0 whitespace-nowrap bg-gold text-white px-4 py-2 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5">
                 <Plus class="w-4 h-4" /> Add series
             </button>
         </div>

@@ -78,31 +78,33 @@ export default {
     </div>
 
     <div v-else>
-        <div class="flex flex-wrap items-center gap-2 mb-3">
-            <label class="relative w-full sm:w-72">
+        <div class="flex items-start gap-2 mb-3">
+          <div class="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+            <label class="relative w-full sm:w-56">
                 <Search class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input v-model="q" @input="search" placeholder="Search name or supplier" class="w-full border border-zinc-300 pl-8 pr-3 py-2 text-sm" />
             </label>
-            <select v-model="heading" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Department">
+            <select v-model="heading" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Department">
                 <option value="">All departments</option>
                 <option v-for="h in headings" :key="h.id" :value="h.id">{{ h.name }}</option>
             </select>
-            <select v-model="sourcing" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Stock">
-                <option value="">In stock or import</option>
-                <option value="local">In stock here</option>
-                <option value="import">Import to order</option>
+            <select v-model="sourcing" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Local or import">
+                <option value="">Local and import</option>
+                <option value="local">Local · in stock</option>
+                <option value="import">Import · no stock</option>
             </select>
-            <select v-model="origin" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Ships from">
+            <select v-model="origin" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Ships from">
                 <option value="">From anywhere</option>
                 <option v-for="o in origins" :key="o.code" :value="o.code">{{ o.label }}</option>
             </select>
-            <select v-model="status" @change="load(1)" class="border border-zinc-300 px-3 py-2 text-sm bg-white" aria-label="Status">
+            <select v-model="status" @change="load(1)" class="border border-zinc-300 pl-2 pr-7 py-2 text-sm bg-white max-w-[11rem]" aria-label="Status">
                 <option value="">Any status</option>
                 <option value="published">Published</option>
                 <option value="draft">Hidden / draft</option>
             </select>
             <button v-if="filtered" @click="clearFilters" class="text-xs text-zinc-500 underline hover:text-black">Clear</button>
-            <button @click="open(true)" class="ml-auto bg-gold text-white px-4 py-2 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5">
+          </div>
+            <button @click="open(true)" class="flex-shrink-0 whitespace-nowrap bg-gold text-white px-4 py-2 text-xs font-semibold tracking-[0.25em] uppercase hover:bg-gold-dark inline-flex items-center gap-1.5">
                 <Plus class="w-4 h-4" /> Add product
             </button>
         </div>
@@ -143,7 +145,7 @@ export default {
                                     <p class="font-medium truncate max-w-[16rem]" :title="r.title">{{ r.title }}
                                         <span v-if="fresh === r.id" class="ml-1 text-[9px] tracking-widest uppercase bg-gold text-white px-1.5 py-0.5 align-middle">New</span>
                                     </p>
-                                    <p class="text-[11px] text-zinc-500">{{ r.sizes }} size{{ r.sizes === 1 ? '' : 's' }} · {{ r.sourcing === 'local' ? 'In stock here' : 'Import' }}</p>
+                                    <p class="text-[11px] text-zinc-500">{{ r.sizes }} size{{ r.sizes === 1 ? '' : 's' }} · {{ r.sourcing === 'local' ? 'Local' : 'Import · to order' }}</p>
                                 </div>
                             </div>
                         </td>
@@ -152,7 +154,7 @@ export default {
                         <td class="px-3 py-2 text-right tabular-nums text-zinc-600">{{ money(r.cost) }}</td>
                         <td class="px-3 py-2 text-right tabular-nums font-medium">{{ money(r.price) }}</td>
                         <td class="px-3 py-2 text-right tabular-nums text-zinc-600">{{ margin(r) }}</td>
-                        <td :class="['px-3 py-2 text-right tabular-nums', r.stock === 0 ? 'text-red-600' : 'text-zinc-600']" :title="r.stock === null ? 'Imported to order — no stock kept' : `${r.stock} on the shelf`">{{ r.stock === null ? '—' : r.stock }}</td>
+                        <td :class="['px-3 py-2 text-right tabular-nums', r.stock === 0 ? 'text-red-600' : 'text-zinc-600']" :title="r.stock === null ? 'Imported to order — no stock kept' : `${r.stock} on the shelf`"><span v-if="r.stock === null" class="text-[10px] tracking-widest uppercase text-zinc-400">No stock</span><template v-else>{{ r.stock }}</template></td>
                         <td class="px-3 py-2 text-right tabular-nums text-zinc-600">{{ r.sold || '—' }}</td>
                         <td class="px-3 py-2">
                             <span :class="['text-[10px] tracking-widest uppercase border px-1.5 py-0.5 whitespace-nowrap', r.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200']">{{ r.status === 'published' ? 'Live' : 'Hidden' }}</span>
