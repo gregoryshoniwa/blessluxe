@@ -12,10 +12,10 @@ export default {
             // Only the Shop column is fixed; Help and Company are whatever staff
             // have switched on, since most of those pages don't exist yet.
             shopSection: [
-                { label: 'New Arrivals', href: '/shop?new=true' },
-                { label: 'Women', href: '/shop?category=women' },
-                { label: 'Men', href: '/shop?category=men' },
-                { label: 'Children', href: '/shop?category=children' },
+                { label: 'New Arrivals', href: '/shop?new=1' },
+                { label: 'Women', href: '/shop?heading=women' },
+                { label: 'Men', href: '/shop?heading=men' },
+                { label: 'Children', href: '/shop?heading=children' },
                 { label: 'Sale', href: '/shop?sale=true' },
             ],
             info: {},                 // staff-entered at /admin/content → Contact details

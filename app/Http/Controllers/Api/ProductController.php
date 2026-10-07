@@ -32,25 +32,41 @@ class ProductController extends Controller
         // not everything.
         $curated = \App\Services\AffiliatePricing::curatedProductIds($this->viewingAffiliate($request));
 
-        $query = Product::query()
+        // The SCOPE is where the shopper is (a heading, a catalogue, sale); the
+        // quick filters narrow within it. Stats describe the scope, so "12 new
+        // this week" doesn't shrink to 0 the moment you tap "Top rated".
+        $scope = fn () => Product::query()
             ->where('status', 'published')
             ->when($curated !== null, fn ($q) => $q->whereIn('id', $curated ?: ['']))
-            ->when($request->query('catalogue'), fn ($q, $c) => $q
-                ->whereHas('catalogues', fn ($qq) => $qq->where('handle', $c))
-            )
-            ->when($request->query('heading'), fn ($q, $h) => $q
-                ->whereHas('catalogues.heading', fn ($qq) => $qq->where('handle', $h))
-            )
-            ->when($request->boolean('sale'), fn ($q) => $q
-                ->whereHas('catalogues.heading', fn ($qq) => $qq->where('is_sale', true))
-            )
+            ->when($request->query('catalogue'), fn ($q, $c) => $q->whereHas('catalogues', fn ($qq) => $qq->where('handle', $c)))
+            ->when($request->query('heading'), fn ($q, $h) => $q->whereHas('catalogues.heading', fn ($qq) => $qq->where('handle', $h)))
+            ->when($request->boolean('sale'), fn ($q) => $q->whereHas('catalogues.heading', fn ($qq) => $qq->where('is_sale', true)));
+
+        // Cheapest USD price per product, for the price filter and the price sorts.
+        $minPrice = \Illuminate\Support\Facades\DB::table('variant_prices as vp')
+            ->join('product_variants as pv', 'pv.id', '=', 'vp.variant_id')
+            ->whereColumn('pv.product_id', 'products.id')
+            ->where('vp.currency_code', 'usd')
+            ->selectRaw('MIN(vp.amount)');
+
+        $query = $scope()
+            ->select('products.*')
+            ->selectSub($minPrice, 'min_price')
             ->when($request->query('q'), function ($q, $term) {
                 $q->where(function ($qq) use ($term) {
                     $qq->where('title', 'like', "%{$term}%")
                        ->orWhere('subtitle', 'like', "%{$term}%")
-                       ->orWhere('handle', 'like', "%{$term}%");
+                       ->orWhere('handle', 'like', "%{$term}%")
+                       ->orWhereHas('catalogues', fn ($c) => $c->where('name', 'like', "%{$term}%"));
                 });
             })
+            // ── Quick filters ───────────────────────────────────────────────
+            ->when($request->query('where') === 'local', fn ($q) => $q->where(fn ($w) => $w->whereNull('sourcing')->orWhere('sourcing', '!=', \App\Services\Couriers::IMPORT)))
+            ->when($request->query('where') === 'import', fn ($q) => $q->where('sourcing', \App\Services\Couriers::IMPORT))
+            ->when($request->boolean('new'), fn ($q) => $q->where('created_at', '>=', now()->subDays(self::NEW_DAYS)))
+            ->when($request->boolean('top'), fn ($q) => $q->where('rating_count', '>', 0)->whereRaw('rating_sum >= 4 * rating_count'))
+            ->when($request->boolean('video'), fn ($q) => $q->whereHas('media', fn ($m) => $m->where('media_type', 'video')->where('status', 'ready')))
+            ->when((int) $request->query('max_price') > 0, fn ($q) => $q->whereRaw('(' . $minPrice->toSql() . ') <= ?', array_merge($minPrice->getBindings(), [(int) $request->query('max_price')])))
             ->with([
                 'variants' => fn ($q) => $q->orderBy('created_at'),
                 'variants.prices' => fn ($q) => $q->where('currency_code', 'usd'),
@@ -59,13 +75,17 @@ class ProductController extends Controller
             ]);
 
         match ($sort) {
-            'newest'     => $query->orderByDesc('created_at'),
-            'price-asc'  => $query->orderBy('created_at'),  // computed below
-            'price-desc' => $query->orderByDesc('created_at'),
+            // These used to sort by date and claim otherwise.
+            'price-asc'  => $query->orderByRaw('min_price IS NULL')->orderBy('min_price'),
+            'price-desc' => $query->orderByDesc('min_price'),
+            // What people actually bought and loved, then the newest.
+            'popular'    => $query->orderByDesc('purchases_count')->orderByDesc('likes_count')->orderByDesc('rating_count'),
             default      => $query->orderByDesc('created_at'),
         };
+        $query->orderByDesc('products.id');                     // stable across pages
 
         $paginator = $query->paginate($limit)->withQueryString();
+        $first = $paginator->currentPage() === 1;
 
         return [
             'products' => collect($paginator->items())->map(fn ($p) => $this->summarise($p)),
@@ -76,7 +96,60 @@ class ProductController extends Controller
                 'last_page'   => $paginator->lastPage(),
                 'has_more'    => $paginator->hasMorePages(),
             ],
+            // The pulse and the ticker are the first screen's job, so page 1 only.
+            'stats'    => $first ? $this->scopeStats($scope) : null,
+            'activity' => $first ? $this->recentlyBought($scope) : null,
         ];
+    }
+
+    /** How fresh a piece has to be to wear "New". */
+    public const NEW_DAYS = 14;
+
+    /** Three honest numbers about where the shopper is standing. */
+    private function scopeStats(\Closure $scope): array
+    {
+        $ids = $scope()->pluck('id');
+
+        return [
+            'pieces'    => $ids->count(),
+            'new'       => (int) $scope()->where('created_at', '>=', now()->subDays(self::NEW_DAYS))->count(),
+            'available' => (int) $scope()->where(fn ($w) => $w->whereNull('sourcing')->orWhere('sourcing', '!=', \App\Services\Couriers::IMPORT))->count(),
+            // Units on paid orders this week, in this part of the shop.
+            'sold_week' => (int) \Illuminate\Support\Facades\DB::table('order_line_items as li')
+                ->join('orders as o', 'o.id', '=', 'li.order_id')
+                ->where('o.payment_status', 'paid')
+                ->where('o.created_at', '>=', now()->subDays(7))
+                ->whereIn('li.product_id', $ids)
+                ->sum('li.quantity'),
+        ];
+    }
+
+    /**
+     * What sold lately in this part of the shop — the piece, never the person.
+     * No name, no initials, no city: a stranger's purchase is not ours to show,
+     * but "this sold an hour ago" is a fact about the dress.
+     */
+    private function recentlyBought(\Closure $scope, int $limit = 12): array
+    {
+        $ids = $scope()->pluck('id');
+        if ($ids->isEmpty()) return [];
+
+        return \Illuminate\Support\Facades\DB::table('order_line_items as li')
+            ->join('orders as o', 'o.id', '=', 'li.order_id')
+            ->join('products as p', 'p.id', '=', 'li.product_id')
+            ->where('o.payment_status', 'paid')
+            ->where('o.created_at', '>=', now()->subDays(14))
+            ->whereIn('li.product_id', $ids)
+            ->orderByDesc('o.created_at')
+            ->limit($limit)
+            ->get(['p.title', 'p.handle', 'p.thumbnail', 'li.variant_title', 'o.created_at'])
+            ->map(fn ($r) => [
+                'title'     => $r->title,
+                'handle'    => $r->handle,
+                'thumbnail' => $r->thumbnail,
+                'size'      => $r->variant_title,
+                'at'        => \Carbon\Carbon::parse($r->created_at)->toIso8601String(),
+            ])->all();
     }
 
     /**
@@ -239,6 +312,14 @@ class ProductController extends Controller
             'likes'     => (int) ($p->likes_count ?? 0),
             'purchases' => (int) ($p->purchases_count ?? 0),
             'sourcing'  => \App\Services\Couriers::promise($p->sourcing),
+            'is_new'    => $p->created_at && $p->created_at->gte(now()->subDays(self::NEW_DAYS)),
+            // Sizes for adding straight from the grid. Out of stock is sent, not
+            // hidden — a struck-through size says "it existed, it went".
+            'sizes'     => $p->relationLoaded('variants') ? $p->variants->map(fn ($v) => [
+                'id'       => $v->id,
+                'title'    => $v->title,
+                'in_stock' => ! $v->manage_inventory || $v->allow_backorder || $v->inventory_quantity > 0,
+            ])->values()->all() : [],
         ];
     }
 

@@ -16,6 +16,7 @@ export default {
             activeMenu: null,
             headings: [],
             bag: bagState,        // the one bag: badge here, lines in the drawer
+            bagBump: false,       // the count pops when it goes up
             nav: siteLinks.state, // which fixed entries staff have switched on
             wishCount: 0,
             // Shared, so the menu, Home and the Series page all agree on whose
@@ -80,6 +81,8 @@ export default {
         window.removeEventListener('blessluxe:search-open', this.openSearch);
     },
     watch: {
+        // Something went into the bag: the count pops so the eye goes to it.
+        'bag.itemCount'(n, was) { if (n > was) { this.bagBump = false; this.$nextTick(() => { this.bagBump = true; }); } },
         '$route'() {
             // Close any open drawers when navigating.
             this.mobileNavOpen = false;
@@ -303,7 +306,8 @@ export default {
                         </svg>
                         <span
                             v-if="bag.itemCount > 0"
-                            class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gold text-white text-[10px] font-semibold rounded-full flex items-center justify-center"
+                            :class="['absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gold text-white text-[10px] font-semibold rounded-full flex items-center justify-center', bagBump && 'pop-once']"
+                            @animationend="bagBump = false"
                         >
                             {{ bag.itemCount > 99 ? '99+' : bag.itemCount }}
                         </span>

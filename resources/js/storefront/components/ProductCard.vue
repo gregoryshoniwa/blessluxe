@@ -1,15 +1,24 @@
 <script>
-import { Heart, Play, Star, ShoppingBag, Plane, MapPin } from 'lucide-vue-next';
+import { Heart, Play, Star, ShoppingBag, Plane, MapPin, Plus, Check, Loader2 } from 'lucide-vue-next';
 import { wishlist } from '../wishlist-store.js';
+import { cart } from '../cart-store.js';
+import { toast } from '../../lib/dialog.js';
 
 export default {
     name: 'ProductCard',
-    components: { Heart, Play, Star, ShoppingBag, Plane, MapPin },
+    components: { Heart, Play, Star, ShoppingBag, Plane, MapPin, Plus, Check, Loader2 },
     props: {
         product: { type: Object, required: true },
     },
     data() {
-        return { liked: false, hovering: false };
+        return {
+            liked: false,
+            hovering: false,
+            popHeart: false,         // the heart bursts once when it's saved
+            sizesOpen: false,        // phones: the "+" opens the sizes, there's no hover
+            adding: null,            // the size id being added
+            added: null,             // the size id just added — a tick, briefly
+        };
     },
     computed: {
         /** Which pieces of social proof this product actually has. */
@@ -37,6 +46,30 @@ export default {
             e.preventDefault();
             e.stopPropagation();
             this.liked = await wishlist.toggle(this.product.id);
+            if (this.liked) { this.popHeart = false; this.$nextTick(() => { this.popHeart = true; }); }
+        },
+        /**
+         * Add a size straight from the grid — Baymard's preferred list action,
+         * because it saves the trip to the product page for someone who already
+         * knows. The bag slides open to confirm, so there's no doubt it worked.
+         */
+        async addSize(size, e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!size.in_stock || this.adding) return;
+            this.adding = size.id;
+            try {
+                await cart.add(size.id, 1);
+                this.added = size.id;
+                setTimeout(() => { this.added = null; this.sizesOpen = false; }, 1400);
+            } catch (err) {
+                toast(err?.payload?.error || 'Could not add that to your bag.', { tone: 'error' });
+            } finally { this.adding = null; }
+        },
+        openSizes(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.sizesOpen = !this.sizesOpen;
         },
     },
 };
@@ -45,7 +78,7 @@ export default {
 <template>
     <router-link
         :to="`/shop/${product.handle}`"
-        class="block group relative border border-black/10 hover:border-gold/40 transition-colors"
+        class="block group relative border border-black/10 hover:border-gold/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_30px_-18px_rgba(0,0,0,.35)] motion-reduce:hover:translate-y-0"
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
     >
@@ -55,9 +88,11 @@ export default {
             :aria-label="liked ? 'Remove from wishlist' : 'Add to wishlist'"
             :title="liked ? 'Remove from wishlist' : 'Save to wishlist'"
         >
-            <Heart :class="['w-4 h-4 transition-colors', liked ? 'fill-gold text-gold' : 'text-black/55 hover:text-gold']" />
+            <Heart :class="['w-4 h-4 transition-colors', liked ? 'fill-gold text-gold' : 'text-black/55 hover:text-gold', popHeart && 'pop-once']" @animationend="popHeart = false" />
         </button>
-        <div class="relative aspect-[3/4] bg-cream-dark overflow-hidden group-hover:opacity-90 transition-opacity">
+        <div class="img-shine relative aspect-[3/4] bg-cream-dark overflow-hidden">
+            <!-- New in: the one label worth a shimmer. -->
+            <span v-if="product.is_new" class="badge-new absolute top-2 left-9 z-10 bg-white/95 text-gold-dark text-[9px] font-semibold tracking-[0.18em] uppercase px-2 py-1">New</span>
             <!-- How soon it can be here: the other half of the price decision.
                  A small square by default so it never sits on the part of the
                  photo someone wants to see; the words unfurl on hover, and the
@@ -108,10 +143,44 @@ export default {
                 />
             </template>
 
+            <!-- Sizes, straight to the bag. Hover reveals them; on a phone the "+" does. -->
+            <div
+                v-if="product.sizes?.length"
+                :class="['absolute inset-x-0 bottom-0 z-20 bg-white/95 backdrop-blur px-2 pt-2 pb-2.5 transition-all duration-300',
+                         sizesOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 lg:group-hover:translate-y-0 lg:group-hover:opacity-100']"
+                @click.prevent.stop
+            >
+                <p class="text-[9px] tracking-[0.2em] uppercase text-black/50 mb-1.5 text-center">Add to bag</p>
+                <div class="flex flex-wrap justify-center gap-1">
+                    <button
+                        v-for="size in product.sizes"
+                        :key="size.id"
+                        @click="addSize(size, $event)"
+                        :disabled="!size.in_stock || !!adding"
+                        :class="['min-w-9 h-8 px-2 border text-[11px] transition-all press',
+                                 added === size.id ? 'bg-emerald-600 border-emerald-600 text-white' :
+                                 size.in_stock ? 'border-black/20 hover:border-gold hover:bg-gold hover:text-white' : 'border-black/10 text-black/30 line-through cursor-not-allowed']"
+                        :title="size.in_stock ? `Add ${size.title} to your bag` : `${size.title} is sold out`"
+                    >
+                        <Loader2 v-if="adding === size.id" class="w-3 h-3 animate-spin mx-auto" />
+                        <Check v-else-if="added === size.id" class="w-3.5 h-3.5 mx-auto" />
+                        <template v-else>{{ size.title }}</template>
+                    </button>
+                </div>
+            </div>
+            <button
+                v-if="product.sizes?.length"
+                @click="openSizes"
+                class="lg:hidden absolute bottom-2 right-2 z-30 w-9 h-9 rounded-full bg-gold text-white shadow-md inline-flex items-center justify-center press"
+                :aria-label="sizesOpen ? 'Close sizes' : 'Add to bag'"
+            >
+                <Plus :class="['w-4 h-4 transition-transform', sizesOpen && 'rotate-45']" />
+            </button>
+
             <!-- Video badge -->
             <span
                 v-if="video"
-                class="absolute bottom-2 left-2 z-10 w-6 h-6 rounded-full bg-black/55 backdrop-blur flex items-center justify-center"
+                class="absolute bottom-2 left-2 z-10 w-6 h-6 rounded-full bg-black/55 backdrop-blur flex items-center justify-center lg:group-hover:opacity-0 transition-opacity"
                 title="This piece has a video"
             >
                 <Play class="w-3 h-3 text-white fill-white" />
@@ -146,3 +215,19 @@ export default {
         </div>
     </router-link>
 </template>
+
+<style scoped>
+/* "New" catches the light every few seconds — the only label that earns it. */
+.badge-new { overflow: hidden; }
+.badge-new::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 -60%;
+    width: 40%;
+    background: linear-gradient(105deg, transparent, rgba(201, 168, 76, .45), transparent);
+    transform: skewX(-18deg);
+    animation: badge-sheen 4.5s ease-in-out infinite;
+}
+@keyframes badge-sheen { 0%, 70% { left: -60%; } 100% { left: 130%; } }
+@media (prefers-reduced-motion: reduce) { .badge-new::after { animation: none; display: none; } }
+</style>
