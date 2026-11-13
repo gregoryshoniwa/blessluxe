@@ -165,7 +165,7 @@ class PaymentOutcomes
                 'discount_total'  => (int) ($snap['discount_total'] ?? 0),
                 'total'           => $total,
                 'status'          => 'completed',
-                'payment_method'  => $session->method ?: $session->provider,
+                'payment_method'  => $session->method ?: (($session->provider_meta ?? [])['paid_with'] ?? null) ?: $session->provider,
                 'payment_status'  => 'paid',
                 'shipping_address' => $snap['shipping_address'] ?? null,
                 'billing_address'  => $snap['billing_address']  ?? null,

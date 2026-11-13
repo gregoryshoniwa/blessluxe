@@ -5,6 +5,7 @@ namespace App\Services\Payments;
 use App\Models\PaymentSession;
 use App\Services\PaymentOutcomes;
 use App\Services\Payments\Contracts\Gateway;
+use App\Services\Payments\Gateways\BlessedPayGateway;
 use App\Services\Payments\Gateways\PaynowGateway;
 use App\Services\Payments\Gateways\VelocityAfricaGateway;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +38,7 @@ class Payments
     {
         static $all = null;
 
-        return $all ??= collect([new PaynowGateway(), new VelocityAfricaGateway()])->keyBy(fn (Gateway $g) => $g->id())->all();
+        return $all ??= collect([new PaynowGateway(), new VelocityAfricaGateway(), new BlessedPayGateway()])->keyBy(fn (Gateway $g) => $g->id())->all();
     }
 
     public static function gateway(string $id): ?Gateway

@@ -72,4 +72,12 @@ return [
         'charge_tax_percent' => (float) env('VELOCITY_CHARGE_TAX_PERCENT', 0),
         'item_code'        => env('VELOCITY_ITEM_CODE', 'BLESSLUXE-ORDER'),
     ],
+    // BlessedPay (pay.blessluxe.com): our own payments app, in front of the bank.
+    // The key and the signing secret both come from the company's page in its console.
+    'blessedpay' => [
+        'base_url'       => env('BLESSEDPAY_BASE_URL', 'https://pay.blessluxe.com'),
+        'api_key'        => env('BLESSEDPAY_API_KEY'),          // sk_live_… (sk_test_… uses a pretend bank)
+        'signing_secret' => env('BLESSEDPAY_SIGNING_SECRET'),   // checks that a callback really came from BlessedPay
+        'timeout'        => (int) env('BLESSEDPAY_TIMEOUT', 20),
+    ],
 ];
