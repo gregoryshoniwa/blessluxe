@@ -263,12 +263,14 @@ export default {
                 </li>
             </ol>
 
+            <!-- The way back and the heading sit above BOTH columns, so the payment panel and the order summary start on the same line. -->
+            <button @click="$router.push('/checkout')" class="text-xs tracking-widest uppercase text-black/55 hover:text-gold mb-4 inline-flex items-center gap-1">
+                <ArrowRight class="w-3 h-3 rotate-180" /> Back to information
+            </button>
+            <h1 class="font-display text-2xl tracking-widest uppercase mb-6">Payment</h1>
+
             <div class="lg:grid lg:grid-cols-12 lg:gap-12">
                 <section class="lg:col-span-7">
-                    <button @click="$router.push('/checkout')" class="text-xs tracking-widest uppercase text-black/55 hover:text-gold mb-4 inline-flex items-center gap-1">
-                        <ArrowRight class="w-3 h-3 rotate-180" /> Back to information
-                    </button>
-                    <h1 class="font-display text-2xl tracking-widest uppercase mb-6">Payment</h1>
 
                     <div v-if="loading" class="text-xs tracking-widest uppercase text-black/55 animate-pulse">Loading…</div>
 
