@@ -3,11 +3,11 @@ import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
 import { gatewayMark, marksFor } from '../../lib/payment-marks.js';
-import { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
+import { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield, Check } from 'lucide-vue-next';
 
 export default {
     name: 'CheckoutPayment',
-    components: { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield },
+    components: { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield, Check },
     data() {
         return {
             cart: null,
@@ -74,6 +74,10 @@ export default {
         // and the field appears only when we don't have one.
         promptsPhone() { return this.needsPhone && this.chosen?.method !== 'card'; },
         askPhone() { return this.needsPhone && (this.promptsPhone || this.phoneRevealed || !this.phoneLooksValid(this.draft.phone)); },
+        /** The one option, when it is a hosted gateway with its own logo: shown as a panel, not a choice. */
+        soleGateway() {
+            return this.options.length === 1 && this.gatewayLogo(this.options[0]) ? this.options[0] : null;
+        },
         payLabel() {
             if (this.submitting) return this.promptsPhone ? 'Sending the prompt…' : `Redirecting to ${this.chosen?.label || 'payment'}…`;
             return `Pay $${this.payTotal}`;
@@ -171,6 +175,16 @@ export default {
         // A hosted gateway wears its own logo, with the marks of what it takes underneath.
         gatewayLogo(o) { return o.method ? null : gatewayMark(o.gateway); },
         accepted(o) { return (o.methods || []).flatMap((m) => marksFor(m)); },
+        // What happens next, in the shopper's words, for the one-option panel.
+        nextSteps(o) {
+            const takes = o.methods || [];
+            return [
+                takes.includes('ecocash') && 'EcoCash: approve the prompt on your phone with your PIN.',
+                takes.includes('card') && 'Visa or Mastercard: your card details go straight to the bank, never to us.',
+                'The exact amount, including any processing fee, is shown before you approve.',
+                'Then you come straight back here for your order confirmation.',
+            ].filter(Boolean);
+        },
         pct(n) { return String(Number(n)).replace(/\.0+$/, ''); },
         async pay() {
             if (!this.chosen) return;
@@ -311,8 +325,30 @@ export default {
                             </div>
                         </section>
 
+                        <!-- One hosted gateway is the only way to pay: nothing to choose, so it gets the room to say what happens next. -->
+                        <section v-if="soleGateway" class="border-2 border-gold grid sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" aria-label="How you will pay">
+                            <div class="bg-black flex items-center justify-center px-6 py-8 sm:py-10">
+                                <img :src="gatewayLogo(soleGateway).src" :alt="gatewayLogo(soleGateway).alt" :width="gatewayLogo(soleGateway).width" :height="gatewayLogo(soleGateway).height" class="w-full max-w-[20rem] h-auto" />
+                            </div>
+                            <div class="bg-cream-dark/40 px-6 py-6 sm:px-8">
+                                <p class="flex items-center gap-2 text-[10px] tracking-[0.3em] uppercase text-emerald-700">
+                                    <ShieldCheck class="w-4 h-4" /> Secure payment
+                                </p>
+                                <h2 class="font-display text-xl sm:text-2xl mt-2">Pay with {{ accepted(soleGateway).map((l) => l.alt).join(', ').replace(/, ([^,]*)$/, ' or $1') || soleGateway.label }}</h2>
+                                <div v-if="accepted(soleGateway).length" class="flex flex-wrap items-center gap-x-6 gap-y-3 mt-4">
+                                    <img v-for="l in accepted(soleGateway)" :key="l.src" :src="l.src" :alt="l.alt" class="h-7 w-auto max-w-[7rem] object-contain" />
+                                </div>
+                                <ul class="mt-5 space-y-2.5 text-sm text-black/70">
+                                    <li v-for="step in nextSteps(soleGateway)" :key="step" class="flex gap-2.5">
+                                        <Check class="w-4 h-4 mt-0.5 flex-none text-gold" /> <span>{{ step }}</span>
+                                    </li>
+                                </ul>
+                                <p class="mt-5 text-xs text-black/55">Processed by {{ soleGateway.label }} and TN CyberTech Bank.</p>
+                            </div>
+                        </section>
+
                         <!-- One button per way to pay, all the same size, each wearing its own mark. -->
-                        <div class="grid gap-3 sm:grid-cols-2">
+                        <div v-else class="grid gap-3 sm:grid-cols-2">
                             <label
                                 v-for="o in options"
                                 :key="o.id"
