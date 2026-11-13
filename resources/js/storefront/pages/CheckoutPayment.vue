@@ -329,8 +329,11 @@ export default {
 
                         <!-- One hosted gateway is the only way to pay: nothing to choose, so it gets the room to say what happens next. -->
                         <section v-if="soleGateway" class="border-2 border-gold grid sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]" aria-label="How you will pay">
-                            <div class="bg-black flex items-center justify-center px-6 py-8 sm:py-10">
-                                <img :src="gatewayLogo(soleGateway).src" :alt="gatewayLogo(soleGateway).alt" :width="gatewayLogo(soleGateway).width" :height="gatewayLogo(soleGateway).height" class="w-full max-w-[20rem] h-auto" />
+                            <div class="bg-black flex flex-col items-center justify-center gap-6 px-8 py-8 sm:py-10">
+                                <template v-for="(l, i) in gatewayLogo(soleGateway).logos" :key="l.src">
+                                    <span v-if="i" class="block w-16 h-px bg-gold/60" aria-hidden="true"></span>
+                                    <img :src="l.src" :alt="l.alt" :width="l.width" :height="l.height" class="h-auto w-full" :class="i ? 'max-w-[11rem]' : 'max-w-[15rem]'" />
+                                </template>
                             </div>
                             <div class="bg-cream-dark/40 px-6 py-6 sm:px-8">
                                 <p class="flex items-center gap-2 text-[10px] tracking-[0.3em] uppercase text-emerald-700">
@@ -345,7 +348,7 @@ export default {
                                         <Check class="w-4 h-4 mt-0.5 flex-none text-gold" /> <span>{{ step }}</span>
                                     </li>
                                 </ul>
-                                <p class="mt-5 text-xs text-black/55">Processed by {{ soleGateway.label }} and TN CyberTech Bank.</p>
+                                <p class="mt-5 text-xs text-black/55">Processed by {{ gatewayLogo(soleGateway).processedBy || soleGateway.label }}.</p>
                             </div>
                         </section>
 
@@ -360,7 +363,9 @@ export default {
                                 <ShieldCheck class="absolute top-4 right-4 w-5 h-5 text-emerald-500" />
 
                                 <template v-if="gatewayLogo(o)">
-                                    <img :src="gatewayLogo(o).src" :alt="gatewayLogo(o).alt" :width="gatewayLogo(o).width" :height="gatewayLogo(o).height" class="h-14 sm:h-16 w-auto max-w-full" />
+                                    <span class="flex items-center justify-center gap-5 bg-black px-5 h-16 max-w-full">
+                                        <img v-for="l in gatewayLogo(o).logos" :key="l.src" :src="l.src" :alt="l.alt" :width="l.width" :height="l.height" class="h-8 w-auto max-w-[45%] object-contain" />
+                                    </span>
                                     <span class="block">
                                         <!-- The logo says the name; the marks say what it takes. -->
                                         <span v-if="accepted(o).length" class="flex items-center justify-center gap-4 h-7">

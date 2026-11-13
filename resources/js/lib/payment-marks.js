@@ -17,13 +17,26 @@ export function marksFor(method) {
 }
 
 /**
- * A gateway's own logo, for a HOSTED gateway — one checkout option that covers
- * several ways of paying, chosen on the gateway's page. Its artwork carries its
- * own background (BlessedPay's is black), so it is shown as a plate and never
- * recoloured. A gateway with no entry returns null and keeps its line icon.
+ * What a HOSTED gateway's checkout option wears — one option that covers
+ * several ways of paying, chosen on the gateway's page. `logos` are shown
+ * together on a black plate (they are gold artwork made for a dark ground, and
+ * are never recoloured); `processedBy` is the line under the panel.
+ *
+ * BlessedPay shows the bank's marks for now (owner's choice, Nov 2026): the
+ * shopper knows TN CyberTech Bank and CyberPay, and the EcoCash prompt and card
+ * form are the bank's. BlessedPay's own logo is kept at /payments/blessedpay.png
+ * for when that changes — swap `logos` and `processedBy` here and nothing else.
+ *
+ * A gateway with no entry returns null and keeps its line icon.
  */
 const GATEWAY_MARKS = {
-    blessedpay: { src: '/payments/blessedpay.png', alt: 'BlessedPay', width: 846, height: 198 },
+    blessedpay: {
+        logos: [
+            { src: '/payments/tncybertech.png', alt: 'TN CyberTech Bank', width: 720, height: 259 },
+            { src: '/payments/cyberpay.png', alt: 'CyberPay', width: 466, height: 80 },
+        ],
+        processedBy: 'CyberPay and TN CyberTech Bank',
+    },
 };
 
 export function gatewayMark(gateway) {

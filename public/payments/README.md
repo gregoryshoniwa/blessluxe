@@ -10,7 +10,9 @@ never recoloured, and nothing here is hot-linked from a third party.
 | `mastercard.svg` | Drawn here from the symbol's geometry — two equal circles overlapping, in Mastercard's colours (`#EB001B`, `#F79E1B`, lens `#FF5F00`). |
 | `ecocash.svg` | Wordmark set in the system's bold sans, in EcoCash's own blue `#075CA8` and red `#EB2528` (sampled from their mark). EcoCash publish no open asset — if they send you an official SVG, drop it in here and nothing else changes. |
 
-| `blessedpay.png` | BlessedPay's own logo, cut from its artwork (`../blessedpay/public/globe.png`), on its black background. A GATEWAY mark, not a method mark: listed in `GATEWAY_MARKS` and shown as a plate on a hosted gateway's checkout option. |
+| `tncybertech.png` | TN CyberTech Bank's logo in gold on transparent, from the bank's own open-banking project (`omni-open-bank-laravel/public/images/logo_text.png`), trimmed. A GATEWAY mark (see `GATEWAY_MARKS`): shown on a black plate, made for a dark ground. |
+| `cyberpay.png` | CyberPay's wordmark in gold on transparent, from the bank's payment-core project (`CyberPay-Logo.png`), trimmed. Shown with the bank's logo on the same plate. |
+| `blessedpay.png` (not shown for now) | BlessedPay's own logo, cut from its artwork (`../blessedpay/public/globe.png`), on its black background. A GATEWAY mark, not a method mark: listed in `GATEWAY_MARKS` and shown as a plate on a hosted gateway's checkout option. |
 
 Adding another (OneMoney, InnBucks, ZIPIT): put `<method>.svg` here and add the
 method to `MARKS` in `resources/js/lib/payment-marks.js` — the payment step and
