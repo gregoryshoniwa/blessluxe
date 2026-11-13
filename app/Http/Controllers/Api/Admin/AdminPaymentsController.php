@@ -32,6 +32,7 @@ class AdminPaymentsController extends Controller
         $data = $request->validate([
             'gateways'           => ['sometimes', 'array'],
             'gateways.*.enabled' => ['boolean'],
+            'gateways.*.checkout' => ['sometimes', 'in:popup,page'],
             'routes'             => ['sometimes', 'array'],
             'routes.*'           => ['nullable', 'string', 'max:40'],
             'tax'                => ['sometimes', 'array'],

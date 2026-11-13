@@ -121,6 +121,9 @@ class Payments
                 'configured' => $g->isConfigured(),
                 // A gateway whose credentials went away is off, whatever was saved.
                 'enabled' => $g->isConfigured() && (bool) ($gateways[$id]['enabled'] ?? false),
+                // A gateway whose checkout can open in a pop-up over our page: staff pick 'popup' or 'page'.
+                'popup' => $popup = method_exists($g, 'popupScript'),
+                'checkout' => $popup && ($gateways[$id]['checkout'] ?? null) === 'popup' ? 'popup' : 'page',
             ];
         }
         foreach (Method::ids() as $m) {
@@ -158,6 +161,11 @@ class Payments
             $want = (bool) ($patch['gateways'][$id]['enabled'] ?? $current['gateways'][$id]['enabled']);
             if ($want && ! $g->isConfigured()) return "{$g->label()} has no credentials yet — add them to the environment first.";
             $gateways[$id] = ['enabled' => $want];
+            if ($current['gateways'][$id]['popup']) {
+                $style = $patch['gateways'][$id]['checkout'] ?? $current['gateways'][$id]['checkout'];
+                if (! in_array($style, ['popup', 'page'], true)) return "{$g->label()}'s checkout opens in a pop-up or on its own page.";
+                $gateways[$id]['checkout'] = $style;
+            }
         }
 
         $routes = [];
@@ -230,6 +238,18 @@ class Payments
         }
 
         return $out;
+    }
+
+    /**
+     * The script that opens this gateway's checkout in a pop-up over our page,
+     * when it has one AND staff chose the pop-up; null means send the shopper
+     * to its page as usual.
+     */
+    public static function popupScript(string $gatewayId): ?string
+    {
+        $g = self::gateway($gatewayId);
+
+        return $g && method_exists($g, 'popupScript') && (self::settings()['gateways'][$gatewayId]['checkout'] ?? 'page') === 'popup' ? $g->popupScript() : null;
     }
 
     /** @return array{0:Gateway,1:?string}|null  [gateway, method] for an option id the checkout sent back. */

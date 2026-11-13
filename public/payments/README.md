@@ -10,6 +10,8 @@ never recoloured, and nothing here is hot-linked from a third party.
 | `mastercard.svg` | Drawn here from the symbol's geometry — two equal circles overlapping, in Mastercard's colours (`#EB001B`, `#F79E1B`, lens `#FF5F00`). |
 | `ecocash.svg` | Wordmark set in the system's bold sans, in EcoCash's own blue `#075CA8` and red `#EB2528` (sampled from their mark). EcoCash publish no open asset — if they send you an official SVG, drop it in here and nothing else changes. |
 
+| `blessedpay.png` | BlessedPay's own logo, cut from its artwork (`../blessedpay/public/globe.png`), on its black background. A GATEWAY mark, not a method mark: listed in `GATEWAY_MARKS` and shown as a plate on a hosted gateway's checkout option. |
+
 Adding another (OneMoney, InnBucks, ZIPIT): put `<method>.svg` here and add the
 method to `MARKS` in `resources/js/lib/payment-marks.js` — the payment step and
 the waiting page both read it, so one line covers both. A method with no file

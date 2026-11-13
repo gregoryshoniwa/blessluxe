@@ -190,4 +190,27 @@ class BlessedPayGatewayTest extends TestCase
         $this->assertSame(0, DB::table('orders')->count());
         $this->assertSame(5, (int) DB::table('product_variants')->where('id', 'var_1')->value('inventory_quantity'));
     }
+
+    #[Test]
+    public function staff_choose_whether_the_checkout_opens_in_a_pop_up_or_on_its_own_page(): void
+    {
+        Http::fake(['pay.blessluxe.test/api/v1/payments' => fn (ClientRequest $r) => Http::response($this->payment($r['reference']), 201)]);
+        $start = fn () => $this->shopper()->postJson('/api/store/payments/initiate', ['option' => 'blessedpay', 'email' => 'rudo@example.test'])->assertOk();
+
+        // Until staff say otherwise it is the full page, as before.
+        $this->assertSame([true, 'page'], [Payments::settings()['gateways']['blessedpay']['popup'], Payments::settings()['gateways']['blessedpay']['checkout']]);
+        $this->assertNull($start()->json('popup'));
+
+        Payments::setConfig(['gateways' => ['blessedpay' => ['enabled' => true, 'checkout' => 'popup']]]);
+        $res = $start();
+        $this->assertSame('https://pay.blessluxe.test/js/blessedpay.js', $res->json('popup.script'));
+        $this->assertSame('https://shop.test/api/store/payments/return?reference=' . $res->json('reference'), $res->json('popup.done_url'));
+        $this->assertSame('https://pay.blessluxe.test/p/pay_01abc', $res->json('redirect_url'));      // still there: the fallback if the script can't load
+
+        // Saving something else (a route) keeps the choice; nonsense is refused; other gateways have no such choice.
+        Payments::setConfig(['routes' => ['card' => null]]);
+        $this->assertSame('popup', Payments::settings()['gateways']['blessedpay']['checkout']);
+        $this->assertIsString(Payments::setConfig(['gateways' => ['blessedpay' => ['enabled' => true, 'checkout' => 'sideways']]]));
+        $this->assertSame([false, 'page'], [Payments::settings()['gateways']['paynow']['popup'], Payments::settings()['gateways']['paynow']['checkout']]);
+    }
 }

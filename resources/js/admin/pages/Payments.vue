@@ -26,7 +26,7 @@ export default {
         async save() {
             this.saving = true;
             try {
-                const gateways = {}; for (const g of this.gatewayList) gateways[g.id] = { enabled: g.enabled };
+                const gateways = {}; for (const g of this.gatewayList) gateways[g.id] = { enabled: g.enabled, ...(g.popup ? { checkout: g.checkout } : {}) };
                 this.apply(await api.put('/api/admin/payments', { gateways, routes: this.settings.routes, tax: this.settings.tax }));
                 toast('Payment settings saved');
             } catch (e) { toastError(e); await this.load(); }
@@ -73,6 +73,18 @@ export default {
                     <span class="text-xs text-zinc-500">{{ g.mode === 'hosted' ? 'Hosted page — the customer chooses the method there' : 'Direct — we take the method and phone number' }}</span>
                     <span class="text-xs text-zinc-500 ml-auto">Takes: {{ g.methods.map((m) => methods.find((x) => x.id === m)?.label || m).join(', ') }}</span>
                     <p v-if="!g.configured" class="w-full text-xs text-zinc-500">Add its keys to the environment (see <code>.env.example</code>) and it can be switched on.</p>
+                    <!-- A gateway whose checkout can open over our own page. -->
+                    <fieldset v-if="g.popup" class="w-full flex flex-wrap items-center gap-x-5 gap-y-2 pt-1">
+                        <legend class="float-left mr-5 text-xs tracking-widest uppercase text-zinc-500">Checkout opens</legend>
+                        <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" v-model="g.checkout" value="popup" :name="`checkout-${g.id}`" class="accent-gold w-4 h-4" />
+                            In a pop-up over our checkout <span class="text-zinc-500">(the shopper never leaves the shop)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" v-model="g.checkout" value="page" :name="`checkout-${g.id}`" class="accent-gold w-4 h-4" />
+                            On {{ g.label }}'s own page <span class="text-zinc-500">(a full-page redirect, then back)</span>
+                        </label>
+                    </fieldset>
                 </div>
             </section>
 

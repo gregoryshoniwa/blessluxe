@@ -2,7 +2,7 @@
 import { api } from '../../lib/api.js';
 import { toast } from '../../lib/dialog.js';
 import { checkoutStore } from '../checkout-store.js';
-import { marksFor } from '../../lib/payment-marks.js';
+import { gatewayMark, marksFor } from '../../lib/payment-marks.js';
 import { Lock, ArrowRight, Loader2, Smartphone, ShieldCheck, Sparkles, CreditCard, Wallet, Landmark, Shield } from 'lucide-vue-next';
 
 export default {
@@ -137,8 +137,40 @@ export default {
             finally { this.previewing = false; }
         },
         phoneLooksValid(v) { return /\d{9,}/.test(String(v || '').replace(/\D/g, '')); },
+        /**
+         * Open the gateway's checkout in its pop-up. Resolves true once the
+         * pop-up is open; false when its script can't be loaded, so the caller
+         * falls back to the full-page redirect. What the pop-up says happened is
+         * only a hint — `done_url` asks the gateway and decides where to go.
+         */
+        async payInPopup(data) {
+            try {
+                if (!window.BlessedPay) {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = data.popup.script; s.onload = resolve; s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                }
+                window.BlessedPay.open({
+                    url: data.redirect_url,
+                    redirect: false,
+                    onSuccess: () => { window.location.href = data.popup.done_url; },
+                    onCancel: () => toast('Payment cancelled. Your bag is still here.'),
+                    onClose: () => toast("The payment window was closed before paying. Choose Pay when you're ready."),
+                    // The checkout would not show inside the pop-up (it only lets sites it knows frame it): go to its page instead.
+                    onError: (e) => { if (e?.code === 'load_timeout') window.location.href = data.redirect_url; },
+                });
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
         icon(o) { return { smartphone: 'Smartphone', wallet: 'Wallet', landmark: 'Landmark', 'credit-card': 'CreditCard' }[o.icon] || 'Shield'; },
         logos(o) { return marksFor(o.method); },
+        // A hosted gateway wears its own logo, with the marks of what it takes underneath.
+        gatewayLogo(o) { return o.method ? null : gatewayMark(o.gateway); },
+        accepted(o) { return (o.methods || []).flatMap((m) => marksFor(m)); },
         pct(n) { return String(Number(n)).replace(/\.0+$/, ''); },
         async pay() {
             if (!this.chosen) return;
@@ -166,6 +198,8 @@ export default {
                     bees_to_use: this.canUseBees ? this.beesToUse : 0,
                 };
                 const data = await api.post('/api/store/payments/initiate', payload);
+                // A gateway set to open over our page: the shopper pays in a pop-up and never leaves the shop.
+                if (data.redirect_url && data.popup && await this.payInPopup(data)) return;
                 if (data.redirect_url) { window.location.href = data.redirect_url; return; }
                 // No redirect: they approve on their phone while we wait and poll.
                 if (data.return_path) { this.$router.push(data.return_path); return; }
@@ -287,15 +321,27 @@ export default {
                                 <input type="radio" v-model="option" :value="o.id" class="absolute top-4 left-4 accent-gold" />
                                 <ShieldCheck class="absolute top-4 right-4 w-5 h-5 text-emerald-500" />
 
-                                <span class="flex items-center justify-center gap-4 h-9">
-                                    <img v-for="l in logos(o)" :key="l.src" :src="l.src" :alt="l.alt" class="h-6 sm:h-7 w-auto max-w-[6.5rem] object-contain" />
-                                    <component :is="icon(o)" v-if="!logos(o).length" class="w-7 h-7 text-gold" />
-                                </span>
+                                <template v-if="gatewayLogo(o)">
+                                    <img :src="gatewayLogo(o).src" :alt="gatewayLogo(o).alt" :width="gatewayLogo(o).width" :height="gatewayLogo(o).height" class="h-14 sm:h-16 w-auto max-w-full" />
+                                    <span class="block">
+                                        <!-- The logo says the name; the marks say what it takes. -->
+                                        <span v-if="accepted(o).length" class="flex items-center justify-center gap-4 h-7">
+                                            <img v-for="l in accepted(o)" :key="l.src" :src="l.src" :alt="l.alt" class="h-5 w-auto max-w-[5.5rem] object-contain" />
+                                        </span>
+                                        <span class="block text-xs text-black/60 mt-2">{{ o.hint }}</span>
+                                    </span>
+                                </template>
+                                <template v-else>
+                                    <span class="flex items-center justify-center gap-4 h-9">
+                                        <img v-for="l in logos(o)" :key="l.src" :src="l.src" :alt="l.alt" class="h-6 sm:h-7 w-auto max-w-[6.5rem] object-contain" />
+                                        <component :is="icon(o)" v-if="!logos(o).length" class="w-7 h-7 text-gold" />
+                                    </span>
 
-                                <span class="block">
-                                    <span class="block font-display text-base">{{ o.label }}</span>
-                                    <span class="block text-xs text-black/60 mt-1">{{ o.hint }}</span>
-                                </span>
+                                    <span class="block">
+                                        <span class="block font-display text-base">{{ o.label }}</span>
+                                        <span class="block text-xs text-black/60 mt-1">{{ o.hint }}</span>
+                                    </span>
+                                </template>
                             </label>
                         </div>
 

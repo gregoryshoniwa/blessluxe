@@ -267,6 +267,9 @@ class PaymentController extends Controller
             'browser_url'  => $redirectUrl,
             'instruction'  => $instruction,
             'return_path'  => '/checkout/return?reference=' . urlencode($session->reference),
+            // Set when the gateway's checkout should open in a pop-up over our page instead of
+            // taking the shopper away: the checkout loads `script` and opens `redirect_url` in it.
+            'popup'        => $redirectUrl && ($script = Payments::popupScript($session->provider)) ? ['script' => $script, 'done_url' => Payments::returnUrl($session->reference)] : null,
         ];
     }
 }

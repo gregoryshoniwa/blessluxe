@@ -33,6 +33,16 @@ class BlessedPayGateway implements Gateway
     public function isConfigured(): bool { return BlessedPay::configured(); }
     public function needs(?string $method): array { return []; }
 
+    /**
+     * BlessedPay's checkout can open in a pop-up over OUR page instead of
+     * taking the shopper away: this is the script that opens it (see
+     * Payments::popupScript()). Staff choose pop-up or full page at /admin/payments.
+     */
+    public function popupScript(): string
+    {
+        return rtrim((string) config('services.blessedpay.base_url'), '/') . '/js/blessedpay.js';
+    }
+
     /** Whether the shopper pays a fee on top, and how much, is BlessedPay's answer on its own page. */
     public function surcharge(?string $method): ?array { return null; }
 
