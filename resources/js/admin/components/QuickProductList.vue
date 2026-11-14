@@ -4,7 +4,7 @@ import { confirmDialog, toast } from '../../lib/dialog.js';
 import IconButton from './IconButton.vue';
 import QuickSeriesForm from './QuickSeriesForm.vue';
 import QuickPager from './QuickPager.vue';
-import { Plus, Copy, Check, ExternalLink, Pencil, Eye, EyeOff, ArrowLeft, Search } from 'lucide-vue-next';
+import { Plus, Copy, Check, ExternalLink, Pencil, Eye, EyeOff, ArrowLeft, Search, Trash2 } from 'lucide-vue-next';
 
 /**
  * Quick process → Products: single pieces sold one at a time, newest first,
@@ -13,7 +13,7 @@ import { Plus, Copy, Check, ExternalLink, Pencil, Eye, EyeOff, ArrowLeft, Search
  */
 export default {
     name: 'QuickProductList',
-    components: { IconButton, QuickSeriesForm, QuickPager, Plus, Copy, Check, ExternalLink, Pencil, Eye, EyeOff, ArrowLeft, Search },
+    components: { IconButton, QuickSeriesForm, QuickPager, Plus, Copy, Check, ExternalLink, Pencil, Eye, EyeOff, ArrowLeft, Search, Trash2 },
     data() {
         return {
             rows: [], page: 1, lastPage: 1, total: 0, from: null, to: null, per: 10,
@@ -62,6 +62,20 @@ export default {
             this.busy = r.id;
             try { await api.put(`/api/admin/products/${r.id}`, { status: next }); r.status = next; toast(next === 'published' ? 'Published — it\'s in the shop' : 'Hidden from the shop'); }
             catch { toast('Could not change that.', { tone: 'error' }); }
+            finally { this.busy = ''; }
+        },
+        /** Gone for good. Past orders keep their own copy of the line, so they survive. */
+        async remove(r) {
+            const body = (r.sold ? `It has sold ${r.sold} — those orders keep their record, but the piece, its sizes, photos and reviews go. ` : 'The piece, its sizes, photos and reviews go. ')
+                + 'This can\'t be undone. To take it off the shop and keep it, hide it instead.';
+            if (!(await confirmDialog({ title: `Delete "${r.title}"?`, body, confirmLabel: 'Delete', tone: 'danger' }))) return;
+            this.busy = r.id;
+            try {
+                await api.del(`/api/admin/products/${r.id}`);
+                toast('Deleted');
+                // Deleting the only row of a later page would leave an empty page.
+                await this.load(this.rows.length === 1 && this.page > 1 ? this.page - 1 : this.page);
+            } catch (e) { toast(e.payload?.error || 'Could not delete.', { tone: 'error' }); }
             finally { this.busy = ''; }
         },
     },
@@ -167,6 +181,7 @@ export default {
                                 <IconButton :label="r.status === 'published' ? 'Hide from the shop' : 'Publish'" :tone="r.status === 'published' ? 'warning' : 'positive'" :disabled="busy === r.id" @click="toggle(r)">
                                     <EyeOff v-if="r.status === 'published'" class="w-4 h-4" /><Eye v-else class="w-4 h-4" />
                                 </IconButton>
+                                <IconButton label="Delete" tone="danger" :disabled="busy === r.id" @click="remove(r)"><Trash2 class="w-4 h-4" /></IconButton>
                             </div>
                         </td>
                     </tr>

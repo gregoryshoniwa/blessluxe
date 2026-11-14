@@ -169,7 +169,18 @@ class AdminProductController extends Controller
 
     public function destroy(string $id)
     {
-        Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($id)->delete();
+        $product = Product::withoutGlobalScope(ExclusivityScope::class)->findOrFail($id);
+
+        // Everything else that points at a product cascades. A bag doesn't — and a
+        // bag is a session nobody can see or empty, so one forgotten line used to
+        // make the delete fail with nothing but "Could not delete."
+        DB::transaction(function () use ($product) {
+            DB::table('cart_line_items')
+                ->whereIn('variant_id', ProductVariant::where('product_id', $product->id)->select('id'))
+                ->delete();
+            $product->delete();
+        });
+
         return ['ok' => true];
     }
 
@@ -238,7 +249,14 @@ class AdminProductController extends Controller
 
     public function destroyVariant(string $productId, string $variantId)
     {
-        ProductVariant::where('product_id', $productId)->where('id', $variantId)->firstOrFail()->delete();
+        $variant = ProductVariant::where('product_id', $productId)->where('id', $variantId)->firstOrFail();
+
+        // Same as destroy(): a size left in someone's bag must not block removing it.
+        DB::transaction(function () use ($variant) {
+            DB::table('cart_line_items')->where('variant_id', $variant->id)->delete();
+            $variant->delete();
+        });
+
         return ['ok' => true];
     }
 
